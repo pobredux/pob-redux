@@ -2967,6 +2967,18 @@ end
 
 M.get_skills = function()
 	ensureBuild()
+	-- SkillsTab's slot.count.shown; local here because the main chunk is at LuaJIT's 200-local limit.
+	local function gemCountable(group, gi, gem)
+		if IS_POE2 and gi == 1 and (group.source or group.sourceItem or group.sourceNode) then return false end
+		local list = gem.gemData and gem.gemData.grantedEffectList or { gem.grantedEffect }
+		for n, ge in ipairs(list) do
+			local hidden = IS_POE2 and ge.hideFromSideBar or (not IS_POE2 and ge.unsupported)
+			if not ge.support and not hidden and (not ge.hasGlobalEffect or gem["enableGlobal" .. n]) then
+				return true
+			end
+		end
+		return false
+	end
 	local groups = array({})
 	for i, group in ipairs(build.skillsTab.socketGroupList) do
 		local gems = array({})
@@ -2986,6 +2998,7 @@ M.get_skills = function()
 				color = opt(gem.color),
 				socketColour = opt(gd and gd.grantedEffect and ({ "R", "G", "B", "W" })[gd.grantedEffect.color]),
 				count = opt(gem.count),
+				countable = gemCountable(group, gi, gem),
 				errMsg = opt(gem.errMsg),
 				-- Set for skills the game grants (default weapon attacks, Raise
 				-- Shield, unique-granted skills): not a socket the player filled.
@@ -3629,7 +3642,10 @@ M.set_gem = function(p)
 	if p.level ~= nil then gem.level = tonumber(p.level) end
 	if p.quality ~= nil then gem.quality = tonumber(p.quality) end
 	if p.enabled ~= nil then gem.enabled = p.enabled end
-	if p.count ~= nil then gem.count = tonumber(p.count) end
+	if p.count ~= nil then
+		local count = math.max(0, tonumber(p.count) or 1)
+		gem.count = IS_POE2 and count or math.floor(count)
+	end
 	if p.gemId ~= nil then gem.gemId = p.gemId; gem.skillId = nil end
 	if p.nameSpec ~= nil then gem.nameSpec = p.nameSpec end
 	build.skillsTab:ProcessSocketGroup(group)

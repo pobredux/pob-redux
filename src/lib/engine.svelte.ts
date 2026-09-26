@@ -646,6 +646,7 @@ export interface GemInfo {
   /** Physical socket colour from PoB's gem data. */
   socketColour?: string | null;
   count: number | null;
+  countable: boolean;
   errMsg: string | null;
   /** Set when the game hands the skill out (a weapon's default attack, Raise Shield, a unique's skill): says what it comes with. */
   granted: string | null;

@@ -3,6 +3,7 @@
   import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
   import { engine, gemDpsParallel, type GemSearchRow, type SkillEntry, type SkillsOptions, type SocketGroup, type Tooltip } from "$lib/engine.svelte";
   import { build } from "$lib/state/build.svelte";
+  import { game } from "$lib/state/game.svelte";
   import PobText from "$lib/components/PobText.svelte";
   import PobTooltip from "$lib/components/PobTooltip.svelte";
   import { stripPobText } from "$lib/pobtext";
@@ -406,7 +407,7 @@
         {/if}
 
         <div class="gems">
-          <div class="gcols label"><span></span><span>{m.skills_col_gem()}</span><span class="r">{m.skills_col_level()}</span><span class="r">{m.skills_col_quality()}</span><span></span></div>
+          <div class="gcols label"><span></span><span>{m.skills_col_gem()}</span><span class="r">{m.skills_col_level()}</span><span class="r">{m.skills_col_quality()}</span><span class="r" title={m.skills_gem_count_title()}>{m.skills_col_count()}</span><span></span></div>
           {#each sel.gems as gem (gem.index)}
             <div class="gem" class:disabled={!gem.enabled}>
               <span class="ops">
@@ -426,6 +427,19 @@
               </span>
               <input class="input sm num r" type="number" min="1" max={gem.maxLevel + 10} value={gem.level ?? 1} onchange={(e) => patchGem(sel.index, gem.index, { level: Number((e.target as HTMLInputElement).value) })} />
               <input class="input sm num r" type="number" min="0" max="30" value={gem.quality ?? 0} onchange={(e) => patchGem(sel.index, gem.index, { quality: Number((e.target as HTMLInputElement).value) })} />
+              {#if gem.countable}
+                <input
+                  class="input sm num r"
+                  type="number"
+                  min="0"
+                  step={game.isPoe2 ? "any" : 1}
+                  title={m.skills_gem_count_title()}
+                  value={gem.count ?? 1}
+                  onchange={(e) => patchGem(sel.index, gem.index, { count: Number((e.target as HTMLInputElement).value) })}
+                />
+              {:else}
+                <span></span>
+              {/if}
               <button class="mini x" title={m.skills_remove_gem()} onclick={() => build.run(() => engine.removeGem(sel.index, gem.index))}>✕</button>
             </div>
           {/each}
@@ -664,7 +678,7 @@
   .gcols,
   .gem {
     display: grid;
-    grid-template-columns: 44px 1fr 70px 70px 26px;
+    grid-template-columns: 44px 1fr 70px 70px 64px 26px;
     gap: 8px;
     align-items: center;
   }
