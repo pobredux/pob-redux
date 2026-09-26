@@ -69,7 +69,8 @@ breakdowns.
 
 Reviews the build and lists what is wrong, worst first, with a fix for each. It can
 design a rare for any slot from the real mod pool, and it ranks passive nodes by what each one adds
-per point. Every figure comes from PoB's own calculation, and it needs no account or key.
+per point. Every figure comes from PoB's own calculation, and it needs no account or key. The search is best
+effort and still being improved, so check each suggestion against your build before you keep it.
 
 ### Compare
 

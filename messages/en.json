@@ -651,6 +651,8 @@
   "skills_mark_gem_fallback": "This skill",
 
   "opt_review": "Review",
+  "opt_disclaimer_title": "Best effort",
+  "opt_disclaimer": "The optimizer is a best-effort search, and we are still improving it. It can miss better options or rate a change too highly. Check each suggestion against your build before you keep it.",
   "opt_sanity_counts": "high · medium · low",
   "opt_sev_high": "high",
   "opt_sev_medium": "medium",
