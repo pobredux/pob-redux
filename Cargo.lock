@@ -3441,7 +3441,7 @@ dependencies = [
 
 [[package]]
 name = "pob-engine"
-version = "0.4.7"
+version = "0.4.8"
 dependencies = [
  "clap",
  "env_logger",
@@ -3458,7 +3458,7 @@ dependencies = [
 
 [[package]]
 name = "pob-redux"
-version = "0.4.7"
+version = "0.4.8"
 dependencies = [
  "axum",
  "getrandom 0.3.4",
@@ -3491,7 +3491,7 @@ dependencies = [
 
 [[package]]
 name = "pob-sync"
-version = "0.4.7"
+version = "0.4.8"
 dependencies = [
  "anyhow",
  "clap",
