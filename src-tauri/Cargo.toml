@@ -37,16 +37,21 @@ rmcp = { version = "3.2", default-features = false, features = ["server", "trans
 axum = "0.8"
 getrandom = "0.3"
 regex = "1"
+sha2 = "0.10"
+zip = { version = "4", default-features = false, features = ["deflate"] }
 tauri-plugin-log = "2"
-tokio = { version = "1", features = ["net", "rt", "sync", "macros"] }
+tokio = { version = "1", features = ["net", "rt", "sync", "macros", "process", "io-util", "time"] }
 
 # The updater has no mobile target, so it is scoped to desktop.
 [target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
 tauri-plugin-updater = "2"
 tauri-plugin-deep-link = "2"
 
+[target."cfg(unix)".dependencies]
+libc = "0.2"
+
 [target."cfg(windows)".dependencies]
-windows-sys = { version = "0.60", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
+windows-sys = { version = "0.60", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Cryptography", "Win32_System_JobObjects", "Win32_System_Threading"] }
 
 [lints]
 workspace = true

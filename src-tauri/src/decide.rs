@@ -13,7 +13,7 @@ use crate::ai;
 
 pub struct Backend {
     pub id: &'static str,
-    /// Credential slot; OpenRouter's is the chat provider's, so one key serves both.
+    /// Credential slot. OpenRouter's keeps the id the old chat provider used, so a stored key still works.
     pub key_id: &'static str,
     pub label: &'static str,
     pub default_base: &'static str,
@@ -258,8 +258,7 @@ mod tests {
         for b in BACKENDS {
             assert!(b.default_base.starts_with("http://") || b.default_base.starts_with("https://"), "{}", b.id);
             assert!(!b.default_base.ends_with('/'), "{}", b.id);
-            let shared = ai::PROVIDERS.iter().any(|p| p.id == b.key_id);
-            assert_eq!(shared, b.id == "openrouter", "{} key slot", b.id);
+            assert_eq!(b.key_id, b.id, "{} key slot", b.id);
         }
     }
 

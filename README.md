@@ -79,18 +79,18 @@ skills and config.
 ### Assistant
 
 An optional chat panel that answers questions about the open build and can change it. It is
-available in Path of Exile 2 only for now. Open it from the chat icon in the status bar or with Ctrl+K. It works
-with your own key for Anthropic, OpenAI, OpenRouter, OpenCode Zen or Ollama Cloud, or with Ollama on
-your computer and no key.
+available in Path of Exile 2 only for now. Open it from the chat icon in the status bar or with Ctrl+K. It runs
+through a coding agent on your computer, signed in to your own plan: Claude Code, Codex, Cursor, Grok,
+OpenCode or Google Antigravity (which the app downloads for you). It can also use a model you run with Ollama.
 
-| Mode | What it does |
-|---|---|
-| Ask | Reads the build and explains. Changes nothing. |
-| Build | Makes changes, asking you before each one. |
-| Try | Saves a checkpoint, then changes freely. At the end you keep the lot or undo it. |
+Sign in once with the agent's own command (for example `claude auth login` or `codex login`); Antigravity signs in
+with Google from Settings > Assistant. The app never sees your login: it starts the agent, which uses its own. Your
+plan's usage limits apply. The agent works in an empty folder, its shell and file-editing tools are turned off or
+refused, and it is told to use only the build's tools.
 
-Keys are kept in your operating system's credential store. A key leaves your computer only in requests
-to the provider you set up, and the chat panel itself never sees it.
+Ask a question and it answers; ask for a change and it makes it. Each reply that changed the build ends with Keep
+and Undo, so one click puts everything back. Turn on "Ask before each change" in Settings > Assistant to approve
+every change first.
 
 ### MCP server
 

@@ -22,6 +22,7 @@ use serde::Serialize;
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::agent::Gate;
 use crate::AppState;
 use crate::tools::{defs, dispatch, ToolContext, ToolDef, ToolError, INSTRUCTIONS};
 
@@ -148,38 +149,51 @@ impl McpState {
         let listener = tokio::net::TcpListener::bind(("127.0.0.1", port))
             .await
             .map_err(|e| format!("cannot listen on 127.0.0.1:{port}: {e}"))?;
-        // Host header validation (DNS-rebinding protection) is rmcp's default:
-        // only localhost hosts are accepted.
-        // One manager for the whole server: 2026-07-28 builds a fresh handler
-        // per request, so a per-handler store would lose every task handle.
-        let tasks = TaskManager::new();
-        let service = StreamableHttpService::new(
-            move || {
-                Ok(PobMcp {
-                    ctx: ctx.clone(),
-                    tasks: tasks.clone(),
-                })
-            },
-            Arc::new(LocalSessionManager::default()),
-            StreamableHttpServerConfig::default(),
-        );
-        let expected = Arc::new(token.clone());
-        let router = axum::Router::new()
-            .nest_service("/mcp", service)
-            .layer(axum::middleware::from_fn(move |req, next| {
-                guard(expected.clone(), req, next)
-            }));
-        let task = tauri::async_runtime::spawn(async move {
-            if let Err(e) = axum::serve(listener, router).await {
-                log::error!("mcp server: {e}");
-            }
-        });
+        let task = serve(ctx, listener, token.clone(), None);
         *self.running.lock().unwrap() = Some(Running { port, task });
         *self.token.lock().unwrap() = Some(token);
         *self.error.lock().unwrap() = None;
         log::info!("mcp server listening on http://127.0.0.1:{port}/mcp");
         Ok(())
     }
+}
+
+/// Serve the registry on a bound listener. With a `gate`, the server belongs to
+/// one assistant session: it lists only that session's tools and reports every
+/// call to the panel.
+pub(crate) fn serve(
+    ctx: Arc<ToolContext>,
+    listener: tokio::net::TcpListener,
+    token: String,
+    gate: Option<Arc<Gate>>,
+) -> tauri::async_runtime::JoinHandle<()> {
+    // Host header validation (DNS-rebinding protection) is rmcp's default:
+    // only localhost hosts are accepted.
+    // One manager for the whole server: 2026-07-28 builds a fresh handler
+    // per request, so a per-handler store would lose every task handle.
+    let tasks = TaskManager::new();
+    let service = StreamableHttpService::new(
+        move || {
+            Ok(PobMcp {
+                ctx: ctx.clone(),
+                tasks: tasks.clone(),
+                gate: gate.clone(),
+            })
+        },
+        Arc::new(LocalSessionManager::default()),
+        StreamableHttpServerConfig::default(),
+    );
+    let expected = Arc::new(token);
+    let router = axum::Router::new()
+        .nest_service("/mcp", service)
+        .layer(axum::middleware::from_fn(move |req, next| {
+            guard(expected.clone(), req, next)
+        }));
+    tauri::async_runtime::spawn(async move {
+        if let Err(e) = axum::serve(listener, router).await {
+            log::error!("mcp server: {e}");
+        }
+    })
 }
 
 /// Two gates in front of the transport. The bearer token stops any other local
@@ -261,6 +275,7 @@ pub fn mcp_stop(app: AppHandle, state: State<'_, AppState>) -> McpStatus {
 struct PobMcp {
     ctx: Arc<ToolContext>,
     tasks: TaskManager,
+    gate: Option<Arc<Gate>>,
 }
 
 fn supports_tasks(context: &RequestContext<RoleServer>) -> bool {
@@ -330,7 +345,19 @@ impl ServerHandler for PobMcp {
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, ErrorData> {
-        Ok(ListToolsResult::with_all_items(tool_list())
+        let tools = match &self.gate {
+            None => tool_list(),
+            // Gated results are clipped text, so no output schema may promise structured content.
+            Some(gate) => tool_list()
+                .into_iter()
+                .filter(|t| gate.lists(&t.name))
+                .map(|mut t| {
+                    t.output_schema = None;
+                    t
+                })
+                .collect(),
+        };
+        Ok(ListToolsResult::with_all_items(tools)
             .with_ttl_ms(TOOL_LIST_TTL_MS)
             .with_cache_scope(CacheScope::Private))
     }
@@ -342,6 +369,18 @@ impl ServerHandler for PobMcp {
     ) -> Result<CallToolResponse, ErrorData> {
         let name = request.name.to_string();
         let args = request.arguments.unwrap_or_default();
+        if let Some(gate) = &self.gate {
+            let ct = context.ct.clone();
+            let out = tokio::select! {
+                out = gate.call(self.ctx.clone(), name, args) => out,
+                _ = ct.cancelled() => Err("cancelled by the client".to_string()),
+            };
+            return Ok(match out {
+                Ok(text) => CallToolResult::success(vec![ContentBlock::text(text)]),
+                Err(msg) => CallToolResult::error(vec![ContentBlock::text(msg)]),
+            }
+            .into());
+        }
         let def = defs().into_iter().find(|d| d.name == name);
 
         if let Some(def) = def.as_ref().filter(|d| d.destructive) {

@@ -3,7 +3,7 @@ import { build, autosaveKey } from "$lib/state/build.svelte";
 import { confirm } from "$lib/state/confirm.svelte";
 import { appOptions } from "$lib/state/options.svelte";
 import { mcp } from "$lib/state/mcp.svelte";
-import { chat, type Mode } from "$lib/state/chat.svelte";
+import { chat } from "$lib/state/chat.svelte";
 import { appUpdate } from "$lib/state/update.svelte";
 import { game } from "$lib/state/game.svelte";
 import { links } from "$lib/state/links.svelte";
@@ -51,7 +51,6 @@ class AppStore {
       if (first) {
         if (this.paths?.chat_provider) await chat.setProvider(this.paths.chat_provider).catch(() => {});
         if (this.paths?.chat_model) chat.setModel(this.paths.chat_model);
-        if (this.paths?.chat_mode) await chat.setMode(this.paths.chat_mode as Mode).catch(() => {});
       }
     } else {
       chat.open = false;

@@ -73,14 +73,13 @@ function score(def: ToolDef, terms: string[]): number {
   return n;
 }
 
-export function findTools(defs: ToolDef[], query: string, limit = 8, readOnly = false): ToolDef[] {
+export function findTools(defs: ToolDef[], query: string, limit = 8): ToolDef[] {
   const terms = query
     .toLowerCase()
     .split(/[^a-z0-9_]+/)
     .filter((t) => t.length > 2);
   if (!terms.length) return [];
   return defs
-    .filter((d) => !readOnly || d.read_only)
     .map((d) => ({ d, n: score(d, terms) }))
     .filter((x) => x.n > 0)
     .sort((a, b) => b.n - a.n)

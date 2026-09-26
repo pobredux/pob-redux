@@ -3,6 +3,7 @@
   import { build } from "$lib/state/build.svelte";
   import { mcp } from "$lib/state/mcp.svelte";
   import { chat } from "$lib/state/chat.svelte";
+  import { appOptions } from "$lib/state/options.svelte";
   import { game } from "$lib/state/game.svelte";
   import Icon from "$lib/components/Icon.svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
@@ -82,8 +83,11 @@
   {#if game.isPoe2}
     <button
       class="seg iconbtn"
-      class:on={chat.open}
-      onclick={() => chat.toggle()}
+      class:on={chat.open && !appOptions.open}
+      onclick={() => {
+        if (appOptions.open && chat.open) appOptions.open = false;
+        else chat.toggle();
+      }}
       title={m.status_assistant_title()}
       aria-label={m.status_assistant()}
     >

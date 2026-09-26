@@ -6,6 +6,7 @@ mod mcp;
 mod tools;
 mod library;
 mod ai;
+mod agent;
 mod decide;
 mod sites;
 mod mobalytics;
@@ -329,8 +330,6 @@ struct AppPaths {
     chat_allow: Option<String>,
     /// Dev hook: write the transcript here when a run ends (POB_REDUX_CHAT_LOG).
     chat_log: Option<String>,
-    /// Dev hook: mode to start in, ask/build/try (POB_REDUX_CHAT_MODE).
-    chat_mode: Option<String>,
     /// Dev hooks: provider id and model to select on boot (POB_REDUX_CHAT_PROVIDER, POB_REDUX_CHAT_MODEL).
     chat_provider: Option<String>,
     chat_model: Option<String>,
@@ -380,7 +379,6 @@ fn app_paths(state: State<'_, AppState>) -> AppPaths {
         chat_allow: std::env::var("POB_REDUX_CHAT_ALLOW").ok(),
         chat_log: std::env::var("POB_REDUX_CHAT_LOG").ok(),
         chat_provider: std::env::var("POB_REDUX_CHAT_PROVIDER").ok(),
-        chat_mode: std::env::var("POB_REDUX_CHAT_MODE").ok(),
         chat_model: std::env::var("POB_REDUX_CHAT_MODEL").ok(),
     }
 }
@@ -1233,6 +1231,13 @@ pub fn run() {
             watch_links(app.handle());
             spawn_pool_reaper(app.handle().clone());
             app.manage(ai::AiState::new(&app.handle().clone()));
+            app.manage(agent::AgentState::new(&app.handle().clone()));
+            if game == Game::Poe2 {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    agent::statuses(&handle, false, None).await;
+                });
+            }
             app.manage(decide::DecideState::new(&app.handle().clone()));
             // POB_REDUX_MCP=<port> brings the MCP server up at launch (scripts, tests)
             if let Some(port) = std::env::var("POB_REDUX_MCP").ok().and_then(|v| v.parse::<u16>().ok()) {
@@ -1303,6 +1308,19 @@ pub fn run() {
             ai::ai_models,
             ai::ai_warm_model,
             ai::ai_chat_stream,
+            agent::agent_open,
+            agent::agent_send,
+            agent::agent_approve,
+            agent::agent_stop,
+            agent::agent_configure,
+            agent::agent_close,
+            agent::agent_path_set,
+            agent::agent_install,
+            agent::agent_sign_in,
+            agent::agent_sign_in_cancel,
+            agent::agent_sign_out,
+            agent::agent_terminal,
+            agent::agent_uninstall,
             decide::decide_status,
             decide::decide_select,
             decide::decide_configure,
@@ -1312,6 +1330,7 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
+                app.state::<agent::AgentState>().shutdown();
                 if let Some(marker) = session_marker(app) {
                     let _ = std::fs::remove_file(marker);
                 }

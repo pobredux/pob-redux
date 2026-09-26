@@ -11,6 +11,8 @@
   import { exportDiagnostics, revealLogs } from "$lib/engine.svelte";
   import { locale, LOCALES, LOCALE_LABEL, type LocalePreference } from "$lib/state/locale.svelte";
   import { decider } from "$lib/state/decide.svelte";
+  import { chat } from "$lib/state/chat.svelte";
+  import AssistantSettings from "$lib/components/AssistantSettings.svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { m } from "$lib/paraglide/messages";
 
@@ -73,6 +75,7 @@
     keyDraft = "";
   }
 
+  const assistantTone = $derived<Tone>(chat.ready ? "ok" : "warn");
   const mcpTone = $derived<Tone>(mcp.status?.running ? "ok" : "off");
   const mcpState = $derived(mcp.status?.running ? m.settings_mcp_running_port({ port: mcp.status.port }) : m.status_off());
   const decideTone = $derived<Tone>(decider.enabled ? (decider.ready ? "ok" : "warn") : "off");
@@ -83,6 +86,7 @@
     { id: "numbers", label: m.settings_numbers() },
     ...(game.isPoe2
       ? [
+          { id: "assistant", label: m.settings_assistant(), tone: assistantTone },
           { id: "mcp", label: m.settings_mcp(), tone: mcpTone },
           { id: "experimental", label: m.settings_experimental(), tone: decideTone },
         ]
@@ -289,6 +293,20 @@
         {:else}
           <p class="note">{m.settings_numbers_waiting()}</p>
         {/if}
+      {:else if active === "assistant"}
+        {@render head(m.settings_assistant(), m.settings_assistant_desc(), chat.current?.label ?? "", assistantTone)}
+        <AssistantSettings />
+        <h2 class="label ghead">{m.assistant_changes()}</h2>
+        <div class="rows">
+          <label class="opt">
+            <span>
+              {m.assistant_ask_first()}
+              <span class="hint">{m.assistant_ask_first_hint()}</span>
+            </span>
+            <input class="switch" type="checkbox" role="switch" checked={chat.askFirst} onchange={(e) => chat.setAskFirst((e.target as HTMLInputElement).checked)} />
+          </label>
+        </div>
+        <p class="note">{m.provider_intro_agents()}</p>
       {:else if active === "mcp"}
         {@render head(m.settings_mcp(), m.settings_mcp_desc(), mcpState, mcpTone)}
         <h2 class="label ghead">{m.settings_mcp_server()}</h2>
@@ -374,9 +392,7 @@
                 {#if dm.has_key}
                   <span class="hint mono">···{dm.hint}</span>
                 {/if}
-                {#if dm.key_id === "openrouter"}
-                  <span class="hint">{m.experimental_key_shared()}</span>
-                {:else if !dm.has_key && !dm.needs_key}
+                {#if !dm.has_key && !dm.needs_key}
                   <span class="hint">{m.experimental_key_optional()}</span>
                 {/if}
                 {#if dm.keys_url}
@@ -392,7 +408,7 @@
                   onkeydown={(e) => e.key === "Enter" && saveDecideKey()}
                 />
                 <button class="btn sm" disabled={decider.busy || !keyDraft.trim()} onclick={saveDecideKey}>{m.common_save()}</button>
-                {#if dm.has_key && dm.key_id !== "openrouter"}
+                {#if dm.has_key}
                   <button class="btn sm ghost" disabled={decider.busy} onclick={() => decider.removeKey(dm.key_id)}>{m.provider_remove()}</button>
                 {/if}
               </div>
@@ -781,49 +797,5 @@
     white-space: nowrap;
     font-size: var(--fs-xs);
     color: var(--fg-1);
-  }
-  .switch {
-    appearance: none;
-    position: relative;
-    flex: none;
-    width: 32px;
-    height: 18px;
-    margin: 0;
-    border: 1px solid var(--line-2);
-    border-radius: 999px;
-    background: var(--bg-3);
-    cursor: pointer;
-    transition:
-      background 0.12s,
-      border-color 0.12s;
-  }
-  .switch::after {
-    content: "";
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: var(--fg-3);
-    transition:
-      transform 0.12s,
-      background 0.12s;
-  }
-  .switch:checked {
-    background: var(--fg-0);
-    border-color: var(--fg-0);
-  }
-  .switch:checked::after {
-    transform: translateX(16px);
-    background: var(--bg-0);
-  }
-  .switch:focus-visible {
-    outline: 2px solid var(--focus);
-    outline-offset: 2px;
-  }
-  .switch:disabled {
-    opacity: var(--fade-off);
-    cursor: default;
   }
 </style>

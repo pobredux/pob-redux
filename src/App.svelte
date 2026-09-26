@@ -121,7 +121,7 @@
         <ImportView {paths} />
       {/if}
     </main>
-    {#if chat.open && game.isPoe2 && status?.state === "ready"}<ChatPanel />{/if}
+    {#if chat.open && !appOptions.open && game.isPoe2 && status?.state === "ready"}<ChatPanel />{/if}
   </div>
   <StatusBar {status} {paths} />
   <ConfirmModal />

@@ -1,11 +1,14 @@
 //! Providers, keys, and the request proxy for the in-app chat panel.
 //!
-//! Keys live in the OS credential store and are never sent to the webview. On
-//! Windows, a key that Credential Manager refuses goes to a DPAPI-encrypted file
-//! instead (`key_file`). The webview asks for a stream by provider id and path;
-//! this module resolves the base URL and key, makes the request from Rust, and
-//! pushes the response back in chunks. A compromised frontend can spend a key
-//! but cannot read one.
+//! Claude and Codex run through the user's own CLI (`agent`). Local Ollama is
+//! the one HTTP provider: the webview asks for a stream by provider id and
+//! path, and this module makes the request from Rust and pushes the response
+//! back in chunks.
+//!
+//! The credential store here now only holds the decision backends' keys. They
+//! live in the OS credential store and are never sent to the webview. On
+//! Windows, a key that Credential Manager refuses goes to a DPAPI-encrypted
+//! file instead (`key_file`).
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -16,86 +19,37 @@ use serde::{Deserialize, Serialize};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager};
 
+use crate::agent::{self, AgentStatus, Cli, CLIS};
+
 const SERVICE: &str = "dev.pobredux.desktop";
 
-/// How a provider expects to be talked to.
 #[derive(Serialize, Clone, Copy, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub enum ApiKind {
-    /// `x-api-key` + `anthropic-version`, `/v1/messages`.
-    Anthropic,
-    /// `Authorization: Bearer`, `/chat/completions`, `/models`.
+    /// The user's own CLI runs the conversation.
+    Agent,
+    /// `/chat/completions` and `/models`, run by the panel's own loop.
     OpenAiCompatible,
 }
 
 pub struct Provider {
     pub id: &'static str,
     pub label: &'static str,
-    pub kind: ApiKind,
     pub default_base: &'static str,
-    /// Local Ollama needs no key.
-    pub needs_key: bool,
-    /// Where to get a key, shown in the settings sheet.
-    pub keys_url: Option<&'static str>,
 }
 
-pub const PROVIDERS: &[Provider] = &[
-    Provider {
-        id: "anthropic",
-        label: "Anthropic",
-        kind: ApiKind::Anthropic,
-        default_base: "https://api.anthropic.com",
-        needs_key: true,
-        keys_url: Some("https://console.anthropic.com/settings/keys"),
-    },
-    Provider {
-        id: "openai",
-        label: "OpenAI",
-        kind: ApiKind::OpenAiCompatible,
-        default_base: "https://api.openai.com/v1",
-        needs_key: true,
-        keys_url: Some("https://platform.openai.com/api-keys"),
-    },
-    Provider {
-        id: "openrouter",
-        label: "OpenRouter",
-        kind: ApiKind::OpenAiCompatible,
-        default_base: "https://openrouter.ai/api/v1",
-        needs_key: true,
-        keys_url: Some("https://openrouter.ai/keys"),
-    },
-    Provider {
-        id: "opencode",
-        label: "OpenCode Zen",
-        kind: ApiKind::OpenAiCompatible,
-        default_base: "https://opencode.ai/zen/v1",
-        needs_key: true,
-        keys_url: Some("https://opencode.ai/auth"),
-    },
-    Provider {
-        id: "ollama-cloud",
-        label: "Ollama (Cloud)",
-        kind: ApiKind::OpenAiCompatible,
-        default_base: "https://ollama.com/v1",
-        needs_key: true,
-        keys_url: Some("https://ollama.com/settings/keys"),
-    },
-    Provider {
-        id: "ollama-local",
-        label: "Ollama (Local)",
-        kind: ApiKind::OpenAiCompatible,
-        default_base: "http://localhost:11434/v1",
-        needs_key: false,
-        keys_url: None,
-    },
-];
+pub const PROVIDERS: &[Provider] = &[Provider {
+    id: "ollama-local",
+    label: "Ollama (Local)",
+    default_base: "http://localhost:11434/v1",
+}];
 
 fn find(id: &str) -> Result<&'static Provider, String> {
     PROVIDERS.iter().find(|p| p.id == id).ok_or_else(|| format!("unknown provider {id}"))
 }
 
-/// Base URL overrides, for self-hosted Ollama or a gateway in front of a
-/// provider. Stored app-side (not secret); keys are kept apart from it.
+/// Base URL overrides, for Ollama on another machine. Stored app-side (not
+/// secret); keys are kept apart from it.
 #[derive(Default)]
 pub struct AiState {
     bases: Mutex<HashMap<String, String>>,
@@ -134,12 +88,11 @@ fn base_url(app: &AppHandle, p: &Provider) -> String {
         .unwrap_or_else(|| p.default_base.to_string())
 }
 
-/// Chat providers and decision backends share the credential store.
 fn known(id: &str) -> Result<(), String> {
-    if PROVIDERS.iter().any(|p| p.id == id) || crate::decide::BACKENDS.iter().any(|b| b.key_id == id) {
+    if crate::decide::BACKENDS.iter().any(|b| b.key_id == id) {
         Ok(())
     } else {
-        Err(format!("unknown provider {id}"))
+        Err(format!("unknown key slot {id}"))
     }
 }
 
@@ -155,7 +108,7 @@ pub(crate) fn stored_key(app: &AppHandle, id: &str) -> Option<String> {
 }
 
 pub(crate) fn stored_keys(app: &AppHandle) -> Vec<String> {
-    let mut ids: Vec<&str> = PROVIDERS.iter().map(|p| p.id).chain(crate::decide::BACKENDS.iter().map(|b| b.key_id)).collect();
+    let mut ids: Vec<&str> = crate::decide::BACKENDS.iter().map(|b| b.key_id).collect();
     ids.sort_unstable();
     ids.dedup();
     ids.into_iter().filter_map(|id| stored_key(app, id)).collect()
@@ -241,37 +194,56 @@ pub struct ProviderStatus {
     id: &'static str,
     label: &'static str,
     kind: ApiKind,
-    needs_key: bool,
-    keys_url: Option<&'static str>,
-    base_url: String,
-    default_base: &'static str,
-    has_key: bool,
-    /// Last four characters, so the user can tell which key is stored.
-    hint: Option<String>,
-    /// Usable now: either no key is needed, or one is stored.
+    /// HTTP providers only.
+    base_url: Option<String>,
+    default_base: Option<&'static str>,
+    /// CLI providers only.
+    agent: Option<AgentStatus>,
+    login: Option<&'static str>,
+    install: Option<&'static str>,
+    /// Bytes the app downloads itself, for an agent it installs; such an agent also signs in from the app.
+    download: Option<u64>,
+    /// The vendor's install command, run in a terminal from the settings page.
+    install_command: Option<&'static str>,
+    /// Usable now, as far as the app can tell.
     ready: bool,
 }
 
+/// The CLIs first, then Ollama. `refresh` checks the CLIs again instead of
+/// using what was found at startup.
 #[tauri::command]
-pub fn ai_providers(app: AppHandle) -> Vec<ProviderStatus> {
-    PROVIDERS
-        .iter()
-        .map(|p| {
-            let key = stored_key(&app, p.id);
-            ProviderStatus {
-                id: p.id,
-                label: p.label,
-                kind: p.kind,
-                needs_key: p.needs_key,
-                keys_url: p.keys_url,
-                base_url: base_url(&app, p),
-                default_base: p.default_base,
-                has_key: key.is_some(),
-                hint: key.as_deref().map(hint),
-                ready: !p.needs_key || key.is_some(),
-            }
-        })
-        .collect()
+pub async fn ai_providers(app: AppHandle, refresh: Option<bool>, only: Option<String>) -> Vec<ProviderStatus> {
+    let found = agent::statuses(&app, refresh.unwrap_or(false), only.as_deref().and_then(Cli::from_id)).await;
+    let agents = CLIS.into_iter().map(|cli: Cli| {
+        let status = found.get(&cli).cloned().unwrap_or_default();
+        ProviderStatus {
+            id: cli.id(),
+            label: cli.label(),
+            kind: ApiKind::Agent,
+            base_url: None,
+            default_base: None,
+            ready: status.installed && status.error.is_none() && status.signed_in != Some(false),
+            agent: Some(status),
+            login: cli.login(),
+            install: Some(cli.install()),
+            download: cli.download(),
+            install_command: cli.install_command(),
+        }
+    });
+    let http = PROVIDERS.iter().map(|p| ProviderStatus {
+        id: p.id,
+        label: p.label,
+        kind: ApiKind::OpenAiCompatible,
+        base_url: Some(base_url(&app, p)),
+        default_base: Some(p.default_base),
+        agent: None,
+        login: None,
+        install: None,
+        download: None,
+        install_command: None,
+        ready: true,
+    });
+    agents.chain(http).collect()
 }
 
 #[tauri::command]
@@ -350,16 +322,16 @@ pub fn ai_base_set(app: AppHandle, provider: String, base_url: String) -> Result
     write_bases(&app, &snapshot)
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct ModelInfo {
-    id: String,
-    label: String,
-    /// Whether to offer the effort selector for this model.
-    supports_effort: bool,
+    pub(crate) id: String,
+    pub(crate) label: String,
+    /// The effort levels this model takes; empty hides the selector.
+    pub(crate) efforts: Vec<String>,
     /// Current-generation, or one generation back. The UI groups these first.
-    recommended: bool,
-    /// Costs nothing to call, where the provider says so.
-    free: bool,
+    pub(crate) recommended: bool,
+    /// Offers a faster service tier (Claude fast mode, Codex's fast tier, Cursor's fast option).
+    pub(crate) fast: bool,
 }
 
 #[derive(Deserialize)]
@@ -367,137 +339,43 @@ struct ModelList {
     data: Vec<RawModel>,
 }
 
-/// Covers every provider's shape: OpenAI-compatible lists use `id` + numeric
-/// `created`; Anthropic uses `display_name` + an RFC 3339 `created_at`;
-/// OpenRouter adds `pricing`.
 #[derive(Deserialize)]
 struct RawModel {
     id: String,
     #[serde(default)]
     created: Option<i64>,
-    #[serde(default)]
-    created_at: Option<String>,
-    #[serde(default)]
-    display_name: Option<String>,
-    #[serde(default)]
-    pricing: Option<Pricing>,
 }
 
-/// OpenRouter quotes per-token prices as decimal strings.
-#[derive(Deserialize)]
-struct Pricing {
-    #[serde(default)]
-    prompt: Option<String>,
-    #[serde(default)]
-    completion: Option<String>,
-}
-
-/// Whether a model costs nothing to call.
-///
-/// OpenRouter publishes prices, and they are the authority: it lists models
-/// that cost nothing without marking the id, so the suffix alone undercounts.
-/// OpenCode Zen publishes no prices and marks free models with a `-free` id.
-/// Ollama publishes neither, so nothing there is reported free.
-fn is_free(m: &RawModel) -> bool {
-    if let Some(p) = &m.pricing {
-        let zero = |v: &Option<String>| v.as_deref().and_then(|s| s.parse::<f64>().ok()).is_some_and(|n| n == 0.0);
-        if zero(&p.prompt) && zero(&p.completion) {
-            return true;
-        }
-    }
-    let l = m.id.to_ascii_lowercase();
-    l.ends_with(":free") || l.ends_with("-free")
-}
-
-impl RawModel {
-    /// A sortable timestamp. Anthropic's RFC 3339 string is compared by its
-    /// date prefix, which orders correctly without pulling in a date crate.
-    fn sort_key(&self) -> i64 {
-        if let Some(c) = self.created {
-            return c;
-        }
-        if let Some(s) = &self.created_at {
-            let digits: String = s.chars().filter(|c| c.is_ascii_digit()).take(8).collect();
-            if let Ok(n) = digits.parse::<i64>() {
-                return n; // YYYYMMDD, larger is newer
-            }
-        }
-        0
-    }
-}
-
-/// Endpoints that are not chat models. Provider lists mix in embeddings,
-/// speech, image and moderation models that would only clutter the picker.
+/// Endpoints that are not chat models, such as embeddings.
 fn is_chat_model(id: &str) -> bool {
     let l = id.to_ascii_lowercase();
-    const EXCLUDE: &[&str] = &[
-        "embed", "whisper", "tts", "dall-e", "moderation", "rerank", "image", "audio", "transcribe",
-        "realtime", "search", "codex", "guard", "vision-preview", "clip", "bge-", "nomic",
-    ];
+    const EXCLUDE: &[&str] = &["embed", "whisper", "tts", "rerank", "guard", "clip", "bge-", "nomic"];
     !EXCLUDE.iter().any(|bad| l.contains(bad))
 }
 
-/// Current generation or one back, per provider family. Anything matching is
-/// grouped at the top of the picker; everything else stays available below.
+/// Widely used current open models, grouped at the top of the picker.
 fn is_recommended(id: &str) -> bool {
     let l = id.to_ascii_lowercase();
     const CURRENT: &[&str] = &[
-        // Anthropic: Claude 5 family and the 4.x generation before it
-        "claude-opus-5",
-        "claude-sonnet-5",
-        "claude-fable-5",
-        "claude-haiku-4-5",
-        "claude-opus-4",
-        "claude-sonnet-4",
-        // OpenAI: GPT-5 line and the o-series reasoning models
-        "gpt-5",
-        "gpt-4.1",
-        "o3",
-        "o4-mini",
-        // Widely used open models
-        "llama-4",
-        "llama3.3",
-        "llama-3.3",
-        "deepseek-v3",
-        "deepseek-r1",
-        "qwen3",
-        "qwen-3",
-        "mistral-large",
-        "gemini-2.5",
-        "gemini-3",
-        "grok-4",
-        "kimi-k2",
-        "glm-4",
+        "llama-4", "llama3.3", "deepseek-v3", "deepseek-r1", "qwen3", "gemma4", "granite4", "mistral-large", "kimi-k2", "glm-4", "gpt-oss",
     ];
     CURRENT.iter().any(|c| l.contains(c))
 }
 
-/// Reasoning models take an effort setting. Matched on id because no provider
-/// advertises the capability in its model list.
+/// Reasoning models take an effort setting. Matched on id because Ollama does
+/// not advertise the capability in its model list.
 fn effort_capable(id: &str) -> bool {
     let l = id.to_ascii_lowercase();
-    l.contains("claude-opus-5")
-        || l.contains("claude-sonnet-5")
-        || l.contains("gpt-5")
-        || l.starts_with("o1")
-        || l.starts_with("o3")
-        || l.starts_with("o4")
-        || l.contains("deepseek-r")
-        || l.contains("qwq")
-        || l.contains("thinking")
+    l.contains("deepseek-r") || l.contains("qwq") || l.contains("thinking") || l.contains("gpt-oss")
 }
 
 /// Load a local Ollama model into memory ahead of the first message and keep
 /// it there for a while. Ollama loads on first use, which for a 6 GB model is
-/// tens of seconds the user would otherwise wait on their first question. Only
-/// the local provider: a hosted one has nothing to warm. Returns the load
-/// time in milliseconds.
+/// tens of seconds the user would otherwise wait on their first question.
+/// Returns the load time in milliseconds.
 #[tauri::command]
 pub async fn ai_warm_model(app: AppHandle, provider: String, model: String) -> Result<u64, String> {
     let p = find(&provider)?;
-    if p.id != "ollama-local" {
-        return Ok(0);
-    }
     // The native API lives beside the OpenAI-compatible one, without /v1.
     let base = base_url(&app, p);
     let root = base.trim_end_matches('/').trim_end_matches("/v1").to_string();
@@ -520,35 +398,18 @@ pub async fn ai_warm_model(app: AppHandle, provider: String, model: String) -> R
     Ok(t0.elapsed().as_millis() as u64)
 }
 
-/// OpenRouter alone returns several hundred entries, so the list is filtered to
-/// chat models and the current generations are flagged `recommended` for the UI
-/// to group at the top.
 #[tauri::command]
 pub async fn ai_models(app: AppHandle, provider: String) -> Result<Vec<ModelInfo>, String> {
+    if let Some(cli) = Cli::from_id(&provider) {
+        return agent::models(&app, cli).await;
+    }
     let p = find(&provider)?;
     let base = base_url(&app, p);
-    let key = stored_key(&app, p.id);
-    if p.needs_key && key.is_none() {
-        return Err(format!("no {} key stored", p.label));
-    }
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(20))
         .build()
         .map_err(|e| e.to_string())?;
-
-    // The OpenAI-compatible bases already end in /v1; Anthropic's does not.
-    let url = match p.kind {
-        ApiKind::Anthropic => format!("{base}/v1/models?limit=100"),
-        ApiKind::OpenAiCompatible => format!("{base}/models"),
-    };
-    let mut req = client.get(url);
-    if let Some(k) = key {
-        req = match p.kind {
-            ApiKind::Anthropic => req.header("x-api-key", k).header("anthropic-version", "2023-06-01"),
-            ApiKind::OpenAiCompatible => req.header("authorization", format!("Bearer {k}")),
-        };
-    }
-    let res = req.send().await.map_err(|e| e.to_string())?;
+    let res = client.get(format!("{base}/models")).send().await.map_err(|e| e.to_string())?;
     if !res.status().is_success() {
         return Err(format!("{} returned {}", p.label, res.status()));
     }
@@ -557,23 +418,14 @@ pub async fn ai_models(app: AppHandle, provider: String) -> Result<Vec<ModelInfo
         serde_json::from_str(&text).map_err(|e| format!("unexpected model list from {}: {e}", p.label))?;
 
     let mut raw: Vec<RawModel> = list.data.into_iter().filter(|m| is_chat_model(&m.id)).collect();
-    // Some gateways stamp every model with the same `created` (OpenCode Zen
-    // uses the time of the request), which makes a date sort meaningless and
-    // silently degrades to alphabetical — putting claude-fable-5 above
-    // claude-opus-5. When the dates carry no information, keep the provider's
-    // own order, which is usually curated.
-    let dates_differ = raw.len() > 1 && raw.iter().any(|m| m.sort_key() != raw[0].sort_key());
-    if dates_differ {
-        raw.sort_by(|a, b| b.sort_key().cmp(&a.sort_key()).then_with(|| a.id.cmp(&b.id)));
-    }
-
+    raw.sort_by(|a, b| b.created.unwrap_or(0).cmp(&a.created.unwrap_or(0)).then_with(|| a.id.cmp(&b.id)));
     Ok(raw
         .into_iter()
         .map(|m| ModelInfo {
-            supports_effort: effort_capable(&m.id),
+            efforts: if effort_capable(&m.id) { ["none", "low", "medium", "high"].map(String::from).to_vec() } else { Vec::new() },
             recommended: is_recommended(&m.id),
-            free: is_free(&m),
-            label: m.display_name.unwrap_or_else(|| m.id.clone()),
+            fast: false,
+            label: m.id.clone(),
             id: m.id,
         })
         .collect())
@@ -593,22 +445,14 @@ pub enum StreamEvent {
 }
 
 /// Request headers the webview may set. Anything else is dropped so the panel
-/// cannot smuggle in a second auth header or rewrite the host.
-const FORWARDABLE: &[&str] = &[
-    "content-type",
-    "accept",
-    "anthropic-version",
-    "anthropic-beta",
-    "openai-beta",
-    "http-referer",
-    "x-title",
-];
+/// cannot rewrite the host.
+const FORWARDABLE: &[&str] = &["content-type", "accept"];
 
-/// Make a request to `provider` at `path`, injecting the stored key, and stream
-/// the response body back over `on_event`.
+/// Make a request to `provider` at `path` and stream the response body back
+/// over `on_event`.
 ///
 /// `path` is joined to the provider's configured base URL. The webview never
-/// supplies a host, so it cannot aim a key at a server of its choosing.
+/// supplies a host, so it cannot aim a request at a server of its choosing.
 #[tauri::command]
 pub async fn ai_chat_stream(
     app: AppHandle,
@@ -623,10 +467,6 @@ pub async fn ai_chat_stream(
         return Err(format!("bad path {path}"));
     }
     let base = base_url(&app, p);
-    let key = stored_key(&app, p.id);
-    if p.needs_key && key.is_none() {
-        return Err(format!("no {} key stored", p.label));
-    }
 
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(600))
@@ -642,12 +482,6 @@ pub async fn ai_chat_stream(
         if FORWARDABLE.contains(&name.to_ascii_lowercase().as_str()) {
             req = req.header(name, value);
         }
-    }
-    if let Some(k) = key {
-        req = match p.kind {
-            ApiKind::Anthropic => req.header("x-api-key", k),
-            ApiKind::OpenAiCompatible => req.header("authorization", format!("Bearer {k}")),
-        };
     }
 
     let mut res = match req.send().await {
@@ -693,12 +527,12 @@ pub async fn ai_chat_stream(
 
 #[cfg(test)]
 mod tests {
-    use super::{effort_capable, find, ApiKind, PROVIDERS};
+    use super::{effort_capable, find, PROVIDERS};
 
     #[test]
     fn only_known_providers_resolve() {
-        assert!(find("anthropic").is_ok());
         assert!(find("ollama-local").is_ok());
+        assert!(find("anthropic").is_err());
         assert!(find("evil.example.com").is_err());
         assert!(find("").is_err());
     }
@@ -716,127 +550,20 @@ mod tests {
     }
 
     #[test]
-    fn local_ollama_is_the_only_keyless_provider() {
-        let keyless: Vec<&str> = PROVIDERS.iter().filter(|p| !p.needs_key).map(|p| p.id).collect();
-        assert_eq!(keyless, vec!["ollama-local"]);
-    }
-
-    #[test]
-    fn anthropic_is_the_only_non_openai_shape() {
-        let anthropic: Vec<&str> =
-            PROVIDERS.iter().filter(|p| p.kind == ApiKind::Anthropic).map(|p| p.id).collect();
-        assert_eq!(anthropic, vec!["anthropic"]);
+    fn key_slots_are_the_decision_backends_only() {
+        assert!(super::known("typesafe").is_ok());
+        assert!(super::known("openrouter").is_ok());
+        assert!(super::known("anthropic").is_err());
     }
 
     #[test]
     fn non_chat_endpoints_are_filtered_out() {
-        for id in [
-            "text-embedding-3-large",
-            "whisper-1",
-            "tts-1-hd",
-            "dall-e-3",
-            "omni-moderation-latest",
-            "nomic-embed-text",
-            "bge-m3",
-        ] {
+        for id in ["nomic-embed-text", "bge-m3", "llama-guard3"] {
             assert!(!super::is_chat_model(id), "{id} should be filtered");
         }
-        for id in ["claude-sonnet-5", "gpt-5.2", "llama3.3:70b", "deepseek-v3"] {
+        for id in ["qwen3-vl:8b-instruct", "llama3.3:70b", "deepseek-v3"] {
             assert!(super::is_chat_model(id), "{id} should be kept");
         }
-    }
-
-    #[test]
-    fn recommended_covers_current_and_previous_generation() {
-        for id in ["claude-opus-5", "claude-sonnet-4-5", "gpt-5.2", "anthropic/claude-haiku-4-5"] {
-            assert!(super::is_recommended(id), "{id} should be recommended");
-        }
-        for id in ["gpt-3.5-turbo", "claude-2.1", "llama2"] {
-            assert!(!super::is_recommended(id), "{id} should not be recommended");
-        }
-    }
-
-    #[test]
-    fn newest_sorts_first_across_both_timestamp_shapes() {
-        let numeric = super::RawModel {
-            id: "a".into(),
-            created: Some(1_700_000_000),
-            created_at: None,
-            display_name: None, pricing: None,
-        };
-        let older = super::RawModel { id: "b".into(), created: Some(1_600_000_000), created_at: None, display_name: None, pricing: None };
-        assert!(numeric.sort_key() > older.sort_key());
-
-        // Anthropic's RFC 3339 string reduces to YYYYMMDD.
-        let iso = super::RawModel {
-            id: "c".into(),
-            created: None,
-            created_at: Some("2025-10-01T00:00:00Z".into()),
-            display_name: None, pricing: None,
-        };
-        let iso_older = super::RawModel {
-            id: "d".into(),
-            created: None,
-            created_at: Some("2024-06-20T00:00:00Z".into()),
-            display_name: None, pricing: None,
-        };
-        assert_eq!(iso.sort_key(), 20_251_001);
-        assert!(iso.sort_key() > iso_older.sort_key());
-    }
-
-    #[test]
-    fn free_models_are_recognised_per_provider() {
-        let priced = |id: &str, p: &str, c: &str| super::RawModel {
-            id: id.into(),
-            created: None,
-            created_at: None,
-            display_name: None,
-            pricing: Some(super::Pricing { prompt: Some(p.into()), completion: Some(c.into()) }),
-        };
-        let bare = |id: &str| super::RawModel {
-            id: id.into(),
-            created: None,
-            created_at: None,
-            display_name: None,
-            pricing: None,
-        };
-
-        // OpenRouter publishes prices, and they outrank the id: it lists models
-        // that cost nothing without marking the id.
-        assert!(super::is_free(&priced("some/model", "0", "0")));
-        assert!(!super::is_free(&priced("anthropic/claude-sonnet-5", "0.000003", "0.000015")));
-        assert!(super::is_free(&priced("deepseek/deepseek-r1:free", "0", "0")));
-
-        // OpenCode Zen publishes no prices and marks free models in the id.
-        assert!(super::is_free(&bare("nemotron-3-ultra-free")));
-        assert!(super::is_free(&bare("deepseek/deepseek-r1:free")));
-        assert!(!super::is_free(&bare("claude-opus-5")));
-
-        // "free" inside a name is not a marker.
-        assert!(!super::is_free(&bare("freedom-model-v2")));
-    }
-
-    /// A gateway that stamps every model with the same date must not have its
-    /// list reordered: sorting on equal keys degrades to alphabetical, which
-    /// puts older models above newer ones.
-    #[test]
-    fn identical_dates_leave_the_order_alone() {
-        let same = |id: &str| super::RawModel {
-            id: id.into(),
-            created: Some(1_788_416_612),
-            created_at: None,
-            display_name: None, pricing: None,
-        };
-        let raw = [same("claude-fable-5"), same("claude-opus-5"), same("claude-sonnet-5")];
-        let differ = raw.len() > 1 && raw.iter().any(|m| m.sort_key() != raw[0].sort_key());
-        assert!(!differ, "identical timestamps must not be treated as orderable");
-
-        let mixed = [
-            super::RawModel { id: "old".into(), created: Some(1), created_at: None, display_name: None, pricing: None },
-            super::RawModel { id: "new".into(), created: Some(2), created_at: None, display_name: None, pricing: None },
-        ];
-        let differ = mixed.iter().any(|m| m.sort_key() != mixed[0].sort_key());
-        assert!(differ, "real timestamps must still sort");
     }
 
     #[test]
@@ -846,25 +573,18 @@ mod tests {
             join("http://localhost:11434/v1", "/v1/chat/completions"),
             "http://localhost:11434/v1/chat/completions"
         );
-        // The correct shapes are left alone.
         assert_eq!(
             join("http://localhost:11434/v1", "/chat/completions"),
             "http://localhost:11434/v1/chat/completions"
-        );
-        assert_eq!(
-            join("https://api.anthropic.com", "/v1/messages"),
-            "https://api.anthropic.com/v1/messages"
         );
     }
 
     #[test]
     fn effort_matches_reasoning_models_only() {
-        assert!(effort_capable("claude-opus-5"));
-        assert!(effort_capable("gpt-5.2"));
         assert!(effort_capable("deepseek-r1:70b"));
-        assert!(!effort_capable("claude-haiku-4-5-20251001"));
+        assert!(effort_capable("gpt-oss:20b"));
         assert!(!effort_capable("llama3.2"));
-        assert!(!effort_capable("gpt-4o"));
+        assert!(!effort_capable("qwen3-vl:8b-instruct"));
     }
 
     /// The OS credential store is reachable and round-trips. Uses a throwaway

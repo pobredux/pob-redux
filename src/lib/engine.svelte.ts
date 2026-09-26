@@ -75,7 +75,6 @@ export interface AppPaths {
   chat_log: string | null;
   chat_provider: string | null;
   chat_model: string | null;
-  chat_mode: string | null;
   initial_view: string | null;
   chat_open: string | null;
   chat_ask: string | null;

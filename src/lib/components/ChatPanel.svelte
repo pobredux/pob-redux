@@ -1,8 +1,11 @@
 <script lang="ts">
-  import { effortsFor, type Effort } from "$lib/ai/providers";
-  import { chat, experimentDelta, MAX_WIDTH, MIN_WIDTH, type Mode, type ToolTurn } from "$lib/state/chat.svelte";
-  import ProviderSettings from "$lib/components/ProviderSettings.svelte";
+  import { chat, experimentDelta, MAX_WIDTH, MIN_WIDTH, type ToolTurn } from "$lib/state/chat.svelte";
   import Icon from "$lib/components/Icon.svelte";
+  import ModelPicker from "$lib/components/ModelPicker.svelte";
+  import TraitsPicker from "$lib/components/TraitsPicker.svelte";
+  import ChangesPicker from "$lib/components/ChangesPicker.svelte";
+  import ContextMeter from "$lib/components/ContextMeter.svelte";
+  import WorkingTimer from "$lib/components/WorkingTimer.svelte";
   import Markdown from "$lib/components/Markdown.svelte";
   import { build } from "$lib/state/build.svelte";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
@@ -22,27 +25,33 @@
       : chat.toolNames.filter((t) => t.name.includes(slashQuery.replace(/\s+/g, "_"))).slice(0, 8),
   );
 
+  /** Follow new output only while the reader is already at the bottom. */
+  let stuck = $state(true);
   $effect(() => {
-    void chat.turns.length;
+    void chat.turns;
     void chat.busy;
-    if (scroller) scroller.scrollTop = scroller.scrollHeight;
+    if (stuck && scroller) scroller.scrollTop = scroller.scrollHeight;
   });
+
+  function onScroll() {
+    if (scroller) stuck = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 40;
+  }
+
+  function toEnd() {
+    stuck = true;
+    scroller?.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
+  }
+
+  let expanded = $state<Record<string, boolean>>({});
+  const pretty = (v: unknown) => {
+    const t = typeof v === "string" ? v : JSON.stringify(v, null, 2) ?? "";
+    return t.length > 20000 ? `${t.slice(0, 20000)}…` : t;
+  };
 
   $effect(() => {
     void slashHits.length;
     slashIndex = 0;
   });
-
-  // Try can be selected before a build is open, and the checkpoint needs one.
-  $effect(() => {
-    if (chat.mode === "try" && build.loaded && !chat.experiment && !chat.busy) void chat.openExperiment();
-  });
-
-  const MODES = $derived<[Mode, string, string][]>([
-    ["ask", m.chat_mode_ask(), m.chat_mode_ask_hint()],
-    ["build", m.chat_mode_build(), m.chat_mode_build_hint()],
-    ["try", m.chat_mode_try(), m.chat_mode_try_hint()],
-  ]);
 
   const moved = $derived(chat.experiment ? experimentDelta(chat.experiment) : []);
   const signed = (n: number, digits = 0) => `${n > 0 ? "+" : ""}${n.toFixed(digits)}`;
@@ -141,9 +150,6 @@
     }
   }
 
-  // Token counts run to five figures quickly; k keeps the row from wrapping.
-  const tokens = (n: number) => (n >= 10000 ? `${Math.round(n / 1000)}k` : n.toLocaleString());
-
   const summary = (t: ToolTurn) => {
     const a = t.args as Record<string, unknown> | null;
     if (!a) return "";
@@ -184,10 +190,9 @@
       </button>
       <button
         class="icon"
-        class:on={chat.settingsOpen}
         title={m.chat_providers_title()}
         aria-label={m.chat_provider_settings()}
-        onclick={() => (chat.settingsOpen = !chat.settingsOpen)}
+        onclick={() => chat.openSettings()}
       >
         <Icon name="gear" size={17} />
       </button>
@@ -200,7 +205,7 @@
   {#if chat.experiment}
     <div class="trying" class:warn={chat.undoWarning}>
       <div class="trow">
-        <span class="tlabel">{m.chat_trying()}</span>
+        <span class="tlabel">{m.chat_reply_changed()}</span>
         {#if moved.length}
           <span class="tdelta">
             {#each moved.slice(0, 3) as d}
@@ -225,18 +230,15 @@
     </div>
   {/if}
 
-  {#if chat.settingsOpen}
-    <ProviderSettings />
-  {/if}
-
-  {#if !chat.anyReady && !chat.settingsOpen}
+  {#if !chat.ready}
     <div class="setup">
       <div class="label">{m.chat_no_provider()}</div>
       <p class="dim">{m.chat_no_provider_blurb()}</p>
-      <button class="btn sm" onclick={() => (chat.settingsOpen = true)}>{m.chat_open_provider_settings()}</button>
+      <button class="btn sm" onclick={() => chat.openSettings()}>{m.chat_open_provider_settings()}</button>
     </div>
   {:else}
-    <div class="log" bind:this={scroller}>
+    <div class="logwrap">
+    <div class="log" bind:this={scroller} onscroll={onScroll}>
       {#each chat.turns as turn, i}
         {#if turn.kind === "user"}
           <button
@@ -260,11 +262,23 @@
           </div>
         {:else}
           <div class="tool" class:err={turn.status === "error"}>
-            <div class="tline">
+            <button class="tline" aria-expanded={!!expanded[turn.id]} onclick={() => (expanded[turn.id] = !expanded[turn.id])}>
+              <span class="ticon"><Icon name={turn.readOnly ? "eye" : "pencil"} size={11} /></span>
               <span class="tname">{turn.name}</span>
               <span class="targs">{summary(turn)}</span>
               <span class="tstat {turn.status}">{turn.status}</span>
-            </div>
+              <span class={["tcaret", { open: expanded[turn.id] }]}><Icon name="caret-right" size={9} /></span>
+            </button>
+            {#if expanded[turn.id]}
+              <div class="tbody">
+                <div class="tlabel">{m.chat_tool_args()}</div>
+                <pre>{pretty(turn.args ?? {})}</pre>
+                {#if turn.result !== undefined}
+                  <div class="tlabel">{m.chat_tool_result()}</div>
+                  <pre>{pretty(turn.result)}</pre>
+                {/if}
+              </div>
+            {/if}
             {#if turn.status === "awaiting"}
               <div class="approve">
                 <span>{m.chat_changes_build()}</span>
@@ -280,7 +294,9 @@
       {/each}
       {#if chat.busy}
         <div class="dim thinking" aria-live="polite">
-          {m.chat_working()}<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          {m.chat_working()}
+          {#if chat.startedAt}<WorkingTimer since={chat.startedAt} />{/if}
         </div>
       {/if}
       {#if chat.notice}
@@ -314,6 +330,10 @@
         </div>
       {/if}
     </div>
+    {#if !stuck}
+      <button class="toend" onclick={toEnd}><Icon name="arrow-down" size={11} /> {m.chat_scroll_end()}</button>
+    {/if}
+    </div>
 
     <div class="composer">
       {#if slashHits.length}
@@ -339,100 +359,34 @@
         disabled={chat.busy}
       ></textarea>
       <div class="bar">
-        <div class="modes" role="group" aria-label={m.chat_mode_group()}>
-          {#each MODES as [id, label, hint]}
-            <button
-              class="mode"
-              class:on={chat.mode === id}
-              title={hint}
-              aria-pressed={chat.mode === id}
-              disabled={chat.busy}
-              onclick={() => chat.setMode(id)}>{label}</button>
-          {/each}
-        </div>
-
-        <select
-          class="pill"
-          value={chat.provider}
-          onchange={(e) => chat.setProvider((e.target as HTMLSelectElement).value)}
-          title={m.chat_provider()}
-        >
-          {#each chat.providers as p}
-            <option value={p.id} disabled={!p.ready}>{p.label}{p.ready ? "" : m.chat_no_key()}</option>
-          {/each}
-        </select>
-
-        <select
-          class="pill"
-          value={chat.model}
-          onchange={(e) => chat.setModel((e.target as HTMLSelectElement).value)}
-          title={m.chat_model()}
-          disabled={!chat.models.length}
-        >
-          {#if chat.models.length}
-            <!-- Each model lands in exactly one group, so nothing appears twice. -->
-            {@const free = chat.models.filter((x) => x.free)}
-            {@const latest = chat.models.filter((x) => x.recommended && !x.free)}
-            {@const rest = chat.models.filter((x) => !x.recommended && !x.free)}
-            {#if [free, latest, rest].filter((g) => g.length).length > 1}
-              {#if latest.length}
-                <optgroup label={m.chat_models_latest()}>
-                  {#each latest as model}<option value={model.id}>{model.label}</option>{/each}
-                </optgroup>
-              {/if}
-              {#if free.length}
-                <optgroup label={m.chat_models_free({ count: free.length })}>
-                  {#each free as model}<option value={model.id}>{model.label}</option>{/each}
-                </optgroup>
-              {/if}
-              {#if rest.length}
-                <optgroup label={m.chat_models_all({ count: rest.length })}>
-                  {#each rest as model}<option value={model.id}>{model.label}</option>{/each}
-                </optgroup>
-              {/if}
-            {:else}
-              {#each chat.models as model}<option value={model.id}>{model.label}</option>{/each}
-            {/if}
-          {:else}
-            <option value={chat.model}>{chat.modelsError ? m.chat_model_unavailable() : chat.model}</option>
+        <div class="left">
+          <ModelPicker />
+          {#if chat.supportsEffort || chat.supportsFast}
+            <span class="sep"></span>
+            <TraitsPicker />
           {/if}
-        </select>
-
-        {#if chat.supportsEffort}
-          <select
-            class="pill"
-            value={chat.effort}
-            onchange={(e) => chat.setEffort((e.target as HTMLSelectElement).value as Effort)}
-            title={m.chat_effort()}
-          >
-            {#each effortsFor(chat.current?.kind ?? "anthropic", chat.provider) as e}<option value={e}>{e[0].toUpperCase() + e.slice(1)}</option>{/each}
-          </select>
-        {/if}
-
-        <div class="grow"></div>
-        {#if chat.needsWarm && chat.warmNote}
-          <span class="warm {chat.warm}" title={chat.warmDetail || m.chat_warm_title()}>
-            <span class="wdot"></span>{chat.warmNote}
-          </span>
-        {/if}
-        {#if chat.busy}
-          <button class="send" onclick={() => chat.stop()} title={m.chat_stop()} aria-label={m.chat_stop()}>
-            <Icon name="stop" size={13} />
-          </button>
-        {:else}
-          <button class="send" onclick={() => chat.send()} disabled={!chat.input.trim() || chat.warm === "loading" || chat.warm === "priming"} title={chat.warm === "loading" || chat.warm === "priming" ? m.chat_waiting_model() : m.chat_send()} aria-label={m.chat_send()}>
-            <Icon name="paper-plane" size={13} />
-          </button>
-        {/if}
+          <span class="sep"></span>
+          <ChangesPicker />
+        </div>
+        <div class="right">
+          {#if chat.needsWarm && chat.warmNote}
+            <span class="warm {chat.warm}" title={chat.warmDetail || m.chat_warm_title()}>
+              <span class="wdot"></span>{chat.warmNote}
+            </span>
+          {/if}
+          <ContextMeter />
+          {#if chat.busy}
+            <button class="send stop" onclick={() => chat.stop()} title={m.chat_stop()} aria-label={m.chat_stop()}>
+              <Icon name="stop" size={11} />
+            </button>
+          {:else}
+            <button class="send" onclick={() => chat.send()} disabled={!chat.input.trim() || chat.warm === "loading" || chat.warm === "priming"} title={chat.warm === "loading" || chat.warm === "priming" ? m.chat_waiting_model() : m.chat_send()} aria-label={m.chat_send()}>
+              <Icon name="arrow-up" size={13} />
+            </button>
+          {/if}
+        </div>
       </div>
       {#if chat.modelsError}<div class="terr small">{chat.modelsError}</div>{/if}
-      {#if chat.usage.input || chat.usage.output}
-        <div class="usage" title={m.chat_usage_title()}>
-          <span class="num">{tokens(chat.usage.input)}</span> {m.chat_usage_in()}
-          <span class="num">{tokens(chat.usage.output)}</span> {m.chat_usage_out()}
-          {#if chat.usage.cacheRead}<span class="num">{tokens(chat.usage.cacheRead)}</span> {m.chat_usage_cached()}{/if}
-        </div>
-      {/if}
     </div>
   {/if}
 </aside>
@@ -517,6 +471,34 @@
     font-size: var(--fs-xs);
     line-height: 1.55;
     margin: 6px 0 12px;
+  }
+  .logwrap {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .toend {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    background: var(--bg-2);
+    border: 1px solid var(--line-2);
+    border-radius: 999px;
+    box-shadow: var(--shadow-pop);
+    color: var(--fg-1);
+    font: inherit;
+    font-size: var(--fs-xs);
+    cursor: pointer;
+  }
+  .toend:hover {
+    color: var(--fg-0);
   }
   .log {
     flex: 1;
@@ -619,7 +601,53 @@
   .tline {
     display: flex;
     gap: 6px;
-    align-items: baseline;
+    align-items: center;
+    width: 100%;
+    padding: 0;
+    background: none;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .tline:hover .tname {
+    color: var(--fg-0);
+  }
+  .ticon,
+  .tcaret {
+    display: grid;
+    place-items: center;
+    color: var(--fg-3);
+    flex: none;
+  }
+  .tcaret {
+    transition: transform 120ms ease;
+  }
+  .tcaret.open {
+    transform: rotate(90deg);
+  }
+  .tbody {
+    margin: 4px 0 2px 17px;
+  }
+  .tlabel {
+    color: var(--fg-3);
+    font-family: var(--font-ui);
+    font-size: var(--fs-2xs);
+    margin: 4px 0 2px;
+  }
+  .tbody pre {
+    margin: 0;
+    max-height: 240px;
+    overflow: auto;
+    padding: 6px 8px;
+    background: var(--bg-2);
+    border: 1px solid var(--line-1);
+    border-radius: var(--r-1);
+    color: var(--fg-1);
+    font-size: var(--fs-2xs);
+    white-space: pre-wrap;
+    word-break: break-word;
   }
   .tname {
     color: var(--fg-1);
@@ -668,26 +696,11 @@
     font-size: var(--fs-xs);
     line-height: 1.45;
   }
-  .usage {
-    display: flex;
-    gap: 4px;
-    justify-content: flex-end;
-    padding: 0 8px 6px;
-    color: var(--fg-3);
-    font-size: var(--fs-2xs);
-  }
-  .usage .num {
-    font-family: var(--font-mono);
-    color: var(--fg-2);
-  }
-  .terr.small {
-    font-size: var(--fs-2xs);
-    padding: 0 10px 8px;
-  }
   .thinking {
     font-size: var(--fs-xs);
     display: flex;
-    align-items: baseline;
+    align-items: center;
+    gap: 6px;
   }
   /* Three dots pulsing in sequence, in the text colour: the same beat as the
      status bar pulse so the two indicators read as one system. */
@@ -737,6 +750,7 @@
 
   /* Composer: one bordered card holding the box and its controls. */
   .composer {
+    container: composer / inline-size;
     position: relative;
     margin: 8px;
     border: 1px solid var(--line-1);
@@ -759,6 +773,9 @@
     font-size: var(--fs-md);
     line-height: 1.5;
     padding: 9px 10px 4px;
+    field-sizing: content;
+    min-height: calc(3em + 13px);
+    max-height: 200px;
   }
   .ta::placeholder {
     color: var(--fg-3);
@@ -766,8 +783,29 @@
   .bar {
     display: flex;
     align-items: center;
-    gap: 5px;
-    padding: 5px 6px 6px;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 4px 6px 6px 4px;
+  }
+  .left {
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    min-width: 0;
+    flex: 1;
+  }
+  .right {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: none;
+  }
+  .sep {
+    width: 1px;
+    height: 14px;
+    margin: 0 3px;
+    background: var(--line-1);
+    flex: none;
   }
   .grow {
     flex: 1;
@@ -800,37 +838,6 @@
   }
   .warm.failed .wdot {
     background: var(--bad);
-  }
-  .modes {
-    display: flex;
-    border: 1px solid var(--line-1);
-    border-radius: var(--r-1);
-    overflow: hidden;
-  }
-  .mode {
-    background: none;
-    border: 0;
-    border-right: 1px solid var(--line-1);
-    color: var(--fg-3);
-    font-family: var(--font-ui);
-    font-size: var(--fs-xs);
-    padding: 2px 7px;
-    cursor: pointer;
-  }
-  .mode:last-child {
-    border-right: 0;
-  }
-  .mode:hover:not(:disabled):not(.on) {
-    background: var(--bg-hover);
-    color: var(--fg-1);
-  }
-  .mode.on {
-    background: var(--bg-3);
-    color: var(--fg-0);
-  }
-  .mode:disabled {
-    cursor: default;
-    color: var(--fg-4);
   }
   .trying {
     border-bottom: 1px solid var(--line-1);
@@ -867,55 +874,31 @@
   .tdelta.dim {
     color: var(--fg-3);
   }
-  .pill {
-    appearance: none;
-    /* Matches the composer behind it, so it still reads as flat while giving
-       the open dropdown a solid dark ground. `background: none` left it
-       transparent and the platform painted the list white. */
-    background-color: var(--bg-2);
-    border: 1px solid transparent;
-    border-radius: var(--r-1);
-    color: var(--fg-2);
-    font-family: var(--font-ui);
-    font-size: var(--fs-xs);
-    padding: 2px 17px 2px 5px;
-    max-width: 132px;
-    cursor: pointer;
-    /* appearance:none drops the native arrow. Same chevron as `.select` in
-       app.css so dropdowns look the same everywhere. */
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%2380808a' stroke-width='1.2'/></svg>");
-    background-repeat: no-repeat;
-    background-position: right 5px center;
-  }
-  .pill:hover:not(:disabled) {
-    background: var(--bg-hover);
-    color: var(--fg-0);
-  }
-  .pill:disabled {
-    color: var(--fg-4);
-    cursor: default;
-  }
   .send {
     display: grid;
     place-items: center;
     width: 26px;
-    height: 24px;
+    height: 26px;
     padding: 0;
-    background: var(--bg-3);
-    border: 1px solid var(--line-2);
-    border-radius: var(--r-1);
-    color: var(--fg-1);
-    font-size: var(--fs-sm);
+    background: var(--fg-0);
+    border: 0;
+    border-radius: 50%;
+    color: var(--bg-1);
     cursor: pointer;
+    transition: transform 100ms ease;
   }
   .send:hover:not(:disabled) {
-    background: var(--bg-hover);
-    color: var(--fg-0);
+    transform: scale(1.06);
   }
   .send:disabled {
+    background: var(--bg-3);
     color: var(--fg-4);
-    border-color: var(--line-1);
     cursor: default;
+  }
+  .send.stop {
+    background: var(--bg-3);
+    border: 1px solid var(--line-2);
+    color: var(--fg-0);
   }
 
   .slash {

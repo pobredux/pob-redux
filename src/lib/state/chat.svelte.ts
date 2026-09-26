@@ -1,12 +1,10 @@
 import { m } from "$lib/paraglide/messages";
-import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { createOpenAI } from "@ai-sdk/openai";
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { isStepCount, streamText, type LanguageModel, type ModelMessage, type ToolResultPart } from "ai";
 
 import {
-  effortOptions,
+  clampEffort,
   listModels,
   listProviders,
   type Effort,
@@ -16,7 +14,7 @@ import {
 import { proxyFetch } from "$lib/ai/transport";
 import { routeTools } from "$lib/ai/decide";
 import { decider } from "$lib/state/decide.svelte";
-import { MODE_PROMPT, STYLE, type Mode } from "$lib/ai/prompt";
+import { LOADING, STYLE } from "$lib/ai/prompt";
 import {
   callTool,
   CORE,
@@ -30,6 +28,7 @@ import {
 import { writeTextFile } from "$lib/engine.svelte";
 import { stripPobText } from "$lib/pobtext";
 import { build } from "$lib/state/build.svelte";
+import { appOptions } from "$lib/state/options.svelte";
 import { gems } from "$lib/state/gems.svelte";
 
 const KEY = "pob-redux:chat";
@@ -40,8 +39,6 @@ const KEY = "pob-redux:chat";
  * midway through exactly that. This is a runaway guard, not a budget.
  */
 const MAX_STEPS = 48;
-/** Anthropic cache breakpoint; see markCacheBreakpoint for the lifetime choice. */
-const CACHE = { type: "ephemeral", ttl: "1h" } as const;
 /**
  * Characters of one tool result the model sees. optimise_gear and
  * suggest_unique_jewels return tens of kilobytes; the panel still shows all of
@@ -52,7 +49,7 @@ const MAX_RESULT_CHARS = 6000;
 const MAX_HISTORY_CHARS = 400_000;
 /** Tool rounds whose results survive compaction intact. */
 const KEEP_RESULTS = 6;
-/** The numbers a Try experiment reports on. */
+/** The numbers the Keep/Undo strip reports on. */
 const TRY_STATS: [string, string][] = [
   ["CombinedDPS", "DPS"],
   ["Life", "life"],
@@ -60,9 +57,7 @@ const TRY_STATS: [string, string][] = [
   ["EnergyShield", "ES"],
 ];
 
-export type { Mode };
-
-/** An open Try experiment: one checkpoint, resolved by Keep or Undo. */
+/** The checkpoint taken before a reply's first change, resolved by Keep or Undo. */
 export interface Experiment {
   label: string;
   before: Record<string, number>;
@@ -148,40 +143,30 @@ export type Turn =
   | { kind: "assistant"; text: string }
   | ToolTurn;
 
+/** What a Claude Code or Codex session reports while it works (`agent.rs`). */
+type AgentEvent =
+  | { kind: "textStart" }
+  | { kind: "text"; text: string }
+  | { kind: "tool"; id: string; name: string; args: unknown; readOnly: boolean; awaiting: boolean }
+  | { kind: "toolDone"; id: string; result: unknown }
+  | { kind: "toolFailed"; id: string; error: string; skipped: boolean }
+  | { kind: "usage"; input: number; output: number; cacheRead: number; cacheWrite: number }
+  | { kind: "context"; used: number; size: number }
+  | { kind: "notice"; message: string };
 
-/**
- * Turn a provider failure into something worth reading.
- *
- * Neither Anthropic nor OpenAI lets a normal API key query a balance — that
- * needs an admin key with organisation-wide scope — so running dry cannot be
- * warned about in advance. What can be done is to name it clearly when it
- * happens, rather than showing the raw provider JSON.
- */
+/** Characters of earlier conversation a new CLI session is given. */
+const MAX_CARRIED_CHARS = 12_000;
+
+/** Turn a local model failure into something worth reading. */
 function explainError(e: unknown, providerLabel: string): string {
-  const raw = String(e);
-  // Match on everything the error carries: the status and body live in `cause`.
   const t = describeError(e).toLowerCase();
-
-  // Match the status line describeError emits, not a bare number: a tool result
-  // or a model id containing "402" is not a billing failure.
-  const status = (code: number) => t.includes(`statuscode: ${code}`) || t.includes(`"status":${code}`);
-
-  if (t.includes("credit balance is too low") || t.includes("insufficient_quota") || t.includes("exceeded your current quota") || status(402)) {
-    return `${providerLabel} rejected the request for billing: the account is out of credit. Top it up, then try again.`;
-  }
-  if (status(401) || t.includes("authentication_error") || t.includes("invalid api key") || t.includes("invalid_api_key")) {
-    return `${providerLabel} rejected the key. Check it in provider settings.`;
-  }
-  if (status(429) || t.includes("rate_limit")) {
-    return `${providerLabel} is rate limiting this key. Wait a moment and try again.`;
-  }
-  if (t.includes("model is unavailable") || t.includes("model_not_found") || t.includes("not_found_error") || t.includes("does not exist") || status(404)) {
+  if (t.includes("model is unavailable") || t.includes("model_not_found") || t.includes("does not exist") || t.includes("statuscode: 404")) {
     return `${providerLabel} cannot serve this model. Pick another in the model list.`;
   }
   if (t.includes("fetch failed") || t.includes("connection") || t.includes("econnrefused")) {
-    return `Could not reach ${providerLabel}. For a local provider, check it is running.`;
+    return `Could not reach ${providerLabel}. Check that it is running.`;
   }
-  return raw;
+  return String(e);
 }
 
 class ChatStore {
@@ -190,15 +175,28 @@ class ChatStore {
   input = $state("");
   busy = $state(false);
   error = $state<string | null>(null);
-  provider = $state("anthropic");
-  model = $state("claude-sonnet-5");
+  provider = $state("claude");
+  model = $state("sonnet");
   effort = $state<Effort>("medium");
   providers = $state<ProviderStatus[]>([]);
   models = $state<ModelInfo[]>([]);
   modelsError = $state<string | null>(null);
-  settingsOpen = $state(false);
   /** Cumulative tokens for this conversation. Cache counts are Anthropic-only. */
   usage = $state({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+  /** How full the model's context window is, where the agent reports it. */
+  contextUse = $state<{ used: number; size: number } | null>(null);
+  /** When the running reply started, for the working timer. */
+  startedAt = $state<number | null>(null);
+  /** The faster service tier, where the model offers one. */
+  fast = $state(false);
+  /** Providers switched off in settings; the composer does not offer them. */
+  disabled = $state<string[]>([]);
+  /** Models hidden from the picker, by provider. */
+  hidden = $state<Record<string, string[]>>({});
+  /** When the providers were last checked. */
+  checkedAt = $state<number | null>(null);
+  /** Model lists by provider, filled as the picker opens each one. */
+  catalog = $state<Record<string, { models: ModelInfo[]; loading: boolean; error: string | null }>>({});
   /**
    * Why the last run ended, when it ended for a reason worth saying out loud.
    * A run that finishes normally leaves this null.
@@ -212,9 +210,9 @@ class ChatStore {
   allowWrites = $state(false);
   /** Tools approved for the rest of this conversation, by name. */
   allowedTools = $state<string[]>([]);
-  /** ask reads only, build writes with approval, try writes freely inside a checkpoint. */
-  mode = $state<Mode>("build");
-  /** The open Try experiment, if any. Outlives a single message. */
+  /** Hold each change for approval instead of applying it at once. */
+  askFirst = $state(false);
+  /** The last reply's changes, until the user keeps or undoes them. */
   experiment = $state<Experiment | null>(null);
   /** Set when Undo would also discard something the user did by hand. */
   undoWarning = $state<string | null>(null);
@@ -248,6 +246,10 @@ class ChatStore {
   private history: ModelMessage[] = [];
   private abort: AbortController | null = null;
   private pending = new Map<string, (ok: boolean) => void>();
+  /** The open coding-agent conversation. */
+  private agent: string | null = null;
+  /** Bumped when a conversation is dropped, so a reply still streaming from it is ignored. */
+  private agentRun = 0;
 
   get current(): ProviderStatus | undefined {
     return this.providers.find((p) => p.id === this.provider);
@@ -257,13 +259,25 @@ class ChatStore {
     return this.current?.ready ?? false;
   }
 
-  /** Any provider usable right now, so the panel knows whether to show setup. */
-  get anyReady() {
-    return this.providers.some((p) => p.ready);
+  get isAgent() {
+    return this.current?.kind === "agent";
+  }
+
+  get efforts(): Effort[] {
+    return this.models.find((x) => x.id === this.model)?.efforts ?? [];
+  }
+
+  get supportsFast() {
+    return this.models.find((x) => x.id === this.model)?.fast ?? false;
   }
 
   get supportsEffort() {
-    return this.models.find((m) => m.id === this.model)?.supports_effort ?? false;
+    return this.efforts.length > 0;
+  }
+
+  /** The effort actually sent: the saved one, clamped to what the model takes. */
+  get effortLevel(): Effort | null {
+    return clampEffort(this.efforts, this.effort);
   }
 
   async init(openOnBoot?: string | null) {
@@ -272,17 +286,19 @@ class ChatStore {
       if (typeof saved.provider === "string") this.provider = saved.provider;
       if (typeof saved.model === "string") this.model = saved.model;
       if (typeof saved.effort === "string") this.effort = saved.effort;
-      // An experiment does not survive a restart, so Try would have no undo.
-      if (saved.mode === "ask" || saved.mode === "build") this.mode = saved.mode;
+      if (typeof saved.askFirst === "boolean") this.askFirst = saved.askFirst;
+      if (typeof saved.fast === "boolean") this.fast = saved.fast;
+      if (Array.isArray(saved.disabled)) this.disabled = saved.disabled.filter((x: unknown) => typeof x === "string");
+      if (saved.hidden && typeof saved.hidden === "object") this.hidden = saved.hidden;
       if (typeof saved.open === "boolean") this.open = saved.open;
       if (Number.isFinite(saved.width)) this.width = clampWidth(saved.width);
     } catch {}
     if (openOnBoot != null) this.open = true;
-    if (openOnBoot === "settings") this.settingsOpen = true;
+    if (openOnBoot === "settings") this.openSettings();
     await this.refreshProviders();
-    // Land on something usable rather than an unconfigured provider.
+    // Land on something usable rather than an unconfigured or retired provider.
     if (!this.ready) {
-      const first = this.providers.find((p) => p.ready);
+      const first = this.providers.find((p) => p.ready && p.kind === "agent") ?? (this.current ? undefined : this.providers[0]);
       if (first) await this.setProvider(first.id);
     }
     await this.refreshModels();
@@ -320,11 +336,11 @@ class ChatStore {
       this.warm = "priming";
       this.warmNote = "priming the prompt";
       if (!this.defs.length) this.defs = await loadToolDefs();
-      const instructions = (await invoke<string>("ai_instructions").catch(() => "")) + STYLE + MODE_PROMPT[this.mode];
+      const instructions = (await invoke<string>("ai_instructions").catch(() => "")) + STYLE + LOADING;
       // The same request shape as a real turn, one token long, so the cached
       // prefix matches what the first question will send.
       const result = streamText({
-        model: this.buildModel("open-ai-compatible"),
+        model: this.buildModel(),
         tools: toToolSet(this.activeDefs()),
         maxOutputTokens: 1,
         instructions: { role: "system", content: instructions },
@@ -363,7 +379,10 @@ class ChatStore {
           provider: this.provider,
           model: this.model,
           effort: this.effort,
-          mode: this.mode,
+          askFirst: this.askFirst,
+          fast: this.fast,
+          disabled: this.disabled,
+          hidden: this.hidden,
           open: this.open,
           width: this.width,
         }),
@@ -379,31 +398,56 @@ class ChatStore {
   setModel(id: string) {
     this.model = id;
     this.persist();
+    this.configureAgent();
     void this.warmUp();
   }
 
   setEffort(e: Effort) {
     this.effort = e;
     this.persist();
+    this.configureAgent();
   }
 
-  /**
-   * Switching into Try opens an experiment. Switching out of it leaves the
-   * changes in place and stops tracking them: discarding someone's work
-   * because they changed a dropdown would be the wrong default.
-   */
-  async setMode(mode: Mode) {
-    if (mode === this.mode) return;
-    const leavingTry = this.mode === "try" && this.experiment;
-    this.mode = mode;
+  private configureAgent() {
+    if (!this.agent) return;
+    invoke("agent_configure", { session: this.agent, model: this.model, effort: this.effortLevel, fast: this.fast && this.supportsFast }).catch(() => {});
+  }
+
+  /** End the CLI conversation. The next message starts a new one, carrying the visible turns. */
+  private closeAgent() {
+    if (!this.agent) return;
+    invoke("agent_close", { session: this.agent }).catch(() => {});
+    this.agent = null;
+    this.agentRun++;
+  }
+
+  setFast(on: boolean) {
+    this.fast = on;
     this.persist();
-    if (mode === "try") {
-      await this.startExperiment();
-    } else if (leavingTry) {
-      this.experiment = null;
-      this.undoWarning = null;
-      this.notice = m.chat_experiment_kept();
+    this.configureAgent();
+  }
+
+  /** Pick a model from any provider, switching provider first when needed. */
+  async choose(provider: string, model: string) {
+    if (provider !== this.provider) await this.setProvider(provider);
+    this.setModel(model);
+  }
+
+  /** Load one provider's models for the picker; kept until the providers are checked again. */
+  async loadCatalog(provider: string, force = false) {
+    const have = this.catalog[provider];
+    if (have && (have.loading || (!force && !have.error))) return;
+    this.catalog[provider] = { models: have?.models ?? [], loading: true, error: null };
+    try {
+      this.catalog[provider] = { models: await listModels(provider), loading: false, error: null };
+    } catch (e) {
+      this.catalog[provider] = { models: [], loading: false, error: String(e) };
     }
+  }
+
+  setAskFirst(on: boolean) {
+    this.askFirst = on;
+    this.persist();
   }
 
   private async readStats(): Promise<Record<string, number>> {
@@ -415,11 +459,6 @@ class ChatStore {
     } catch {
       return {};
     }
-  }
-
-  /** Open a Try experiment if the mode calls for one and none is open. */
-  async openExperiment() {
-    await this.startExperiment();
   }
 
   private async startExperiment() {
@@ -472,14 +511,56 @@ class ChatStore {
   }
 
   async setProvider(id: string) {
+    if (id !== this.provider) {
+      this.closeAgent();
+      this.contextUse = null;
+    }
     this.provider = id;
     this.persist();
     await this.refreshModels();
     void this.warmUp();
   }
 
-  async refreshProviders() {
-    this.providers = await listProviders().catch(() => []);
+  openSettings() {
+    appOptions.section = "assistant";
+    appOptions.open = true;
+  }
+
+  /** `recheck` asks the CLIs again, after the user installed or signed in to one. */
+  async refreshProviders(recheck = false, only?: string) {
+    this.providers = await listProviders(recheck, only).catch(() => this.providers);
+    this.checkedAt = Date.now();
+    if (recheck && only) delete this.catalog[only];
+    else if (recheck) this.catalog = {};
+  }
+
+  /** The providers the composer offers. */
+  get offered() {
+    return this.providers.filter((p) => !this.disabled.includes(p.id));
+  }
+
+  async setEnabled(id: string, on: boolean) {
+    this.disabled = on ? this.disabled.filter((x) => x !== id) : [...new Set([...this.disabled, id])];
+    this.persist();
+    if (!on && id === this.provider) {
+      const next = this.offered.find((p) => p.ready) ?? this.offered[0];
+      if (next) await this.setProvider(next.id);
+    }
+  }
+
+  isHidden(provider: string, model: string) {
+    return this.hidden[provider]?.includes(model) ?? false;
+  }
+
+  /** Show or hide models in the picker; the one in use always stays. */
+  setHidden(provider: string, models: string[], hide: boolean) {
+    const now = new Set(this.hidden[provider] ?? []);
+    for (const id of models) {
+      if (hide) now.add(id);
+      else now.delete(id);
+    }
+    this.hidden = { ...this.hidden, [provider]: [...now] };
+    this.persist();
   }
 
   /** Pull the model list for the selected provider and keep the choice valid. */
@@ -491,6 +572,7 @@ class ChatStore {
     }
     try {
       this.models = await listModels(this.provider);
+      this.catalog[this.provider] = { models: this.models, loading: false, error: null };
       if (this.models.length && !this.models.some((m) => m.id === this.model)) {
         // Prefer a current-generation model over whatever merely sorts newest —
         // a provider's newest entry can be a niche preview.
@@ -524,17 +606,22 @@ class ChatStore {
     }
   }
 
-  private approve(turn: ToolTurn): Promise<boolean> {
-    // Try auto-approves: everything the panel can reach is inside the
-    // checkpoint, so Undo covers it.
-    if (turn.readOnly || this.allowWrites || this.mode === "try" || this.allowedTools.includes(turn.name)) {
-      return Promise.resolve(true);
-    }
-    return new Promise((resolve) => this.pending.set(turn.id, resolve));
+  /** Whether a write waits for the user instead of running at once. */
+  private asks(name: string): boolean {
+    return this.askFirst && !this.allowWrites && !this.allowedTools.includes(name);
+  }
+
+  /** Every write lands inside the reply's checkpoint, so Undo covers it. */
+  private async approve(turn: ToolTurn): Promise<boolean> {
+    if (turn.readOnly) return true;
+    const ok = this.asks(turn.name) ? await new Promise<boolean>((resolve) => this.pending.set(turn.id, resolve)) : true;
+    if (ok) await this.startExperiment();
+    return ok;
   }
 
   reset() {
     this.stop();
+    this.closeAgent();
     this.turns = [];
     this.history = [];
     this.active.clear();
@@ -542,6 +629,7 @@ class ChatStore {
     this.error = null;
     this.notice = null;
     this.usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+    this.contextUse = null;
     this.allowWrites = false;
     this.allowedTools = [];
     // The build keeps whatever the experiment did; a new conversation only
@@ -553,6 +641,7 @@ class ChatStore {
   stop() {
     this.abort?.abort();
     this.abort = null;
+    if (this.agent && this.busy) invoke("agent_stop", { session: this.agent }).catch(() => {});
     for (const [id, fn] of this.pending) {
       this.pending.delete(id);
       fn(false);
@@ -584,13 +673,19 @@ class ChatStore {
     // A send during warm-up waits for it; the composer button is disabled
     // meanwhile, but a boot-time message must not be lost.
     if (this.warming) await this.warming;
-    // Try was selected before a build was open, or the checkpoint failed.
-    if (this.mode === "try" && !this.experiment) await this.startExperiment();
+    // A new message keeps whatever the last reply changed.
+    this.experiment = null;
+    this.undoWarning = null;
     this.input = "";
     this.error = null;
     this.notice = null;
     this.canContinue = false;
+    const carried = this.isAgent && !this.agent ? this.transcript() : "";
     this.turns = [...this.turns, { kind: "user", text, mark: this.history.length }];
+    if (this.isAgent) {
+      await this.runAgent(text, carried);
+      return;
+    }
     // The snapshot rides with the question rather than the instructions, so the
     // cached prefix stays byte-identical between turns.
     this.history.push({ role: "user", content: `${await this.context()}\n\n${text}` });
@@ -598,14 +693,121 @@ class ChatStore {
     await this.run();
   }
 
+  /** The visible conversation as plain text, for a new CLI session to pick up from. */
+  private transcript(): string {
+    const lines = this.turns.flatMap((t) =>
+      t.kind === "user" ? [`User: ${t.text}`] : t.kind === "assistant" ? [`You: ${t.text}`] : [],
+    );
+    if (!lines.length) return "";
+    let text = lines.join("\n\n");
+    if (text.length > MAX_CARRIED_CHARS) text = `…${text.slice(-MAX_CARRIED_CHARS)}`;
+    return `Earlier in this conversation:\n\n${text}\n\n---\n\n`;
+  }
+
+  private async openAgent(): Promise<string> {
+    if (this.agent) return this.agent;
+    if (!this.defs.length) this.defs = await loadToolDefs();
+    const instructions = (await invoke<string>("ai_instructions").catch(() => "")) + STYLE;
+    this.agent = await invoke<string>("agent_open", {
+      provider: this.provider,
+      model: this.model,
+      effort: this.effortLevel,
+      fast: this.fast && this.supportsFast,
+      tools: this.defs.map((d) => d.name),
+      instructions,
+    });
+    return this.agent;
+  }
+
+  /** One message through Claude Code or Codex. The CLI runs the loop; tools arrive as events. */
+  private async runAgent(text: string, carried: string) {
+    this.busy = true;
+    this.startedAt = Date.now();
+    const run = ++this.agentRun;
+    let at = -1;
+    const pushText = (chunk: string) => {
+      if (at < 0) {
+        at = this.turns.length;
+        this.turns = [...this.turns, { kind: "assistant", text: "" }];
+      }
+      const next = [...this.turns];
+      const cur = next[at];
+      if (cur.kind === "assistant") next[at] = { kind: "assistant", text: plainDashes(cur.text + chunk) };
+      this.turns = next;
+    };
+    try {
+      const session = await this.openAgent();
+      const channel = new Channel<AgentEvent>();
+      channel.onmessage = (e) => {
+        if (run !== this.agentRun) return;
+        switch (e.kind) {
+          case "textStart":
+            at = -1;
+            break;
+          case "text":
+            pushText(e.text);
+            break;
+          case "tool": {
+            at = -1;
+            const waits = e.awaiting && this.asks(e.name);
+            const turn: ToolTurn = { kind: "tool", id: e.id, name: e.name, args: e.args, readOnly: e.readOnly, status: waits ? "awaiting" : "running" };
+            this.turns = [...this.turns, turn];
+            if (e.awaiting) {
+              void this.approve(turn).then((ok) => {
+                this.patchTool(turn.id, { status: ok ? "running" : "skipped" });
+                return invoke("agent_approve", { session, id: turn.id, ok });
+              });
+            }
+            break;
+          }
+          case "toolDone": {
+            this.patchTool(e.id, { result: e.result, status: "done" });
+            const stats = (e.result as { stats?: Record<string, number> })?.stats;
+            if (this.experiment && stats) this.experiment = { ...this.experiment, now: { ...this.experiment.now, ...stats } };
+            break;
+          }
+          case "toolFailed":
+            this.patchTool(e.id, e.skipped ? { status: "skipped" } : { status: "error", error: e.error });
+            break;
+          case "context":
+            this.contextUse = { used: e.used, size: e.size };
+            break;
+          case "usage":
+            this.usage = {
+              input: this.usage.input + e.input,
+              output: this.usage.output + e.output,
+              cacheRead: this.usage.cacheRead + e.cacheRead,
+              cacheWrite: this.usage.cacheWrite + e.cacheWrite,
+            };
+            break;
+          case "notice":
+            this.notice = e.message;
+            break;
+        }
+      };
+      const message = `${carried}${await this.context()}\n\n${text}`;
+      await invoke<string>("agent_send", { session, text: message, onEvent: channel });
+    } catch (e) {
+      if (run !== this.agentRun) return;
+      this.error = String(e);
+      this.lastErrorDetail = describeError(e);
+      console.error("assistant run failed", e);
+    } finally {
+      if (run === this.agentRun) this.busy = false;
+      void this.log();
+      if (this.logPath) {
+        const log = { turns: this.turns, usage: this.usage, notice: this.notice, error: this.error, at: new Date().toISOString() };
+        writeTextFile(this.logPath, JSON.stringify(log, null, 2)).catch(() => {});
+      }
+    }
+  }
+
   /** Experimental: load the tools a decision model expects this message to need. */
   private async route(text: string) {
     this.routed = null;
     if (!decider.routingOn) return;
     if (!this.defs.length) this.defs = await loadToolDefs().catch(() => []);
-    const candidates = this.defs.filter(
-      (d) => !CORE.has(d.name) && !this.active.has(d.name) && (this.mode !== "ask" || d.read_only),
-    );
+    const candidates = this.defs.filter((d) => !CORE.has(d.name) && !this.active.has(d.name));
     const users = this.turns.filter((t) => t.kind === "user");
     const previous = users.length > 1 ? users[users.length - 2].text : undefined;
     try {
@@ -632,12 +834,10 @@ class ChatStore {
 
   /** find_tools: keyword matches, led by the decision model's picks when routing is on. */
   private async searchTools(query: string): Promise<ToolDef[]> {
-    const readOnly = this.mode === "ask";
-    const keyword = findTools(this.defs, query, 8, readOnly);
+    const keyword = findTools(this.defs, query, 8);
     if (!decider.routingOn) return keyword;
     try {
-      const candidates = this.defs.filter((d) => !readOnly || d.read_only);
-      const r = await routeTools(query, candidates, { min: 0.1, max: 5 });
+      const r = await routeTools(query, this.defs, { min: 0.1, max: 5 });
       const byName = new Map(this.defs.map((d) => [d.name, d]));
       const exact = keyword.filter((d) => d.name === query.trim());
       const picked = r.picks.flatMap((p) => byName.get(p.name) ?? []);
@@ -657,6 +857,8 @@ class ChatStore {
     const turn = this.turns[index];
     if (turn?.kind !== "user" || this.busy) return;
     this.stop();
+    // A CLI keeps its own history, so start a new one that carries only the kept turns.
+    this.closeAgent();
     this.input = turn.text;
     this.turns = this.turns.slice(0, index);
     this.history = this.history.slice(0, turn.mark);
@@ -687,52 +889,23 @@ class ChatStore {
   }
 
   /**
-   * The key is injected in Rust, so the SDKs only need a placeholder. The host
-   * is nominal too: `proxyFetch` sends only the path onward and Rust joins it
-   * to the provider's configured base.
-   *
-   * That join is a plain concatenation, so exactly one side must carry the
-   * version segment. Anthropic's base in ai.rs has none and its SDK default
-   * baseURL supplies `/v1`. OpenAI-compatible bases already end in `/v1`
-   * (`http://localhost:11434/v1`), so the placeholder here must not repeat it —
-   * doing so produced `/v1/v1/chat/completions` and a 404 from every provider
-   * of that kind.
+   * The host is nominal: `proxyFetch` sends only the path onward and Rust joins
+   * it to the provider's configured base. That base already ends in `/v1`
+   * (`http://localhost:11434/v1`), so the placeholder here must not repeat it,
+   * or every request becomes `/v1/v1/chat/completions` and a 404.
    */
-  private buildModel(kind: "anthropic" | "open-ai-compatible"): LanguageModel {
-    const fetch = proxyFetch(this.provider);
-    if (kind === "anthropic") {
-      return createAnthropic({ apiKey: "managed-by-host", fetch })(this.model);
-    }
-    if (this.provider === "openai") {
-      return createOpenAI({ baseURL: "https://managed-by-host", apiKey: "managed-by-host", fetch }).responses(this.model);
-    }
+  private buildModel(): LanguageModel {
     return createOpenAICompatible({
       name: this.provider,
       baseURL: "https://managed-by-host",
       apiKey: "managed-by-host",
-      fetch,
+      fetch: proxyFetch(this.provider),
     })(this.model);
   }
 
-  /**
-   * Cache the conversation so far. The system prompt and tools carry a fixed
-   * breakpoint; this one moves to the newest message each step, and Anthropic
-   * matches the unchanged prefix against the previous step's cache, so a
-   * 20-step task pays for each message about once rather than 20 times.
-   *
-   * The 1-hour lifetime is for the gaps between turns: a user reading an
-   * answer and typing the next question often takes longer than the 5-minute
-   * default, after which the whole prefix would be written again.
-   *
-   * OpenAI and Ollama cache a repeated prefix on their own, and this loop
-   * already keeps tools, system prompt and history in a stable, append-only
-   * order, which is all they need. The other providers ignore the option.
-   */
   /** The tool definitions loaded for this step. */
   private activeDefs(): ToolDef[] {
-    const loaded = this.defs.filter((d) => CORE.has(d.name) || this.active.has(d.name));
-    const forMode = this.mode === "ask" ? loaded.filter((d) => d.read_only) : loaded;
-    return [FIND_TOOLS_DEF, ...forMode];
+    return [FIND_TOOLS_DEF, ...this.defs.filter((d) => CORE.has(d.name) || this.active.has(d.name))];
   }
 
   /**
@@ -767,25 +940,17 @@ class ChatStore {
     }
   }
 
-  private markCacheBreakpoint() {
-    const mark = { anthropic: { cacheControl: CACHE } };
-    for (let i = 0; i < this.history.length; i++) {
-      const m = this.history[i] as ModelMessage & { providerOptions?: Record<string, unknown> };
-      if (i === this.history.length - 1) m.providerOptions = mark;
-      else delete m.providerOptions;
-    }
-  }
-
   private async run() {
     this.busy = true;
+    this.startedAt = Date.now();
     this.abort = new AbortController();
     try {
       if (!this.defs.length) this.defs = await loadToolDefs();
       const readOnly = new Map(this.defs.map((d) => [d.name, d.read_only]));
-      const kind = this.current?.kind ?? "anthropic";
-      const model = this.buildModel(kind);
-      const providerOptions = this.supportsEffort ? effortOptions(kind, this.effort, this.provider) : undefined;
-      const instructions = (await invoke<string>("ai_instructions").catch(() => "")) + STYLE + MODE_PROMPT[this.mode];
+      const model = this.buildModel();
+      const level = this.effortLevel;
+      const providerOptions = level ? { openaiCompatible: { reasoningEffort: level } } : undefined;
+      const instructions = (await invoke<string>("ai_instructions").catch(() => "")) + STYLE + LOADING;
       // Set when the model itself ends the turn, so exhausting the step budget
       // can be told apart from finishing.
       let done = false;
@@ -799,20 +964,14 @@ class ChatStore {
 
       for (let step = 0; step < MAX_STEPS; step++) {
         this.compactHistory();
-        this.markCacheBreakpoint();
         const result = streamText({
           model,
           abortSignal: this.abort.signal,
           stopWhen: isStepCount(1),
           tools: toToolSet(this.activeDefs()),
           providerOptions,
-          // v7 takes the system prompt here, not as a message. Marked cacheable:
-          // this plus the tool block dominates the prompt and repeats every turn.
-          instructions: {
-            role: "system",
-            content: instructions,
-            providerOptions: { anthropic: { cacheControl: CACHE } },
-          },
+          // v7 takes the system prompt here, not as a message.
+          instructions: { role: "system", content: instructions },
           messages: this.history,
         });
 
@@ -875,7 +1034,7 @@ class ChatStore {
             name: call.toolName,
             args: call.input,
             readOnly: readOnly.get(call.toolName) ?? false,
-            status: readOnly.get(call.toolName) ? "running" : "awaiting",
+            status: readOnly.get(call.toolName) || !this.asks(call.toolName) ? "running" : "awaiting",
           };
           this.turns = [...this.turns, turn];
 
@@ -991,8 +1150,7 @@ class ChatStore {
       at: new Date().toISOString(),
       provider: this.provider,
       model: this.model,
-      effort: this.supportsEffort ? this.effort : undefined,
-      mode: this.mode,
+      effort: this.effortLevel ?? undefined,
       error: this.error,
       errorDetail: this.lastErrorDetail || undefined,
       notice: this.notice,
