@@ -8239,7 +8239,7 @@ local function pickBaseForSlot(slotName, level, o)
 		end
 		return nil, "no " .. family .. " base at level " .. level
 	end
-	return nil, "slot is not optimised"
+	return nil, "slot is not optimized"
 end
 
 local function optimiseSlot(slotName, cfg, w, base, itemLevel, range, title)
@@ -8480,7 +8480,7 @@ local function runGearOpt(p)
 			optProgress(i - 1, #slots, slotName, slotName)
 			coroutine.yield()
 			local stepBefore = optHeadline(build.calcsTab.mainOutput or {})
-			local title = (p.titlePrefix or "Optimised") .. " " .. slotName
+			local title = (p.titlePrefix or "Optimized") .. " " .. slotName
 			local prop, why = optimiseSlot(slotName, cfg, w, before, itemLevel, range, title)
 			if prop then
 				-- Equip it for the rest of the run so the next slot is scored
@@ -8509,7 +8509,7 @@ local function runGearOpt(p)
 	for _, item in ipairs(added) do build.itemsTab:DeleteItem(item, true) end
 	build.itemsTab:PopulateSlots()
 	refresh()
-	if not ok then error("gear optimiser failed: " .. tostring(err), 0) end
+	if not ok then error("gear optimizer failed: " .. tostring(err), 0) end
 	optProgress(#slots, #slots, nil, "done")
 	local d = optDelta(before, after)
 	local parts = {}
@@ -8588,7 +8588,7 @@ end
 
 M.gear_opt_step = function(p)
 	ensureBuild()
-	if not gearOpt or not gearOpt.co then error("no gear optimisation is running", 0) end
+	if not gearOpt or not gearOpt.co then error("no gear optimization is running", 0) end
 	local budget = tonumber(p and p.budgetMs) or 150
 	local t0 = GetTime()
 	while gearOpt.co and coroutine.status(gearOpt.co) ~= "dead" and GetTime() - t0 < budget do
@@ -8607,7 +8607,7 @@ M.gear_opt_step = function(p)
 end
 
 M.gear_opt_result = function()
-	if not gearOpt or not gearOpt.result then error("no gear optimisation result", 0) end
+	if not gearOpt or not gearOpt.result then error("no gear optimization result", 0) end
 	return gearOpt.result
 end
 

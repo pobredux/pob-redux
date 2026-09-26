@@ -129,7 +129,7 @@
   "view_config": "Config",
   "view_notes": "Notes",
   "view_party": "Party",
-  "view_optimise": "Optimise",
+  "view_optimise": "Optimize",
   "view_compare": "Compare",
 
   "titlebar_sidebar_show": "Show sidebar",
@@ -691,7 +691,7 @@
     {
       "declarations": ["input count", "local countPlural = count: plural"],
       "selectors": ["countPlural"],
-      "match": { "countPlural=one": "Optimise {count} slot", "countPlural=*": "Optimise {count} slots" }
+      "match": { "countPlural=one": "Optimize {count} slot", "countPlural=*": "Optimize {count} slots" }
     }
   ],
   "opt_result": "Result",

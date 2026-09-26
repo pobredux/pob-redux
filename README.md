@@ -65,7 +65,7 @@ To check by hand, open Settings (the gear in the title bar, or Ctrl+,) and press
 Tree, skills, items, calcs, config, notes, party and builds are all here, with PoB's tooltips and
 breakdowns.
 
-### Optimise
+### Optimize
 
 Reviews the build and lists what is wrong, worst first, with a fix for each. It can
 design a rare for any slot from the real mod pool, and it ranks passive nodes by what each one adds
