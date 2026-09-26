@@ -1015,21 +1015,36 @@ export interface CraftBase {
   subType: string | null;
 }
 
-export interface AffixOption {
-  modId: string;
-  affix: string | null;
+export interface AffixSeries {
+  id: string;
   label: string;
-  level: number | null;
-  haveRange: boolean;
+  modIds: string[];
 }
 
 export interface AffixSlot {
   index: number;
   modId: string;
   range?: number | null;
+  rangeIsTable: boolean;
   label: string | null;
+  value: string | null;
   affix: string | null;
-  options: AffixOption[];
+  options: AffixSeries[];
+  rolls: { seriesId: string; tiers: AffixRollTier[] } | null;
+}
+
+export interface AffixRollStep {
+  position: number;
+  range: number;
+  value: string;
+}
+
+export interface AffixRollTier {
+  modId: string;
+  affix: string | null;
+  tier: number;
+  flipped: boolean;
+  steps: AffixRollStep[];
 }
 
 export interface ItemAffixes {
@@ -1058,6 +1073,7 @@ export type ItemTarget = { itemId: number; raw?: never; generation?: number } | 
 export type ItemCustomizationEdit =
   | { operation: "props"; quality?: number; itemLevel?: number; corrupted?: boolean; catalyst?: number; catalystQuality?: number }
   | { operation: "affix"; table: "prefixes" | "suffixes"; index: number; modId: string; range?: number }
+  | { operation: "affix"; table: "prefixes" | "suffixes"; index: number; seriesId: string; relativePosition: number }
   | { operation: "rune"; index: number; name: string }
   | { operation: "variant"; picks: number[] }
   | { operation: "shape"; influences?: string[]; sockets?: ItemSocket[]; clusterSkill?: string; clusterNodeCount?: number }
@@ -1599,8 +1615,8 @@ export const engine = {
   craftItem: (opts: { type: string; baseName: string; rarity?: string; title?: string; equip?: boolean }) =>
     call<{ ok: boolean; itemId: number; name: string; crafted: boolean }>("craft_item", opts),
   itemAffixes: (itemId: number) => call<ItemAffixes>("item_affixes", { itemId }),
-  setItemAffix: (itemId: number, table: "prefixes" | "suffixes", index: number, modId: string, range?: number) =>
-    call<ItemAffixes>("set_item_affix", { itemId, table, index, modId, range }),
+  itemAffixRolls: (target: ItemTarget, table: "prefixes" | "suffixes", index: number, seriesId: string) =>
+    call<{ tiers: AffixRollTier[] }>("item_affix_rolls", { ...target, table, index, seriesId }),
   itemRunes: (itemId: number) => call<ItemRunes>("item_runes", { itemId }),
   setItemRune: (itemId: number, index: number, name: string) => call<ItemRunes>("set_item_rune", { itemId, index, name }),
   setItemProps: (itemId: number, patch: { quality?: number; itemLevel?: number; corrupted?: boolean; catalyst?: number; catalystQuality?: number }) =>

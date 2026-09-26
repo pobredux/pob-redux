@@ -902,6 +902,8 @@
   "items_prefix_number": "Prefix {index}",
   "items_suffix_number": "Suffix {index}",
   "items_roll_percent": "Roll: {value}%",
+  "items_affix_tier": "Tier {tier}",
+  "items_affix_roll": "Affix tier and roll",
   "items_modifiers": "Modifiers",
   "items_modifier_implicit": "Implicit",
   "items_modifier_explicit": "Explicit",
