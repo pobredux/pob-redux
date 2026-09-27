@@ -1,6 +1,6 @@
 {
 "pob": {"commit":"ce566eac45ea8a86477f513c7ee65a1ebe60014e","game":"poe2","patches":["0001-Fix-Fist-of-War-Ancestral-Empowerment-and-Ancestral-.patch","0002-Fix-crash-when-an-item-grants-a-skill-below-its-lowe.patch"],"version":"0.23.1"},
-"corpus": "2deebd496c90d3222364cbf3efea7954d6a49553",
+"corpus": "39ad10d71056a19bc274f71935531c484372b1ae",
 "stats": "curated",
 "builds": {
 "006528bc4719": {"ascendancy":"Oracle","skill":"Lightning Bolt","stats":{"Armour":493,"AverageDamage":565599.6,"AverageHit":565599.6,"BlockChance":0,"ChaosMaximumHitTaken":10070,"ChaosResist":25,"ColdMaximumHitTaken":37517,"ColdResist":67,"CombinedDPS":2043312.5531140424,"CritChance":100,"CritMultiplier":24,"Dex":92,"EffectiveMovementSpeedMod":1.3,"EnergyShield":11907,"EnergyShieldRegenRecovery":0,"Evasion":553,"FireMaximumHitTaken":48236,"FireResist":75,"FullDPS":0,"HitChance":100,"IgniteDPS":47078.670761101435,"Int":171,"Life":1546,"LifeCost":0,"LifeRegenRecovery":16.4,"LifeUnreserved":525,"LightningMaximumHitTaken":48236,"LightningResist":75,"Mana":938,"ManaCost":0,"ManaRegenRecovery":21.6,"ManaUnreserved":938,"MovementSpeedMod":1.3,"PhysicalMaximumHitTaken":13555,"ReqDex":91,"ReqInt":157,"ReqStr":80,"Speed":3.5294117647058822,"SpellBlockChance":0,"SpellSuppressionChance":0,"Spirit":212,"Str":91,"TotalDPS":1996233.882352941,"TotalDotDPS":47078.670761101435,"TotalEHP":25998.92135145274,"Ward":136}},

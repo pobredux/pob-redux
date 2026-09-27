@@ -1,7 +1,9 @@
-# Library
+# Library (Path of Exile 2)
 
 Game knowledge that PoB does not carry, written down so the assistant can give
-correct build advice instead of guessing.
+correct build advice instead of guessing. The `library` tool serves these files
+when the open game is PoE2 and the files in [../poe1/](../poe1/README.md) when it
+is PoE1.
 
 PoB knows how to calculate a build. It does not know how many passive points a
 level 21 character has, which skill gem drops at which level, or that 30 spirit

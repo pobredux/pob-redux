@@ -1,6 +1,6 @@
 {
 "pob": {"commit":"16de4b82d57f1c0de6eb40f37143c32d4da36a02","game":"poe1","patches":[],"version":"2.67.2"},
-"corpus": "31db001984e1ebc375536aff21e37d9cf71b66f9",
+"corpus": "39ad10d71056a19bc274f71935531c484372b1ae",
 "stats": "curated",
 "builds": {
 "0041e438a0b3": {"ascendancy":"Guardian","skill":"Summon Raging Spirit of Enormity","stats":{"Armour":14111,"AverageDamage":0,"AverageHit":0,"BlockChance":54,"ChaosMaximumHitTaken":22500,"ChaosResist":76,"ColdMaximumHitTaken":34358,"ColdResist":84,"CombinedDPS":0,"CritChance":0,"CritMultiplier":3.05,"Dex":141,"EffectiveMovementSpeedMod":1.4040000000000001,"EnergyShield":1054,"EnergyShieldRegenRecovery":0,"Evasion":471,"FireMaximumHitTaken":32640,"FireResist":83,"FullDPS":0,"HitChance":100,"Int":217,"Life":4320,"LifeCost":0,"LifeRegenRecovery":273.2,"LifeUnreserved":4320,"LightningMaximumHitTaken":32640,"LightningResist":83,"Mana":794,"ManaCost":134,"ManaRegenRecovery":16.7,"ManaUnreserved":72,"Minion.CombinedDPS":1166988.9099390665,"Minion.EnergyShield":0,"Minion.Life":25933,"Minion.Speed":11.087719298245615,"Minion.TotalDPS":1148698.775262316,"MovementSpeedMod":1.35,"PhysicalMaximumHitTaken":10814,"ReqDex":139,"ReqInt":155,"ReqStr":155,"Speed":2.2359999999999998,"SpellBlockChance":75,"SpellSuppressionChance":0,"Str":198,"TotalDPS":0,"TotalDotDPS":0,"TotalEHP":89910.20481989114,"Ward":0}},

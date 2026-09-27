@@ -2,7 +2,7 @@
 
 Game knowledge that PoB does not carry, for the assistant when the app is in PoE1
 mode. The `library` tool serves these files when the open game is PoE1 and the
-files one folder up when it is PoE2.
+files in [../poe2/](../poe2/README.md) when it is PoE2.
 
 Written against **3.29** (PoB 2.67.2, tree 3_29), league Allflame.
 

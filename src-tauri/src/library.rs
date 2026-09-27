@@ -1,4 +1,4 @@
-//! The game-knowledge library (`library/*.md` for PoE2 and `library/poe1/*.md`
+//! The game-knowledge library (`library/poe2/*.md` and `library/poe1/*.md`
 //! at the repository root), compiled into the binary so the assistant can read a
 //! topic on demand instead of carrying all of it in every prompt.
 
@@ -17,23 +17,23 @@ macro_rules! topic {
 }
 
 pub(crate) const TOPICS: &[Topic] = &[
-    topic!("progression-and-points", "Levels, the passive point budget, quest rewards, spirit", "00-progression-and-points.md"),
-    topic!("defences", "Armour, evasion, energy shield, block, resistances, the damage calculation order", "01-defences.md"),
-    topic!("damage", "Damage types, conversion, crit, accuracy, penetration, skill speed", "02-damage.md"),
-    topic!("ailments", "Ignite, shock, freeze, chill, bleed, poison, stun, electrocute", "03-ailments.md"),
-    topic!("skills-and-gems", "Gem tier to character level, support rules, meta gems, spirit costs", "04-skills-and-gems.md"),
-    topic!("sustain-and-utility", "Leech, regeneration, recoup, flasks, charms, curses, marks", "05-sustain-and-utility.md"),
-    topic!("tree-and-emotions", "Passive tree structure, attribute nodes, distilled emotion anoints", "06-tree-and-emotions.md"),
-    topic!("advising-builds", "How to turn the library into a build recommendation; read first", "07-advising-builds.md"),
-    topic!("keywords", "Short definitions: blind, exposure, withered, impale, rage, pin", "08-keywords.md"),
-    topic!("buildcraft", "What 63 published builds do: tree composition, support depth, skill swaps", "09-buildcraft.md"),
-    topic!("progression-curve", "Stage-by-stage targets: points, skills, supports, gear, uniques", "10-progression-curve.md"),
-    topic!("gear-and-charms", "What goes in each gear slot, and why charms carry the unique budget", "11-gear-and-charms.md"),
-    topic!("playstyle-and-buttons", "Button count as a design goal, automation via triggers, movement speed", "12-playstyle-and-buttons.md"),
-    topic!("game-constants", "Hard numbers from PoB's engine: attribute bonuses, every cap, charges, thresholds", "13-game-constants.md"),
-    topic!("keystones", "All 33 keystones with their downsides", "14-keystones.md"),
-    topic!("runes-and-augments", "Runes, soul cores, augment sockets", "15-runes-and-augments.md"),
-    topic!("evaluating-changes", "Guard rails for judging a change: requirements are a maximum not a sum, flat vs increased vs more damage, the sheet vs the build, dead stats, granted skills, a checklist", "16-evaluating-changes.md"),
+    topic!("progression-and-points", "Levels, the passive point budget, quest rewards, spirit", "poe2/00-progression-and-points.md"),
+    topic!("defences", "Armour, evasion, energy shield, block, resistances, the damage calculation order", "poe2/01-defences.md"),
+    topic!("damage", "Damage types, conversion, crit, accuracy, penetration, skill speed", "poe2/02-damage.md"),
+    topic!("ailments", "Ignite, shock, freeze, chill, bleed, poison, stun, electrocute", "poe2/03-ailments.md"),
+    topic!("skills-and-gems", "Gem tier to character level, support rules, meta gems, spirit costs", "poe2/04-skills-and-gems.md"),
+    topic!("sustain-and-utility", "Leech, regeneration, recoup, flasks, charms, curses, marks", "poe2/05-sustain-and-utility.md"),
+    topic!("tree-and-emotions", "Passive tree structure, attribute nodes, distilled emotion anoints", "poe2/06-tree-and-emotions.md"),
+    topic!("advising-builds", "How to turn the library into a build recommendation; read first", "poe2/07-advising-builds.md"),
+    topic!("keywords", "Short definitions: blind, exposure, withered, impale, rage, pin", "poe2/08-keywords.md"),
+    topic!("buildcraft", "What 63 published builds do: tree composition, support depth, skill swaps", "poe2/09-buildcraft.md"),
+    topic!("progression-curve", "Stage-by-stage targets: points, skills, supports, gear, uniques", "poe2/10-progression-curve.md"),
+    topic!("gear-and-charms", "What goes in each gear slot, and why charms carry the unique budget", "poe2/11-gear-and-charms.md"),
+    topic!("playstyle-and-buttons", "Button count as a design goal, automation via triggers, movement speed", "poe2/12-playstyle-and-buttons.md"),
+    topic!("game-constants", "Hard numbers from PoB's engine: attribute bonuses, every cap, charges, thresholds", "poe2/13-game-constants.md"),
+    topic!("keystones", "All 33 keystones with their downsides", "poe2/14-keystones.md"),
+    topic!("runes-and-augments", "Runes, soul cores, augment sockets", "poe2/15-runes-and-augments.md"),
+    topic!("evaluating-changes", "Guard rails for judging a change: requirements are a maximum not a sum, flat vs increased vs more damage, the sheet vs the build, dead stats, granted skills, a checklist", "poe2/16-evaluating-changes.md"),
 ];
 
 pub(crate) const TOPICS_POE1: &[Topic] = &[
