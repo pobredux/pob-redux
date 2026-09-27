@@ -1001,6 +1001,15 @@ pub(crate) fn run_tool(ctx: &ToolContext, name: &str, args: &JsonObject) -> Resu
             let limit = arg_i64(args, "limit")?.unwrap_or(15).clamp(1, 60) as usize;
             let max_points = arg_i64(args, "max_points")?.unwrap_or(8).max(1) as f64;
             let node_type = arg_str(args, "node_type").filter(|s| !s.trim().is_empty());
+            let known: Vec<String> = ctx.call("power_stats", Value::Null)?["stats"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|s| s["stat"].as_str().map(str::to_string))
+                .collect();
+            if !known.contains(&stat) {
+                return Err(ToolError::Invalid(format!("{stat} is not a stat the scan can score. Use one of: {}", known.join(", "))));
+            }
             // allocated nodes are at distance 0, so a depth limit keeps every one of them
             let scored = match pob_engine::pool::power_scan(&ctx.engine(), &ctx.pool(), Some(&stat), Some(max_points)) {
                 Ok(v) => v,
