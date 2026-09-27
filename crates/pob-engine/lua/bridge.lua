@@ -154,6 +154,23 @@ end
 local GAME = (tostring(APP_NAME or ""):find("PoE2", 1, true) or tostring(liveTargetVersion or ""):match("^0_")) and "poe2" or "poe1"
 local IS_POE2 = GAME == "poe2"
 
+-- CalcSetup's addExtraSupports sets fromItem on the shared data.skills support, so it leaks into
+-- every later build; PoB resets its caches through wipeGlobalCache, so restore the shipped flags there.
+do
+	local shipped = {}
+	for id, ge in pairs(data.skills) do
+		if ge.support then shipped[id] = ge.fromItem or false end
+	end
+	local wipe = wipeGlobalCache
+	function wipeGlobalCache(...)
+		for id, flag in pairs(shipped) do
+			local ge = data.skills[id]
+			if ge and (ge.fromItem or false) ~= flag then ge.fromItem = flag or nil end
+		end
+		return wipe(...)
+	end
+end
+
 -- PoE1 keeps set copy/rename/delete inside its list controls and has no
 -- loadout API; PoE2's methods are supplied here so the rest of the bridge is
 -- the same for both games. Mirrors ItemSetListControl.lua,
