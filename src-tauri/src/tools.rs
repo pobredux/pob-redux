@@ -317,7 +317,7 @@ fn defs_poe2() -> Vec<ToolDef> {
             "library",
             &format!(
                 "Game knowledge PoB does not carry, written for advising on builds. Pass `topic` to read one; omit it for the index. Topics: {}.",
-                crate::library::index()
+                crate::library::index(Game::Poe2)
             ),
             obj(json!({ "topic": prop("string", "Topic slug from the list, or a word from its description") }), &[]),
         ),
@@ -664,8 +664,8 @@ const POE1_TEXT: &[(&str, &str)] = &[
 ];
 
 fn adapt_for_poe1(defs: &mut Vec<ToolDef>) {
-    // No attribute nodes in the PoE1 tree; the library is PoE2's until PoE1 has one.
-    defs.retain(|d| !matches!(d.name, "set_attribute_choice" | "library"));
+    // No attribute nodes in the PoE1 tree.
+    defs.retain(|d| d.name != "set_attribute_choice");
     for d in defs.iter_mut() {
         if let Some((_, text)) = POE1_TEXT.iter().find(|(name, _)| *name == d.name) {
             d.description = (*text).to_string();
@@ -687,6 +687,12 @@ fn adapt_for_poe1(defs: &mut Vec<ToolDef>) {
                 }
             }
             "optimise_gear" => d.description.push_str(" Flasks are left alone."),
+            "library" => {
+                d.description = format!(
+                    "Game knowledge PoB does not carry, written for advising on builds. Pass `topic` to read one; omit it for the index. Topics: {}.",
+                    crate::library::index(Game::Poe1)
+                )
+            }
             _ => {}
         }
     }
@@ -956,11 +962,11 @@ pub(crate) fn run_tool(ctx: &ToolContext, name: &str, args: &JsonObject) -> Resu
             let topic = arg_str(args, "topic").filter(|t| !t.trim().is_empty());
             match topic {
                 None => read(json!({
-                    "topics": crate::library::TOPICS.iter().map(|t| json!({ "topic": t.slug, "covers": t.covers })).collect::<Vec<_>>()
+                    "topics": crate::library::topics(ctx.game()).iter().map(|t| json!({ "topic": t.slug, "covers": t.covers })).collect::<Vec<_>>()
                 })),
-                Some(t) => match crate::library::find(&t) {
+                Some(t) => match crate::library::find(ctx.game(), &t) {
                     Some(found) => read(json!({ "topic": found.slug, "text": found.text })),
-                    None => Err(ToolError::Invalid(format!("no library topic matches {t:?}; topics: {}", crate::library::index()))),
+                    None => Err(ToolError::Invalid(format!("no library topic matches {t:?}; topics: {}", crate::library::index(ctx.game())))),
                 },
             }
         }
@@ -1371,7 +1377,7 @@ mod tests {
     #[test]
     fn poe1_registry_speaks_poe1() {
         let d = defs(Game::Poe1);
-        assert_eq!(d.len(), 74, "PoE1 tool count changed");
+        assert_eq!(d.len(), 75, "PoE1 tool count changed");
         for (name, _) in POE1_TEXT {
             assert!(d.iter().any(|t| t.name == *name), "POE1_TEXT names {name}, which is not a tool");
         }
