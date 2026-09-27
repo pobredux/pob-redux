@@ -8,7 +8,7 @@
   import Icon from "$lib/components/Icon.svelte";
   import { m } from "$lib/paraglide/messages";
 
-  import logo from "$lib/assets/logo.png";
+  import LogoMark from "$lib/components/LogoMark.svelte";
 
   const win = getCurrentWindow();
   let maximized = $state(false);
@@ -117,7 +117,7 @@
 
 <header class="titlebar" data-tauri-drag-region>
   <div class="brand" class:wide={!ui.sidebarCollapsed} data-tauri-drag-region>
-    <img class="mark" src={logo} alt="" draggable="false" />
+    <LogoMark class="mark" />
     <span class="name">PoB <span class="thin">Redux</span></span>
     <button
       class="sb"
@@ -235,14 +235,13 @@
   .sb.on {
     color: var(--fg-2);
   }
-  .mark {
+  .brand :global(.mark) {
     width: 16px;
     height: 16px;
+    flex: none;
+    color: var(--fg-0);
     pointer-events: none;
     user-select: none;
-  }
-  :global(:root[data-theme="light"]) .mark {
-    filter: invert(1);
   }
   .name {
     font-size: var(--fs-sm);

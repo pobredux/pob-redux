@@ -19,7 +19,7 @@
   import { tooltip } from "$lib/state/tooltip.svelte";
   import ChatPanel from "$lib/components/ChatPanel.svelte";
   import UpdateBanner from "$lib/components/UpdateBanner.svelte";
-  import logo from "$lib/assets/logo.png";
+  import LogoMark from "$lib/components/LogoMark.svelte";
   import { engine } from "$lib/engine.svelte";
   import { prefetchArt } from "$lib/item-art";
   import { app } from "$lib/state/app.svelte";
@@ -80,7 +80,7 @@
       {:else if !status || status.state === "booting"}
         <div class="center">
           <div class="boot">
-            <img class="bootlogo" src={logo} alt="" draggable="false" />
+            <LogoMark class="bootlogo" />
             <div class="label">{m.boot_engine()}</div>
             <div class="big">{m.boot_loading({ suffix: game.isPoe1 ? "" : " (PoE2)", dots: ".".repeat(bootDots) })}</div>
             <div class="dim mono small">{status?.pob_root ?? ""}</div>
@@ -171,14 +171,12 @@
     display: grid;
     place-items: center;
   }
-  .bootlogo {
+  .boot :global(.bootlogo) {
     width: 40px;
     height: 40px;
     margin-bottom: 6px;
+    color: var(--fg-0);
     user-select: none;
-  }
-  :global(:root[data-theme="light"]) .bootlogo {
-    filter: invert(1);
   }
   .boot,
   .pick {
