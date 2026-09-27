@@ -580,9 +580,6 @@ pub async fn agent_open(
     instructions: String,
 ) -> Result<String, String> {
     let cli = Cli::from_id(&provider).ok_or_else(|| format!("unknown provider {provider}"))?;
-    if app.state::<crate::AppState>().game() != crate::game::Game::Poe2 {
-        return Err("the assistant is a PoE2 feature".into());
-    }
     let state = app.state::<AgentState>();
     let launch = state.launch(&app, cli).ok_or_else(|| format!("{} is not installed", cli.label()))?;
     let id = random_hex(8)?;

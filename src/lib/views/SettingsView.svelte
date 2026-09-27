@@ -2,7 +2,6 @@
   import { onMount } from "svelte";
   import { appOptions } from "$lib/state/options.svelte";
   import { mcp, mcpConfigJson } from "$lib/state/mcp.svelte";
-  import { game } from "$lib/state/game.svelte";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
   import { getVersion } from "@tauri-apps/api/app";
   import { appUpdate } from "$lib/state/update.svelte";
@@ -84,13 +83,9 @@
   const sections = $derived<{ id: string; label: string; tone?: Tone }[]>([
     { id: "appearance", label: m.settings_appearance() },
     { id: "numbers", label: m.settings_numbers() },
-    ...(game.isPoe2
-      ? [
-          { id: "assistant", label: m.settings_assistant(), tone: assistantTone },
-          { id: "mcp", label: m.settings_mcp(), tone: mcpTone },
-          { id: "experimental", label: m.settings_experimental(), tone: decideTone },
-        ]
-      : []),
+    { id: "assistant", label: m.settings_assistant(), tone: assistantTone },
+    { id: "mcp", label: m.settings_mcp(), tone: mcpTone },
+    { id: "experimental", label: m.settings_experimental(), tone: decideTone },
     { id: "updates", label: m.settings_updates() },
     { id: "diagnostics", label: m.settings_diagnostics() },
   ]);

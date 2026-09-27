@@ -4,7 +4,6 @@
   import { mcp } from "$lib/state/mcp.svelte";
   import { chat } from "$lib/state/chat.svelte";
   import { appOptions } from "$lib/state/options.svelte";
-  import { game } from "$lib/state/game.svelte";
   import Icon from "$lib/components/Icon.svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { m } from "$lib/paraglide/messages";
@@ -80,20 +79,18 @@
   {#if build.info}
     <div class="seg dim"><span>{m.status_rev()}</span><span class="num">{build.info.rev}</span></div>
   {/if}
-  {#if game.isPoe2}
-    <button
-      class="seg iconbtn"
-      class:on={chat.open && !appOptions.open}
-      onclick={() => {
-        if (appOptions.open && chat.open) appOptions.open = false;
-        else chat.toggle();
-      }}
-      title={m.status_assistant_title()}
-      aria-label={m.status_assistant()}
-    >
-      <Icon name="chat-text" size={15} />
-    </button>
-  {/if}
+  <button
+    class="seg iconbtn"
+    class:on={chat.open && !appOptions.open}
+    onclick={() => {
+      if (appOptions.open && chat.open) appOptions.open = false;
+      else chat.toggle();
+    }}
+    title={m.status_assistant_title()}
+    aria-label={m.status_assistant()}
+  >
+    <Icon name="chat-text" size={15} />
+  </button>
   <button
     class="seg iconbtn"
     onclick={() => openUrl(DISCORD_URL).catch(() => {})}

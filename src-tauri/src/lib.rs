@@ -1047,10 +1047,6 @@ fn set_game(app: tauri::AppHandle, state: State<'_, AppState>, game: Game) -> Re
         if find_pob_root(&app, game).is_none() {
             return Err(format!("{} data is missing: run pob-sync --game {}", game.user_subdir(), game.id()));
         }
-        if game == Game::Poe1 {
-            // The MCP server and the assistant are PoE2 features.
-            state.mcp.stop();
-        }
         let fresh = boot_runtime(&app, game, &state.user_dir);
         let old = std::mem::replace(&mut *state.rt.write().unwrap(), fresh);
         old.pool.release();
@@ -1232,12 +1228,10 @@ pub fn run() {
             spawn_pool_reaper(app.handle().clone());
             app.manage(ai::AiState::new(&app.handle().clone()));
             app.manage(agent::AgentState::new(&app.handle().clone()));
-            if game == Game::Poe2 {
-                let handle = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    agent::statuses(&handle, false, None).await;
-                });
-            }
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                agent::statuses(&handle, false, None).await;
+            });
             app.manage(decide::DecideState::new(&app.handle().clone()));
             // POB_REDUX_MCP=<port> brings the MCP server up at launch (scripts, tests)
             if let Some(port) = std::env::var("POB_REDUX_MCP").ok().and_then(|v| v.parse::<u16>().ok()) {

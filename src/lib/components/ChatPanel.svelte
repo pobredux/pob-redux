@@ -8,6 +8,7 @@
   import WorkingTimer from "$lib/components/WorkingTimer.svelte";
   import Markdown from "$lib/components/Markdown.svelte";
   import { build } from "$lib/state/build.svelte";
+  import { game } from "$lib/state/game.svelte";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
   import { m } from "$lib/paraglide/messages";
 
@@ -177,7 +178,10 @@
     title={m.chat_resize_title()}
   ></div>
   <div class="head">
-    <span class="label">{m.chat_title()}</span>
+    <span class="title">
+      <span class="label">{m.chat_title()}</span>
+      {#if game.isPoe1}<span class="beta" title={m.chat_poe1_beta_title()}>{m.chat_poe1_beta()}</span>{/if}
+    </span>
     <div class="acts">
       <button
         class="icon fresh"
@@ -435,6 +439,21 @@
     display: flex;
     gap: 6px;
     align-items: center;
+  }
+  .title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  .beta {
+    padding: 0 5px;
+    border: 1px solid var(--line-2);
+    border-radius: var(--r-1);
+    color: var(--fg-2);
+    font-size: var(--fs-2xs);
+    line-height: 16px;
+    white-space: nowrap;
   }
   .icon {
     display: grid;

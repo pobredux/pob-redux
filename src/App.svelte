@@ -54,7 +54,7 @@
   onMount(() => {
     // Single-letter keys belong to the tree view.
     const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "k" && game.isPoe2) {
+      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "k") {
         e.preventDefault();
         chat.toggle();
       }
@@ -121,7 +121,7 @@
         <ImportView {paths} />
       {/if}
     </main>
-    {#if chat.open && !appOptions.open && game.isPoe2 && status?.state === "ready"}<ChatPanel />{/if}
+    {#if chat.open && !appOptions.open && status?.state === "ready"}<ChatPanel />{/if}
   </div>
   <StatusBar {status} {paths} />
   <ConfirmModal />

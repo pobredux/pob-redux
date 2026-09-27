@@ -102,9 +102,6 @@ const HEADLINE: &[&str] = &[
 ];
 
 pub struct ToolContext {
-    pub(crate) engine: EngineHandle,
-    pub(crate) pool: Arc<EnginePool>,
-
     pub(crate) app: AppHandle,
     pub(crate) calls: Arc<AtomicU64>,
 }
@@ -117,8 +114,17 @@ pub(crate) enum ToolError {
 }
 
 impl ToolContext {
+    // Read per call: switching game replaces the engine under a running server.
+    fn engine(&self) -> EngineHandle {
+        tauri::Manager::state::<crate::AppState>(&self.app).engine()
+    }
+
+    fn pool(&self) -> Arc<EnginePool> {
+        tauri::Manager::state::<crate::AppState>(&self.app).pool()
+    }
+
     fn call(&self, method: &str, params: Value) -> Result<Value, ToolError> {
-        self.engine
+        self.engine()
             .call(method, params)
             .map(|o| o.result)
             .map_err(|e| ToolError::Failed(clean_error(&e.to_string())))
@@ -996,7 +1002,7 @@ pub(crate) fn run_tool(ctx: &ToolContext, name: &str, args: &JsonObject) -> Resu
             let max_points = arg_i64(args, "max_points")?.unwrap_or(8).max(1) as f64;
             let node_type = arg_str(args, "node_type").filter(|s| !s.trim().is_empty());
             // allocated nodes are at distance 0, so a depth limit keeps every one of them
-            let scored = match pob_engine::pool::power_scan(&ctx.engine, &ctx.pool, Some(&stat), Some(max_points)) {
+            let scored = match pob_engine::pool::power_scan(&ctx.engine(), &ctx.pool(), Some(&stat), Some(max_points)) {
                 Ok(v) => v,
                 Err(e) => {
                     log::warn!("parallel power scan failed ({e}); falling back to PowerBuilder");
@@ -1162,7 +1168,7 @@ pub(crate) fn run_tool(ctx: &ToolContext, name: &str, args: &JsonObject) -> Resu
                 "range": args.get("range").and_then(Value::as_f64),
                 "limit": arg_i64(args, "limit")?,
             });
-            let result = match pob_engine::pool::jewel_scan(&ctx.engine, &ctx.pool, params.clone()) {
+            let result = match pob_engine::pool::jewel_scan(&ctx.engine(), &ctx.pool(), params.clone()) {
                 Ok(v) => v,
                 Err(e) => {
                     log::warn!("parallel jewel scan failed ({e}); scoring on the main engine");

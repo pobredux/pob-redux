@@ -5,7 +5,7 @@ import { appOptions } from "$lib/state/options.svelte";
 import { mcp } from "$lib/state/mcp.svelte";
 import { chat } from "$lib/state/chat.svelte";
 import { appUpdate } from "$lib/state/update.svelte";
-import { game } from "$lib/state/game.svelte";
+import { game, type Game } from "$lib/state/game.svelte";
 import { links } from "$lib/state/links.svelte";
 import { m } from "$lib/paraglide/messages";
 
@@ -19,6 +19,7 @@ class AppStore {
   paths = $state<AppPaths | null>(null);
   private timer = 0;
   private booted = false;
+  private bootedGame: Game | null = null;
 
   async boot() {
     clearTimeout(this.timer);
@@ -44,17 +45,14 @@ class AppStore {
     this.booted = true;
     this.paths = await appPaths().catch(() => null);
     await appOptions.init().catch(() => {});
-    // The MCP server and the assistant are PoE2 features.
-    if (game.isPoe2) {
-      await mcp.init().catch(() => {});
-      await chat.init(this.paths?.chat_open).catch(() => {});
-      if (first) {
-        if (this.paths?.chat_provider) await chat.setProvider(this.paths.chat_provider).catch(() => {});
-        if (this.paths?.chat_model) chat.setModel(this.paths.chat_model);
-      }
-    } else {
-      chat.open = false;
-      await mcp.refresh().catch(() => {});
+    // A conversation about the other game's build does not carry over.
+    if (this.bootedGame && this.bootedGame !== game.current) chat.reset();
+    this.bootedGame = game.current;
+    await mcp.init().catch(() => {});
+    await chat.init(this.paths?.chat_open).catch(() => {});
+    if (first) {
+      if (this.paths?.chat_provider) await chat.setProvider(this.paths.chat_provider).catch(() => {});
+      if (this.paths?.chat_model) chat.setModel(this.paths.chat_model);
     }
     if (first) appUpdate.init();
     // shared items added in this app are ours to restore (PoB's own
@@ -78,7 +76,7 @@ class AppStore {
       await build.run(async () => {}, { sync: true });
     }
     build.view = ((first && this.paths?.initial_view) as typeof build.view) || "tree";
-    if (first && game.isPoe2) {
+    if (first) {
       if (this.paths?.chat_allow) chat.allowWrites = true;
       if (this.paths?.chat_log) chat.logPath = this.paths.chat_log;
       if (this.paths?.chat_ask) {

@@ -771,6 +771,8 @@
   "chat_resize": "Resize assistant panel",
   "chat_resize_title": "Drag to resize · double-click to reset",
   "chat_title": "Assistant",
+  "chat_poe1_beta": "PoE1 beta",
+  "chat_poe1_beta_title": "The PoE1 assistant is new. Its library and advice are checked against PoE1 PoB and our PoE1 build corpus, but it has had less testing than the PoE2 one. Check its suggestions in the app before you keep them.",
   "chat_new": "New conversation",
   "chat_providers_title": "Assistant settings",
   "chat_provider_settings": "Assistant settings",
