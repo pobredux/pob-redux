@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import type { ToolDef } from "$lib/ai/tools";
+import type { Game } from "$lib/state/game.svelte";
 
 export interface BackendStatus {
   id: string;
@@ -63,7 +64,7 @@ export interface Routed {
   ms: number;
 }
 
-export function routingRequest(request: string, candidates: ToolDef[], previous?: string) {
+export function routingRequest(request: string, candidates: ToolDef[], previous?: string, game: Game = "poe2") {
   const criteria: Record<string, string> = Object.fromEntries(candidates.map((d) => [d.name, firstSentence(d.description)]));
   criteria[NONE] =
     "None of these. The request needs only the build's stats, gear, skills, config or passive tree, which are already available, or no tool at all.";
@@ -72,7 +73,7 @@ export function routingRequest(request: string, candidates: ToolDef[], previous?
     tool: {
       type: "choice",
       instructions:
-        "A Path of Exile 2 player asks an assistant in a Path of Building app about their build. Which tool does the assistant need for `request`?" +
+        `A Path of Exile ${game === "poe1" ? 1 : 2} player asks an assistant in a Path of Building app about their build. Which tool does the assistant need for \`request\`?` +
         (previous ? " `previous` is the player's earlier message, for context." : ""),
       criteria,
     },
@@ -93,10 +94,10 @@ export function readPicks(answers: Decision["answers"], min: number, max: number
 export async function routeTools(
   request: string,
   candidates: ToolDef[],
-  opts: { previous?: string; min: number; max: number; timeoutMs?: number },
+  opts: { previous?: string; min: number; max: number; timeoutMs?: number; game?: Game },
 ): Promise<Routed> {
   if (!candidates.length) return { picks: [], model: "", ms: 0 };
-  const { state, questions } = routingRequest(request, candidates, opts.previous);
+  const { state, questions } = routingRequest(request, candidates, opts.previous, opts.game);
   const res = await decide(state, questions, opts.timeoutMs ?? 4000);
   const known = new Set(candidates.map((d) => d.name));
   const picks = readPicks(res.answers, opts.min, opts.max).filter((p) => known.has(p.name));

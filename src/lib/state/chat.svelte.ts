@@ -14,7 +14,8 @@ import {
 import { proxyFetch } from "$lib/ai/transport";
 import { routeTools } from "$lib/ai/decide";
 import { decider } from "$lib/state/decide.svelte";
-import { LOADING, STYLE } from "$lib/ai/prompt";
+import { LOADING, style } from "$lib/ai/prompt";
+import { game } from "$lib/state/game.svelte";
 import {
   callTool,
   CORE,
@@ -336,7 +337,7 @@ class ChatStore {
       this.warm = "priming";
       this.warmNote = "priming the prompt";
       if (!this.defs.length) this.defs = await loadToolDefs();
-      const instructions = (await invoke<string>("ai_instructions").catch(() => "")) + STYLE + LOADING;
+      const instructions = (await invoke<string>("ai_instructions").catch(() => "")) + style(game.current) + LOADING;
       // The same request shape as a real turn, one token long, so the cached
       // prefix matches what the first question will send.
       const result = streamText({
@@ -707,7 +708,7 @@ class ChatStore {
   private async openAgent(): Promise<string> {
     if (this.agent) return this.agent;
     if (!this.defs.length) this.defs = await loadToolDefs();
-    const instructions = (await invoke<string>("ai_instructions").catch(() => "")) + STYLE;
+    const instructions = (await invoke<string>("ai_instructions").catch(() => "")) + style(game.current);
     this.agent = await invoke<string>("agent_open", {
       provider: this.provider,
       model: this.model,
@@ -811,7 +812,7 @@ class ChatStore {
     const users = this.turns.filter((t) => t.kind === "user");
     const previous = users.length > 1 ? users[users.length - 2].text : undefined;
     try {
-      const r = await routeTools(text, candidates, { previous, min: 0.15, max: 3 });
+      const r = await routeTools(text, candidates, { previous, min: 0.15, max: 3, game: game.current });
       this.routed = { picked: r.picks.map((p) => p.name), model: r.model, ms: r.ms };
       if (!r.picks.length) return;
       for (const p of r.picks) this.active.add(p.name);
@@ -837,7 +838,7 @@ class ChatStore {
     const keyword = findTools(this.defs, query, 8);
     if (!decider.routingOn) return keyword;
     try {
-      const r = await routeTools(query, this.defs, { min: 0.1, max: 5 });
+      const r = await routeTools(query, this.defs, { min: 0.1, max: 5, game: game.current });
       const byName = new Map(this.defs.map((d) => [d.name, d]));
       const exact = keyword.filter((d) => d.name === query.trim());
       const picked = r.picks.flatMap((p) => byName.get(p.name) ?? []);
@@ -950,7 +951,7 @@ class ChatStore {
       const model = this.buildModel();
       const level = this.effortLevel;
       const providerOptions = level ? { openaiCompatible: { reasoningEffort: level } } : undefined;
-      const instructions = (await invoke<string>("ai_instructions").catch(() => "")) + STYLE + LOADING;
+      const instructions = (await invoke<string>("ai_instructions").catch(() => "")) + style(game.current) + LOADING;
       // Set when the model itself ends the turn, so exhausting the step budget
       // can be told apart from finishing.
       let done = false;

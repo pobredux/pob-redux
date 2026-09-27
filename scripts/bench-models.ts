@@ -13,7 +13,9 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 
 import { ALLOWED } from "../src/lib/ai/allowed";
-import { STYLE } from "../src/lib/ai/prompt";
+import { style } from "../src/lib/ai/prompt";
+
+const STYLE = style("poe2");
 
 const MCP = "http://127.0.0.1:7315/mcp";
 const OLLAMA = "http://localhost:11434";
