@@ -84,7 +84,13 @@ local function refresh()
 	syncCalcsSelection()
 	build.buildFlag = true
 	build.modFlag = true
+	local level = build.characterLevel
 	frame()
+	-- PoB sets an auto level after the calc that used the old one.
+	if build.characterLevel ~= level then
+		build.buildFlag = true
+		frame()
+	end
 end
 
 local function ensureBuild(p)
