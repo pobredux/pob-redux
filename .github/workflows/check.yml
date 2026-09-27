@@ -129,3 +129,22 @@ jobs:
       - name: Compare calculated stats with golden/poe2.json
         if: env.HAS_CORPUS == 'true'
         run: bun run golden
+
+      # Each game's baseline names its own corpus commit, since the two games refresh separately.
+      - name: Read the PoE1 baseline's corpus commit
+        id: corpus1
+        if: env.HAS_CORPUS == 'true'
+        run: echo "commit=$(jq -r .corpus golden/poe1.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout the build corpus for PoE1
+        if: env.HAS_CORPUS == 'true'
+        uses: actions/checkout@v7
+        with:
+          repository: pobredux/corpus
+          ref: ${{ steps.corpus1.outputs.commit }}
+          ssh-key: ${{ secrets.CORPUS_DEPLOY_KEY }}
+          path: corpus-poe1
+
+      - name: Compare calculated stats with golden/poe1.json
+        if: env.HAS_CORPUS == 'true'
+        run: cargo run -p pob-engine --bin pobctl -- --pob-root src-tauri/resources/pob1 golden corpus-poe1/poe1/index.json --out target/golden-poe1.json --baseline golden/poe1.json --check

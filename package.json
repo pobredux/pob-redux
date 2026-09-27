@@ -18,6 +18,8 @@
     "ctl": "cargo run -p pob-engine --bin pobctl --",
     "golden": "cargo run -p pob-engine --bin pobctl -- --pob-root src-tauri/resources/pob golden corpus/index.json --out target/golden-poe2.json --baseline golden/poe2.json --check",
     "golden:accept": "cargo run -p pob-engine --bin pobctl -- --pob-root src-tauri/resources/pob golden corpus/index.json --out golden/poe2.json",
+    "golden:poe1": "cargo run -p pob-engine --bin pobctl -- --pob-root src-tauri/resources/pob1 golden corpus/poe1/index.json --out target/golden-poe1.json --baseline golden/poe1.json --check",
+    "golden:poe1:accept": "cargo run -p pob-engine --bin pobctl -- --pob-root src-tauri/resources/pob1 golden corpus/poe1/index.json --out golden/poe1.json",
     "mcp": "bun scripts/mcp-call.ts",
     "check:tools": "bun scripts/check-tools.ts",
     "release:tag": "bun scripts/release.mjs",
