@@ -311,18 +311,33 @@ if not IS_POE2 then
 			end
 			return names
 		end
+		-- As the buildLoadouts dropdown: an exact title, else the set carrying the name's {linkId}.
 		function build:GetLoadoutByName(name)
-			local specId
-			for i, spec in ipairs(self.treeTab.specList) do
-				if (spec.title or "Default") == name then specId = i break end
+			local link = name:match("%{(%w+)%}")
+			if link and not self.treeListSpecialLinks then self:SyncLoadouts() end
+			local function linked(links)
+				return link and links and links[link] and links[link].setId
 			end
+			local function setId(orderList, sets, links)
+				if #orderList == 1 then return orderList[1] end
+				return setByTitle(orderList, sets, name) or linked(links)
+			end
+			local specId
+			for i, specName in ipairs(self.treeTab:GetSpecList()) do
+				if specName == name then specId = i break end
+			end
+			for i, spec in ipairs(self.treeTab.specList) do
+				if specId then break end
+				if (spec.title or "Default") == name then specId = i end
+			end
+			specId = specId or linked(self.treeListSpecialLinks)
 			if not specId then return nil end
 			return {
 				name = name,
 				specId = specId,
-				itemSetId = setByTitle(self.itemsTab.itemSetOrderList, self.itemsTab.itemSets, name),
-				skillSetId = setByTitle(self.skillsTab.skillSetOrderList, self.skillsTab.skillSets, name),
-				configSetId = setByTitle(self.configTab.configSetOrderList, self.configTab.configSets, name),
+				itemSetId = setId(self.itemsTab.itemSetOrderList, self.itemsTab.itemSets, self.itemListSpecialLinks),
+				skillSetId = setId(self.skillsTab.skillSetOrderList, self.skillsTab.skillSets, self.skillListSpecialLinks),
+				configSetId = setId(self.configTab.configSetOrderList, self.configTab.configSets, self.configListSpecialLinks),
 			}
 		end
 		function build:SetActiveLoadout(lo)
