@@ -45,3 +45,7 @@ strip = true
 
 [profile.dev.package."*"]
 opt-level = 1
+
+# luajit-src adds LuaJIT's internal asserts to Unix debug builds, and one aborts on a PoE1 build; build it as it ships.
+[profile.dev.package.luajit-src]
+debug-assertions = false
