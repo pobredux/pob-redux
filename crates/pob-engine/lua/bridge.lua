@@ -4401,11 +4401,12 @@ end
 
 -- The affix pool for a base at an item level, one row per mod family with the
 -- best tier that can roll. Built on a throwaway item so the spawn-weight and
--- level rules are PoB's own.
+-- level rules are PoB's own. PoE1's pool also holds Delve, Mercenary and other
+-- mods that normal crafting cannot roll; only its Explicit table can.
 local function affixPool(item, itemLevel, affixType, query)
 	local best = {}
 	for modId, mod in pairs(item.affixes) do
-		if mod.type == affixType and item:GetModSpawnWeight(mod) > 0 and (mod.level or 1) <= itemLevel then
+		if mod.type == affixType and (IS_POE2 or item.affixes ~= data.itemMods.Item or data.itemMods.Explicit[modId]) and item:GetModSpawnWeight(mod) > 0 and (mod.level or 1) <= itemLevel then
 			local label = table.concat(mod, "/")
 			if not query or label:lower():find(query, 1, true) or (mod.group or ""):lower():find(query, 1, true) then
 				local g = mod.group or modId
@@ -4470,7 +4471,7 @@ local function resolveAffix(item, itemLevel, affixType, want, usedGroups)
 	local bestId, bestMod
 	local families = {}
 	for modId, mod in pairs(item.affixes) do
-		if mod.type == affixType and item:GetModSpawnWeight(mod) > 0 and (mod.level or 1) <= itemLevel then
+		if mod.type == affixType and (IS_POE2 or item.affixes ~= data.itemMods.Item or data.itemMods.Explicit[modId]) and item:GetModSpawnWeight(mod) > 0 and (mod.level or 1) <= itemLevel then
 			local g = mod.group or modId
 			families[g] = true
 			if not usedGroups[g] then
@@ -8359,6 +8360,37 @@ local function optimiseSlot(slotName, cfg, w, base, itemLevel, range, title)
 		for i = 1, item.itemSocketCount do item.runes[i] = current.runes[i] or "None" end
 		item:UpdateRunes()
 	end
+	-- Carry over what the player can put on the new item again.
+	local carried = array({})
+	local implicitText = entry.base.implicit
+	if current then
+		for _, l in ipairs(current.enchantModLines or {}) do
+			item.enchantModLines[#item.enchantModLines + 1] = copyTable(l, true)
+			carried[#carried + 1] = l.line
+		end
+		if not IS_POE2 then
+			for _, inf in ipairs(itemLib.influenceInfo.all) do item[inf.key] = current[inf.key] end
+			-- Imports do not tag Eldritch implicits; the item's Exarch or Eater flag says they are.
+			if current.cleansing or current.tangle then
+				implicitText = nil
+				item.implicitModLines = {}
+				for _, l in ipairs(current.implicitModLines or {}) do
+					item.implicitModLines[#item.implicitModLines + 1] = copyTable(l, true)
+					carried[#carried + 1] = l.line
+				end
+			end
+			local sockets = {}
+			for _, s in ipairs(current.sockets or {}) do
+				if s.color ~= "A" then sockets[#sockets + 1] = { color = s.color, group = s.group } end
+			end
+			if #sockets > 0 and #sockets <= (entry.base.socketLimit or 0) then item.sockets = sockets end
+		end
+	end
+	-- PoB leaves a new PoE1 item at 0 quality; anything worn is at 20.
+	if not IS_POE2 and (entry.base.armour or entry.base.weapon) then item.quality = 20 end
+	item:BuildAndParseRaw()
+	-- An abyssal socket mod rewrites the socket list, and removing the mod does not undo it.
+	local baseSockets = copyTable(item.sockets or {})
 	local pools = {
 		prefixes = affixPool(item, itemLevel, "Prefix", nil),
 		suffixes = affixPool(item, itemLevel, "Suffix", nil),
@@ -8388,7 +8420,7 @@ local function optimiseSlot(slotName, cfg, w, base, itemLevel, range, title)
 		local kept = array({})
 		for _, fam in ipairs(pools[t]) do
 			local g = (fam.group or ""):lower():gsub("physicaldamagereductionrating", "armour")
-			local drop = lifeOnly(g)
+			local drop = lifeOnly(g) or (item.affixes[fam.modId].affix or ""):find("^Elevated") ~= nil
 			for _, u in ipairs(unwanted) do
 				if g:find(u, 1, true) and not g:find("applies", 1, true) then drop = true end
 			end
@@ -8402,6 +8434,7 @@ local function optimiseSlot(slotName, cfg, w, base, itemLevel, range, title)
 	}
 	local calcFunc = build.calcsTab:GetMiscCalculator()
 	local function evaluate()
+		item.sockets = copyTable(baseSockets)
 		item:Craft()
 		item:BuildAndParseRaw()
 		return withoutFullDPS(calcFunc, { repSlotName = slotName, repItem = item })
@@ -8465,6 +8498,7 @@ local function optimiseSlot(slotName, cfg, w, base, itemLevel, range, title)
 	if current and bestScore <= optScore(withoutFullDPS(calcFunc, {}), base, w, cfg) + 1e-9 then
 		return nil, "the current item scores higher"
 	end
+	item.sockets = copyTable(baseSockets)
 	item:Craft()
 	item:BuildAndParseRaw()
 	local lines = array({})
@@ -8496,7 +8530,8 @@ local function optimiseSlot(slotName, cfg, w, base, itemLevel, range, title)
 		title = title,
 		replaces = current and current.name or null,
 		baseReason = opt(baseReason),
-		implicit = opt(entry.base.implicit),
+		implicit = opt(implicitText),
+		carried = carried,
 		runes = strArray(item.runes or {}),
 		affixes = affixes,
 		lookFor = lookFor,
@@ -8579,10 +8614,18 @@ local function runGearOpt(p)
 				added[#added + 1] = prop.item
 				refresh()
 				local after = optHeadline(build.calcsTab.mainOutput or {})
-				prop.delta = optDelta(stepBefore, after)
-				prop.output = after
-				prop.item = nil
-				proposals[#proposals + 1] = prop
+				-- The slot calculator still counts skills the old item grants; equipped, they are gone.
+				if optScore(after, before, w, cfg) <= optScore(stepBefore, before, w, cfg) + 1e-9 then
+					build.itemsTab.slots[slotName]:SetSelItemId(original[slotName])
+					build.itemsTab:PopulateSlots()
+					refresh()
+					skipped[#skipped + 1] = { slot = slotName, reason = "the current item scores higher once the new one is equipped" }
+				else
+					prop.delta = optDelta(stepBefore, after)
+					prop.output = after
+					prop.item = nil
+					proposals[#proposals + 1] = prop
+				end
 			else
 				skipped[#skipped + 1] = { slot = slotName, reason = why }
 			end

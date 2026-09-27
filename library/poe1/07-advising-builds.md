@@ -57,7 +57,9 @@ plus utility: movement, a curse, auras, a guard skill.
 - **`search_item_db` then `equip_from_item_db`** for uniques. Do not write item
   text by hand; a made-up unique will not calculate correctly.
 - **`optimise_gear`** for rares, once for every slot in question. It leaves
-  flasks alone.
+  flasks alone. A proposal keeps the old item's influence, sockets and links,
+  and lists in `carried` the anoint, enchantments and Eldritch implicits it
+  kept; tell the player to put those on the new item again.
 - **Resistances first.** Capping fire, cold and lightning at 75% after the
   campaign penalty beats any damage upgrade until it is done.
 - **Give every slot its job.** See [11-gear-and-flasks.md](11-gear-and-flasks.md):

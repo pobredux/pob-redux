@@ -473,7 +473,7 @@ setting for the whole tree. It applies to nodes allocated from then on, so set i
         ),
         rw(
             "optimise_gear",
-            "Design a rare for each chosen slot by greedy search over the affix families that roll on the slot's base, every candidate scored by PoB's calculation. An empty slot gets a base picked from the build: the defence type the character's attributes favour, the weapon type the main skill needs, a shield when a skill uses one, all within the character's level. Keeps resistances at 75, attribute requirements met and movement speed on boots, then maximises DPS (the minions' for a minion skill), life plus energy shield, and effective HP by the chosen aim. The balanced and defence aims never give up more than 5% effective HP for damage; only the damage aim may. Item level defaults to the character's level. Each proposal carries `lookFor` (the mod lines without numbers, what to look for in game), `base`, `baseReason`, `mods`, `raw` and a stat delta; `summary` says what happened. Nothing is equipped unless `apply` is true. Unique items are left alone, and a slot keeps its item when no designed rare scores higher (listed in `skipped`). Takes a few seconds for all slots. This is the tool for filling empty slots or improving gear; do not craft slot by slot.",
+            "Design a rare for each chosen slot by greedy search over the affix families that roll on the slot's base, every candidate scored by PoB's calculation. An empty slot gets a base picked from the build: the defence type the character's attributes favour, the weapon type the main skill needs, a shield when a skill uses one, all within the character's level. Keeps resistances at 75, attribute requirements met and movement speed on boots, then maximises DPS (the minions' for a minion skill), life plus energy shield, and effective HP by the chosen aim. The balanced and defence aims never give up more than 5% effective HP for damage; only the damage aim may. Item level defaults to the character's level. Each proposal carries `lookFor` (the mod lines without numbers, what to look for in game), `base`, `baseReason`, `mods`, `raw`, a stat delta and `carried` (enchantments such as an anoint that the proposal keeps from the old item; tell the player to apply them again); `summary` says what happened. Nothing is equipped unless `apply` is true. Unique items are left alone, and a slot keeps its item when no designed rare scores higher (listed in `skipped`). Takes a few seconds for all slots. This is the tool for filling empty slots or improving gear; do not craft slot by slot.",
             obj(
                 json!({
                     "aim": { "type": "string", "enum": ["balanced", "defence", "damage"], "description": "What to weight (default balanced)" },
@@ -692,7 +692,7 @@ fn adapt_for_poe1(defs: &mut Vec<ToolDef>) {
                     p.remove("runes");
                 }
             }
-            "optimise_gear" => d.description.push_str(" Flasks are left alone."),
+            "optimise_gear" => d.description.push_str(" Flasks are left alone. Influence, sockets and Eldritch implicits also carry over from the item a proposal replaces, and `carried` lists the implicits too."),
             "library" => {
                 d.description = format!(
                     "Game knowledge PoB does not carry, written for advising on builds. Pass `topic` to read one; omit it for the index. Topics: {}.",

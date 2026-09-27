@@ -374,6 +374,7 @@
               {#each p.mods as mod}<div>{mod}</div>{/each}
             </div>
             <div class="lookfor"><span class="dim">{m.opt_look_for()}</span> {p.lookFor.join(", ")}{#if p.implicit}<span class="dim"> {m.opt_implicit()}</span> {plainImplicit(p.implicit)}{/if}</div>
+            {#if p.carried.length}<div class="lookfor"><span class="dim">{m.opt_carried()}</span> {p.carried.join(", ")}</div>{/if}
             <div class="deltas">
               {#each DELTA_KEYS as d}
                 {#if p.delta[d.key] !== undefined && Math.abs(p.delta[d.key]) >= 0.5}

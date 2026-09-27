@@ -875,6 +875,7 @@ export interface GearProposal {
   replaces: string | null;
   baseReason: string | null;
   implicit: string | null;
+  carried: string[];
   lookFor: string[];
   runes: string[];
   affixes: { slot: "Prefix" | "Suffix"; group: string; modId: string; text: string }[];

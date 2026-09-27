@@ -711,6 +711,7 @@
   "opt_apply": "Apply",
   "opt_look_for": "Look for",
   "opt_implicit": "· implicit",
+  "opt_carried": "Keep from the old item",
   "opt_needs": "needs",
   "opt_req_str": "{value} str",
   "opt_req_dex": "{value} dex",
