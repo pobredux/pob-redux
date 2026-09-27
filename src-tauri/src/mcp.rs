@@ -24,7 +24,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::agent::Gate;
 use crate::AppState;
-use crate::tools::{defs, dispatch, ToolContext, ToolDef, ToolError, INSTRUCTIONS};
+use crate::tools::{defs, dispatch, instructions, ToolContext, ToolDef, ToolError};
 
 pub const DEFAULT_PORT: u16 = 7315;
 
@@ -333,7 +333,7 @@ impl ServerHandler for PobMcp {
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().enable_tasks().build())
             .with_server_info(Implementation::new("pob-redux", env!("CARGO_PKG_VERSION")))
-            .with_instructions(INSTRUCTIONS)
+            .with_instructions(instructions(self.ctx.game()))
     }
 
     fn supported_protocol_versions(&self) -> Cow<'static, [ProtocolVersion]> {
@@ -346,9 +346,9 @@ impl ServerHandler for PobMcp {
         _context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, ErrorData> {
         let tools = match &self.gate {
-            None => tool_list(),
+            None => tool_list(self.ctx.game()),
             // Gated results are clipped text, so no output schema may promise structured content.
-            Some(gate) => tool_list()
+            Some(gate) => tool_list(self.ctx.game())
                 .into_iter()
                 .filter(|t| gate.lists(&t.name))
                 .map(|mut t| {
@@ -381,7 +381,7 @@ impl ServerHandler for PobMcp {
             }
             .into());
         }
-        let def = defs().into_iter().find(|d| d.name == name);
+        let def = defs(self.ctx.game()).into_iter().find(|d| d.name == name);
 
         if let Some(def) = def.as_ref().filter(|d| d.destructive) {
             if supports_confirm(&context) {
@@ -455,8 +455,8 @@ impl ServerHandler for PobMcp {
 // Tool table
 // ---------------------------------------------------------------------------
 
-fn tool_list() -> Vec<Tool> {
-    defs()
+fn tool_list(game: crate::game::Game) -> Vec<Tool> {
+    defs(game)
         .into_iter()
         .map(|d| {
             let schema: JsonObject = d.schema.as_object().cloned().unwrap_or_default();

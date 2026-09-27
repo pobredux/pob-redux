@@ -11,10 +11,12 @@ use serde::Serialize;
 use serde_json::{json, Map, Value};
 use tauri::{AppHandle, Emitter};
 
+use crate::game::Game;
+
 /// Same shape as `rmcp::model::JsonObject`, without depending on rmcp here.
 pub(crate) type JsonObject = Map<String, Value>;
 
-pub(crate) const INSTRUCTIONS: &str = "This server drives the build that is open in PoB Redux (Path of Building for \
+const INSTRUCTIONS: &str = "This server drives the build that is open in PoB Redux (Path of Building for \
 Path of Exile 2). Every number comes from Path of Building's own calculation engine, and every change is \
 shown in the app immediately. Start with get_character and get_stats to see what is loaded, or load_build \
 to open a share code, a pobb.in / Maxroll / poe.ninja / poe2db.tw / Pastebin / Rentry link, a local .xml \
@@ -43,6 +45,41 @@ run of changes call checkpoint; every write returns `stats` and a `delta` \
 against the previous state, and rollback restores a checkpoint if the result is worse. Manage alternate \
 trees and gear sets with the list/select/create/copy/rename/delete _spec and _item_set tools. Use \
 save_build or export_build to persist the result. The user is watching the app while you work.";
+
+const INSTRUCTIONS_POE1: &str = "This server drives the build that is open in PoB Redux (Path of Building for \
+Path of Exile 1). Every number comes from Path of Building's own calculation engine, and every change is \
+shown in the app immediately. Start with get_character and get_stats to see what is loaded, or load_build \
+to open a share code, a pobb.in / Maxroll / Mobalytics / poe.ninja / Pastebin / Rentry link, a local .xml \
+file, or raw PoB XML. For advice or a fix, start with build_summary — one call gives the level, main skill \
+and its support count, every skill with whether it needs a keypress (auras, heralds and other skills that \
+reserve count as persistent), the passive point budget for that level, mana and life reservation, flasks, \
+bandit and pantheon, and resistances — then sanity_check for ranked findings with fixes. \
+Set the level with set_level before anything else if the user names one: it changes every number, and gates \
+which gem levels the character can use. Inspect further with get_stats / list_stat_keys / get_sidebar / \
+get_tree_state / get_items / get_skills / get_config. Explore the passive tree with search_tree, node_info and \
+node_path_cost; tree_suggest scores every reachable node for one stat and returns the best unallocated \
+ones per point plus the weakest allocated ones. To reach a notable, find it with search_tree, then path_plan \
+for a route — it takes an objective (defence, damage, speed, attributes, or a stat substring) and a max_extra \
+point budget, so \"path to X optimising for defence\" is one call — and alloc_path to take it. A mastery needs \
+an effect: node_info lists them, and alloc_node takes the chosen one as `effect`. Change the build with \
+alloc_node / dealloc_node / select_class / set_level, equip_item_raw / unequip_item, add_gem / set_gem / \
+remove_gem / set_main_skill, and set_config, which also holds the bandit and pantheon choices. For better \
+gear, optimise_gear searches the real mod pool for every slot and scores each candidate with PoB, keeping \
+resistances capped; apply its proposals with `apply` or equip_item_raw. For unique jewels, suggest_unique_jewels \
+scores every one PoB knows in every allocated socket, variants included, and ranks them; equip a pick with \
+equip_from_item_db and its `variants`. For one specific item, list_bases \
+then list_affixes for the mod pool, then craft_rare, which builds it from PoB's own affix tables. Before a \
+run of changes call checkpoint; every write returns `stats` and a `delta` \
+against the previous state, and rollback restores a checkpoint if the result is worse. Manage alternate \
+trees and gear sets with the list/select/create/copy/rename/delete _spec and _item_set tools. Use \
+save_build or export_build to persist the result. The user is watching the app while you work.";
+
+pub(crate) fn instructions(game: Game) -> &'static str {
+    match game {
+        Game::Poe1 => INSTRUCTIONS_POE1,
+        Game::Poe2 => INSTRUCTIONS,
+    }
+}
 
 const HEADLINE: &[&str] = &[
     "Life",
@@ -87,8 +124,14 @@ impl ToolContext {
             .map_err(|e| ToolError::Failed(clean_error(&e.to_string())))
     }
 
+    pub(crate) fn game(&self) -> Game {
+        tauri::Manager::state::<crate::AppState>(&self.app).game()
+    }
+
     fn headline(&self) -> Value {
-        self.call("get_stats", json!({ "fields": HEADLINE }))
+        let poe1 = self.game() == Game::Poe1;
+        let fields: Vec<&str> = HEADLINE.iter().map(|f| if poe1 && *f == "Spirit" { "ManaUnreserved" } else { *f }).collect();
+        self.call("get_stats", json!({ "fields": fields }))
             .ok()
             .and_then(|v| v.get("stats").cloned())
             .unwrap_or(Value::Null)
@@ -128,7 +171,7 @@ fn stat_delta(before: &Value, after: &Value) -> Value {
 }
 
 fn is_read_only(name: &str) -> bool {
-    defs().iter().any(|d| d.name == name && d.read_only)
+    defs(Game::Poe2).iter().any(|d| d.name == name && d.read_only)
 }
 
 // ---------------------------------------------------------------------------
@@ -205,7 +248,15 @@ fn write_output() -> Value {
     })
 }
 
-pub(crate) fn defs() -> Vec<ToolDef> {
+pub(crate) fn defs(game: Game) -> Vec<ToolDef> {
+    let mut all = defs_poe2();
+    if game == Game::Poe1 {
+        adapt_for_poe1(&mut all);
+    }
+    all
+}
+
+fn defs_poe2() -> Vec<ToolDef> {
     let ro = |name, description: &str, schema| ToolDef { name, description: description.into(), schema, output_schema: None, read_only: true, destructive: false, idempotent: false, open_world: false, slow: false };
     let rw = |name, description: &str, schema| ToolDef { name, description: description.into(), schema, output_schema: Some(write_output()), read_only: false, destructive: false, idempotent: false, open_world: false, slow: false };
     let del = |name, description: &str, schema| ToolDef { name, description: description.into(), schema, output_schema: Some(write_output()), read_only: false, destructive: true, idempotent: false, open_world: false, slow: false };
@@ -594,6 +645,53 @@ setting for the whole tree. It applies to nodes allocated from then on, so set i
     ]
 }
 
+/// PoE1 wording for the tools whose PoE2 text names PoE2 mechanics.
+const POE1_TEXT: &[(&str, &str)] = &[
+    ("load_build", "Open a build in the app, replacing the one that is open. `source` may be a PoB share code, a pobb.in / Maxroll / Mobalytics / poe.ninja / Pastebin / Rentry link (a Mobalytics build page loads the PoB code its author attached), a local path to a .xml build, or raw PoB build XML."),
+    ("sanity_check", "Review the open build and return ranked findings, each with `severity` (high/medium/low), `area`, `message` and a suggested `fix`. Covers resistances, the passive point budget against the character's level, ascendancy points, supports on the main skill (5-link from level 68, 6-link from 85, when the skill is alone in its link), a main skill PoB counts as unusable because reservation leaves too little mana or life for its cost, empty flask slots, missing pantheon gods, life and energy shield for the level, movement speed, unmet attribute requirements with the item or gem that sets them, affixes spent on reduced attribute requirements, and gem errors. Run it again after a change: it is the cheapest check that the change did not break something else. An empty list is not proof the build is sound, and a finding is about numbers only: it cannot see how skills interact in play."),
+    ("build_summary", "One compact snapshot of the open build: level, class, ascendancy, main skill and its support count, every skill as `skills` (group index, skill, `press` = active/persistent/trigger/granted, support count, enabled, main, `grantedBy` for an item's skill and `duplicateOf` pointing at a socketed copy); a link can hold several skills and each is listed. `persistent` means it reserves mana or life (auras, heralds, golems, spectres, stances); `trigger` means a trigger support, a skill or an item fires it. Also: how many skills need a keypress (`activeSkills`), passive points used against the budget available at that level, ascendancy points, life, energy shield, mana, mana and life reservation (`manaReserved`, `manaReservedPercent`, `manaUnreserved` and the life equivalents), flasks equipped and active, bandit and pantheon gods, resistances, attributes, `requirements` (per attribute: need, have, met, and the item or gem that sets it; the highest single source, never a sum), movement speed, DPS, `keystones` (allocated or granted by items) and `keystoneRules`: plain rules for keystones that change which lines matter. Follow keystoneRules before recommending a line. Only `active` skills cost a keypress. Prefer this over several get_stats calls when starting to advise on a build."),
+    ("get_tree_state", "Allocated passive nodes of the active tree: node ids, class ids, and node overrides, plus the point accounting — points used, ascendancy points, jewel sockets, and the budget available at the character's level. The budget is a range because quest points depend on campaign progress rather than level. Use node_info for details on any id."),
+    ("path_plan", "Plan a route from the allocated tree to a node, preferring intermediate nodes that serve an objective. `objective` is \"short\" (fewest points, the default), \"defence\", \"damage\", \"speed\", \"attributes\", or any stat substring such as \"mana\". `max_extra` permits that many points beyond the shortest route when they buy more of the objective — 3 to 5 is usually where a route starts picking up real nodes. Changes nothing; pass the returned node ids to alloc_path."),
+    ("node_info", "Name, type, stats, mods, allocation state, and path cost of one node. For a mastery, `masteryEffects` lists each effect with the `effect` id alloc_node takes, and `takenBy` when another mastery already holds it."),
+    ("alloc_node", "Allocate a node and the shortest path to it, exactly as clicking it in the tree would, then recalculate. A mastery needs `effect`, an id from node_info's masteryEffects; on an allocated mastery it changes the effect."),
+    ("set_gem_levels", "Lower every gem, supports included, that the character's level cannot use to the highest level it can, from each gem level's own level requirement. Gems the level allows stay as they are, corrupted level 21 gems included. Call this after set_level on a levelling build."),
+    ("list_gems", "Find gem ids for add_gem. Matches the query against display names and ids. Returns `req_level` (the character level the gem needs at gem level 1), `gem_level` (the highest gem level the character's level allows), `req_str` / `req_dex` / `req_int` (what that gem level asks of the character, by PoB's formula) and `attr` (the gem's colour). Legacy gems are left out, as in PoB's gem list. **Gems above the open build's level are excluded by default** — set max_level to 0 to see them all, or to a number to plan for a future level. `short_by` names any attribute the build is missing."),
+    ("list_valid_supports", "Support gems PoB considers valid for a group's main active skill, excluding any above the character's level and legacy gems. Each carries its req_level, `attr` (its colour) and whether it is already `socketed`. With `sort_by_dps`, PoB scores each one as if added to the group and returns `dps_delta` (CombinedDPS change, best first; takes about a second), which is how to choose supports on a damage skill. Each support has its own attribute requirement by gem level; the character needs the highest single source, never the sum. `requirements` reports need, have and the binding source for each attribute."),
+    ("get_items", "Every visible equipment, flask and jewel slot with the item in it (if any). Hidden and inactive slots are left out."),
+    ("list_classes", "Every class and its ascendancies, and the bloodlines (`secondaryAscendancies`), with ids for select_class."),
+    ("select_class", "Change class, ascendancy and/or bloodline. Omit an id to leave it unchanged. Changing class deallocates nodes the new class cannot reach. An invalid id leaves the build untouched."),
+    ("list_bases", "Item bases of one type with the numbers that decide between them: weapon damage, attack rate and crit; armour, evasion and energy shield; requirements; implicit. `type` is a family (Boots, Helmet, Ring, Two Hand Mace) or a typed list (Boots: Armour); omit it for the list of types. The best endgame bases are usually the highest requirement ones."),
+];
+
+fn adapt_for_poe1(defs: &mut Vec<ToolDef>) {
+    // No attribute nodes in the PoE1 tree; the library is PoE2's until PoE1 has one.
+    defs.retain(|d| !matches!(d.name, "set_attribute_choice" | "library"));
+    for d in defs.iter_mut() {
+        if let Some((_, text)) = POE1_TEXT.iter().find(|(name, _)| *name == d.name) {
+            d.description = (*text).to_string();
+        }
+        let props = &mut d.schema["properties"];
+        if props.get("item_level").is_some() {
+            props["item_level"]["description"] = json!(if d.name == "optimise_gear" {
+                "Item level for the mod pool (default: the character's level, at most 86)"
+            } else {
+                "Item level (default 86)"
+            });
+        }
+        match d.name {
+            "alloc_node" => props["effect"] = prop("integer", "Mastery effect id from node_info's masteryEffects"),
+            "select_class" => props["secondary_ascend_class_id"] = prop("integer", "Bloodline id from list_classes' secondaryAscendancies (0 for none)"),
+            "craft_rare" => {
+                if let Some(p) = props.as_object_mut() {
+                    p.remove("runes");
+                }
+            }
+            "optimise_gear" => d.description.push_str(" Flasks are left alone."),
+            _ => {}
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Tool bodies
 // ---------------------------------------------------------------------------
@@ -759,6 +857,9 @@ pub(crate) fn run_tool(ctx: &ToolContext, name: &str, args: &JsonObject) -> Resu
             let info = if src.starts_with('<') {
                 ctx.call("load_build_xml", json!({ "xml": src, "name": name }))?
             } else if is_path && lower.ends_with(".build") {
+                if ctx.game() == Game::Poe1 {
+                    return Err(ToolError::Failed("A GGG .build planner file is a PoE2 build. Open a PoE1 build as a PoB code, a link or an .xml file.".into()));
+                }
                 let json = crate::read_text_lossy(src).map_err(ToolError::Failed)?;
                 ctx.call("import_game_build", json!({ "json": json, "name": name }))?
             } else if is_path {
@@ -806,10 +907,15 @@ pub(crate) fn run_tool(ctx: &ToolContext, name: &str, args: &JsonObject) -> Resu
         "select_class" => {
             let class_id = arg_i64(args, "class_id")?;
             let ascend = arg_i64(args, "ascend_class_id")?;
-            if class_id.is_none() && ascend.is_none() {
-                return Err(ToolError::Invalid("class_id or ascend_class_id is required".into()));
+            let bloodline = arg_i64(args, "secondary_ascend_class_id")?;
+            if class_id.is_none() && ascend.is_none() && bloodline.is_none() {
+                return Err(ToolError::Invalid("class_id, ascend_class_id or secondary_ascend_class_id is required".into()));
             }
-            stats(ctx.call("select_class", json!({ "classId": class_id, "ascendClassId": ascend }))?)
+            let mut params = json!({ "classId": class_id, "ascendClassId": ascend });
+            if let Some(id) = bloodline {
+                params["secondaryAscendClassId"] = json!(id);
+            }
+            stats(ctx.call("select_class", params)?)
         }
         // Stats
         "get_stats" => {
@@ -969,7 +1075,11 @@ pub(crate) fn run_tool(ctx: &ToolContext, name: &str, args: &JsonObject) -> Resu
             }),
         )?),
         "alloc_node" => {
-            let state = ctx.call("alloc_node", json!({ "id": req_i64(args, "node_id")? }))?;
+            let mut params = json!({ "id": req_i64(args, "node_id")? });
+            if let Some(effect) = arg_i64(args, "effect")? {
+                params["effect"] = json!(effect);
+            }
+            let state = ctx.call("alloc_node", params)?;
             stats(tree_summary(state))
         }
         "dealloc_node" => {
@@ -1255,13 +1365,30 @@ pub(crate) fn run_tool(ctx: &ToolContext, name: &str, args: &JsonObject) -> Resu
 
 #[cfg(test)]
 mod tests {
-    use super::defs;
+    use super::{defs, instructions, POE1_TEXT};
+    use crate::game::Game;
+
+    #[test]
+    fn poe1_registry_speaks_poe1() {
+        let d = defs(Game::Poe1);
+        assert_eq!(d.len(), 74, "PoE1 tool count changed");
+        for (name, _) in POE1_TEXT {
+            assert!(d.iter().any(|t| t.name == *name), "POE1_TEXT names {name}, which is not a tool");
+        }
+        let poe2_only = ["spirit", "charm", "rune", "jeweller", "weapon set", "poe2db", ".build", "tier ladder", "attribute node"];
+        let mut found = Vec::new();
+        for (name, text) in d.iter().map(|t| (t.name, format!("{} {}", t.description, t.schema))).chain([("instructions", instructions(Game::Poe1).to_string())]) {
+            let text = text.to_lowercase();
+            found.extend(poe2_only.iter().filter(|w| text.contains(*w)).map(|w| format!("{name}: {w}")));
+        }
+        assert!(found.is_empty(), "PoE2 terms in PoE1 text: {found:?}");
+    }
 
     /// The chat panel sends a curated subset of these on every turn and the user
     /// pays for the tokens, so the serialized size is a number worth watching.
     #[test]
     fn registry_is_stable_and_measured() {
-        let d = defs();
+        let d = defs(Game::Poe2);
         assert_eq!(d.len(), 76, "tool count changed");
 
         let mut names: Vec<&str> = d.iter().map(|t| t.name).collect();

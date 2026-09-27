@@ -208,7 +208,7 @@ impl Gate {
     }
 
     pub(crate) async fn call(&self, ctx: Arc<ToolContext>, name: String, args: JsonObject) -> Result<String, String> {
-        let Some(def) = defs().into_iter().find(|d| d.name == name).filter(|d| self.allowed.contains(d.name)) else {
+        let Some(def) = defs(ctx.game()).into_iter().find(|d| d.name == name).filter(|d| self.allowed.contains(d.name)) else {
             return Err(format!("{name} is not available in the assistant."));
         };
         if def.read_only {

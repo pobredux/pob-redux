@@ -937,15 +937,15 @@ fn ai_log_reveal(app: tauri::AppHandle) -> Result<String, String> {
 /// The system instructions for the chat panel: the same text the MCP server
 /// sends to external clients.
 #[tauri::command]
-fn ai_instructions() -> &'static str {
-    tools::INSTRUCTIONS
+fn ai_instructions(state: State<'_, AppState>) -> &'static str {
+    tools::instructions(state.game())
 }
 
 /// The tool registry as JSON Schema, for the in-app chat panel. Same list the
 /// MCP server serves over `tools/list`.
 #[tauri::command]
-fn ai_tools() -> Vec<tools::ToolDef> {
-    tools::defs()
+fn ai_tools(state: State<'_, AppState>) -> Vec<tools::ToolDef> {
+    tools::defs(state.game())
 }
 
 /// Run one tool against the open build. Goes through `tools::dispatch`, so it
