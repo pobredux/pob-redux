@@ -14,7 +14,7 @@ PoB's own estimate from the points spent, the same estimate PoB's Auto level but
 Read two limits before quoting a campaign row:
 
 - **Campaign gear is shared.** 5 of the 7 guides with more than one campaign loadout use one gear set for all of
-  them. Tree, skills and links change per stage; gear, flasks and life mostly do not.
+  them. Tree, skills and links change per stage; gear and flasks mostly do not. Life rises with level in all 7.
 - **Every loadout keeps PoB's default resistance penalty of ‑60%.** A campaign loadout shows resistances as they
   would be after Act 10.
 
@@ -50,7 +50,7 @@ Medians. "Keys" is `build_summary`'s count of `active` skills; "on" is `persiste
 | Act 3–5 | 4 (4) | 51.5 | 44 (37–46) | 4-link in 4 of 4 | 7 / 3 / 0.5 |
 | Act 6–10 | 9 (8) | 83 | 64 (54–67) | 4-link in 9 of 9 | 9 / 4 / 1 |
 | Entering maps | 6 (6) | 89.5 | 68 (64–75) | 4-link in 3 of 6 | 6 / 2.5 / 2 |
-| Early maps | 22 (17) | 112 | 90 (81–95) | 5-link 11, 6-link 11 | 6 / 4 / 3 |
+| Early maps | 22 (16) | 112 | 90 (81–95) | 5-link 11, 6-link 11 | 6 / 4 / 3 |
 | Mid and red maps | 14 (10) | 119.5 | 97 (92–99) | 6-link in 9 of 14 | 7.5 / 4 / 2.5 |
 | Endgame | 52 (25) | 121 | 98 (90–100) | 6-link in 31 of 52 | 6 / 4 / 3 |
 | Aspirational | 16 (7) | 123 | 100 (97–100) | 6-link in 13 of 16 | 8.5 / 4 / 3 |
@@ -122,16 +122,17 @@ before the tree and gear.
 
 | PoB level | Guide loadouts | Median life (life builds) | Median ES (ES builds) |
 |---|---|---|---|
-| 1–20 | 7 | 1,364 | |
-| 21–40 | 7 | 1,641 | |
-| 41–60 | 7 | 2,273 | |
-| 61–75 | 11 | 2,788 | |
-| 76–89 | 11 | 3,727 | |
-| 90–100 | 93 | **5,032** (64 builds) | 10,492 (29 builds) |
+| 1–20 | 7 | 326 | |
+| 21–40 | 7 | 760 | |
+| 41–60 | 7 | 1,563 | |
+| 61–75 | 11 | 2,341 | |
+| 76–89 | 11 | 3,426 | |
+| 90–100 | 93 | **5,240** (64 builds) | 10,492 (29 builds) |
 | Ladder, level 100 | 327 | 5,123 (226 builds) | 9,009 (67 CI builds) |
 
-The rows up to level 75 use shared campaign gear, so read them as an upper bound. Map stages have real per-stage
-gear: early maps median 4,246 life, mid and red maps 5,292, endgame 4,578.
+The rows up to level 75 use shared campaign gear, often gear meant for a later level: two Act 1 loadouts carry a
+Divine Life Flask, which needs level 60. Read these rows as an upper bound. Map stages have real per-stage gear:
+early maps median 3,992 life, mid and red maps 5,458, endgame 4,578.
 
 ## Flasks and movement speed
 

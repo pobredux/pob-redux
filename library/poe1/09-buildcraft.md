@@ -170,7 +170,7 @@ HC and 82 of 84 SSF characters.
 | Keys pressed (median) | 6 | 6 |
 | Chaos Inoculation | 67 (20%) | 21 (31%) |
 | Life, life builds (median) | 5,123 | 4,558 |
-| EHP (median) | 101,759 | 237,084 |
+| EHP (median) | 101,759 | 239,922 |
 | Mana reserved (median) | 89% | 89% |
 | Elemental resistances capped | 266 of 327 | 60 of 68 |
 | Flasks with a "Used when" enchant (median) | 3 | 0 |
