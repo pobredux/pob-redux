@@ -560,7 +560,7 @@ end
 -- Quest passive points are campaign progress, not level, so this is the total
 -- available once an act is finished. PoE2 0.5.5: 4 per act plus 8 across the
 -- interludes; acts 5 and 6 replace the interludes at 1.0. PoE1: PoB's own act
--- table (Build.lua), 23 points over ten acts, the bandit reward included.
+-- table (Build.lua), 23 points over ten acts; killing the bandits adds 1 through ExtraPoints.
 local QUEST_POINTS_BY_ACT = { 4, 8, 12, 16 }
 local QUEST_POINTS_MAX = 24
 local POE1_ACTS = {
@@ -570,20 +570,27 @@ local POE1_ACTS = {
 	{ level = 64, questPoints = 20 }, { level = 67, questPoints = 23 },
 }
 
-local function questPointsForLevel(level)
+local function questPointsForLevel(level, extra)
+	extra = extra or 0
 	if not IS_POE2 then
 		local act = 1
 		while POE1_ACTS[act + 1] and level >= POE1_ACTS[act + 1].level do act = act + 1 end
-		return POE1_ACTS[act].questPoints, POE1_ACTS[math.min(act + 1, #POE1_ACTS)].questPoints
+		-- The kill-all bandit point is in ExtraPoints from level 1, but Build.lua only counts it after Act 2.
+		local input = build and build.configTab and build.configTab.input or {}
+		local bandit = input.bandit or (build and build.bandit)
+		local killAll = bandit ~= "Oak" and bandit ~= "Kraityn" and bandit ~= "Alira"
+		local function extraAt(a) return extra - ((killAll and a <= 2) and 1 or 0) end
+		local high = math.min(act + 1, #POE1_ACTS)
+		return POE1_ACTS[act].questPoints, POE1_ACTS[high].questPoints, extraAt(act), extraAt(high)
 	end
 	-- Act boundaries by level, used only to bracket the budget when the caller
 	-- has not said how far through the campaign they are.
 	local act = 0
-	if level >= 60 then return QUEST_POINTS_MAX, QUEST_POINTS_MAX end
+	if level >= 60 then return QUEST_POINTS_MAX, QUEST_POINTS_MAX, extra, extra end
 	if level >= 45 then act = 4 elseif level >= 32 then act = 3 elseif level >= 20 then act = 2 elseif level >= 12 then act = 1 end
 	local low = act > 0 and QUEST_POINTS_BY_ACT[act] or 0
 	local high = QUEST_POINTS_BY_ACT[math.min(act + 1, 4)] or QUEST_POINTS_MAX
-	return low, high
+	return low, high, extra, extra
 end
 
 local function decodeCode(code)
@@ -1455,8 +1462,8 @@ M.get_tree_state = function()
 	end
 	local used, ascUsed, secondaryAscUsed, socketCount, ws1Used, ws2Used = countAllocNodes(spec)
 	local level = build.characterLevel or 1
-	local questLow, questHigh = questPointsForLevel(level)
 	local extra = (build.calcsTab.mainOutput or {}).ExtraPoints or 0
+	local questLow, questHigh, extraLow, extraHigh = questPointsForLevel(level, extra)
 	return {
 		treeVersion = spec.treeVersion,
 		classId = spec.curClassId,
@@ -1485,8 +1492,8 @@ M.get_tree_state = function()
 		questPointsMin = questLow,
 		questPointsMax = questHigh,
 		extraPoints = extra,
-		pointsAvailableMin = math.max(0, level - 1) + questLow + extra,
-		pointsAvailableMax = math.max(0, level - 1) + questHigh + extra,
+		pointsAvailableMin = math.max(0, level - 1) + questLow + extraLow,
+		pointsAvailableMax = math.max(0, level - 1) + questHigh + extraHigh,
 		ascendancyPointsAvailable = 8,
 		overrides = overrides,
 		sockets = sockets,
@@ -8040,14 +8047,20 @@ function keystone.profile()
 		local ok, v = pcall(function() return env.modDB:Sum("BASE", nil, name) end)
 		return ok and tonumber(v) or 0
 	end
-	local esToMana = math.min(sum("EnergyShieldConvertToMana"), 100)
+	local function flag(name)
+		local ok, v = pcall(function() return env.modDB:Flag(nil, name) end)
+		return ok and v == true
+	end
+	-- PoE1's Eldritch Battery and Iron Reflexes are flags; PoE2's are conversions.
+	local esToMana = IS_POE2 and math.min(sum("EnergyShieldConvertToMana"), 100) or 0
 	local manaFirst = math.min(tonumber(o.sharedMindOverMatter) or 0, 100)
 	return {
 		chaosImmune = o.ChaosInoculation == true,
 		noMana = (o.Mana or 0) <= 0,
 		esToMana = esToMana,
+		esProtectsMana = not IS_POE2 and flag("EnergyShieldProtectsMana"),
 		manaFirst = manaFirst,
-		evasionToArmour = math.min(sum("EvasionConvertToArmour"), 100),
+		evasionToArmour = IS_POE2 and math.min(sum("EvasionConvertToArmour"), 100) or (flag("IronReflexes") and 100 or 0),
 		manaPool = esToMana > 0 or manaFirst > 0,
 	}
 end
@@ -8079,6 +8092,9 @@ function keystone.rules(k)
 	end
 	if k.esToMana > 0 then
 		rules[#rules + 1] = string.format("%d%% of energy shield becomes mana (Eldritch Battery): energy shield lines raise mana.", k.esToMana)
+	end
+	if k.esProtectsMana then
+		rules[#rules + 1] = "Energy shield protects mana instead of life (Eldritch Battery): energy shield lines stop protecting life."
 	end
 	if k.manaFirst > 0 then
 		rules[#rules + 1] = string.format("%d%% of damage is taken from mana before life (Mind Over Matter): mana is a defensive pool, so mana lines count as defence.", k.manaFirst)
@@ -9370,7 +9386,7 @@ M.build_summary = function()
 	local spec = build.spec
 	local used, ascUsed, _, socketCount, ws1, ws2 = countAllocNodes(spec)
 	local level = build.characterLevel or 1
-	local questLow, questHigh = questPointsForLevel(level)
+	local questLow, questHigh, extraLow, extraHigh = questPointsForLevel(level, o.ExtraPoints)
 
 	local active, persistent, trigger, meta = 0, 0, 0, 0
 	local mainSupports, mainName = 0, null
@@ -9470,8 +9486,8 @@ M.build_summary = function()
 		pointsUsed = used,
 		passivePointsSpent = used - math.min(ws1, ws2),
 		extraPoints = o.ExtraPoints or 0,
-		pointsAvailableMin = math.max(0, level - 1) + questLow + (o.ExtraPoints or 0),
-		pointsAvailableMax = math.max(0, level - 1) + questHigh + (o.ExtraPoints or 0),
+		pointsAvailableMin = math.max(0, level - 1) + questLow + extraLow,
+		pointsAvailableMax = math.max(0, level - 1) + questHigh + extraHigh,
 		ascendancyPointsUsed = ascUsed,
 		jewelSocketsUsed = socketCount,
 		life = o.Life or 0,
@@ -9488,7 +9504,9 @@ M.build_summary = function()
 		-- support-gem source), as PoB computes it. Never add sources together.
 		requirements = requirementSummary(),
 		movementSpeedMod = o.MovementSpeedMod or 0,
-		totalDPS = o.TotalDPS or o.CombinedDPS or 0,
+		totalDPS = o.CombinedDPS or o.TotalDPS or 0,
+		-- A minion skill's damage is the minions', not the player's.
+		minionDPS = o.Minion and opt(o.Minion.CombinedDPS or o.Minion.TotalDPS) or null,
 		keystones = keystone.names(),
 		keystoneRules = keystone.rules(keystone.profile()),
 	}
@@ -9529,9 +9547,12 @@ M.build_summary = function()
 		out.lifeUnreserved = o.LifeUnreserved or 0
 		out.flasksEquipped = flasksEquipped
 		out.flasksActive = flasksActive
-		out.bandit = opt(build.bandit)
-		out.pantheonMajorGod = opt(build.pantheonMajorGod)
-		out.pantheonMinorGod = opt(build.pantheonMinorGod)
+		-- The config holds what set_config changed; build.bandit and the god fields are only set on load.
+		local input = build.configTab and build.configTab.input or {}
+		local bandit = input.bandit or build.bandit
+		out.bandit = opt((bandit == "None" or bandit == "Eramir") and "Kill all" or bandit)
+		out.pantheonMajorGod = opt(input.pantheonMajorGod or build.pantheonMajorGod)
+		out.pantheonMinorGod = opt(input.pantheonMinorGod or build.pantheonMinorGod)
 	end
 	return out
 end
@@ -9596,7 +9617,7 @@ M.sanity_check = function()
 	if not IS_POE2 and s.mainSkill ~= null and linkSkills == 1 and not itemSkill
 		and s.characterLevel >= 68 and s.mainSkillSupports < (s.characterLevel >= 85 and 5 or 4) then
 		add(s.mainSkillSupports < 3 and "high" or "medium", "supports", string.format("main skill %s has %d supports", tostring(s.mainSkill), s.mainSkillSupports),
-			"256 of 320 ladder characters in our PoE1 corpus run the main skill with 5 supports, a 6-link. Call list_valid_supports for the legal options.")
+			"246 of 324 ladder characters in our PoE1 corpus run their largest link with 5 supports, a 6-link. Call list_valid_supports for the legal options.")
 	end
 	if s.activeSkills > (IS_POE2 and 6 or 10) then
 		add("low", "buttons", string.format("%d skills need a keypress", s.activeSkills),
@@ -9653,7 +9674,7 @@ M.sanity_check = function()
 	if s.characterLevel >= 15 and s.movementSpeedMod < 1.15 then
 		add("medium", "movement", string.format("movement speed is %+.0f%%", (s.movementSpeedMod - 1) * 100),
 			IS_POE2 and "57 of 63 published builds carry movement speed on boots, usually 20-35%. It shortens the campaign and is a primary avoidance layer."
-				or "317 of 327 ladder characters in our PoE1 corpus have at least +15% and 302 at least +30%. It shortens the campaign and is a primary avoidance layer.")
+				or "317 of 327 ladder characters in our PoE1 corpus have at least +15% and 302 at least +30%, counting their flasks as active as PoB does. It shortens the campaign and is a primary avoidance layer.")
 	end
 
 	if IS_POE2 and s.characterLevel >= 60 and s.weaponSetPointsUsed == 0 then
