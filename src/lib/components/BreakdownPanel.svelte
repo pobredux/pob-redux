@@ -2,7 +2,7 @@
   import { convertFileSrc } from "@tauri-apps/api/core";
   import type { BreakdownSection } from "$lib/engine.svelte";
   import { stripPobText } from "$lib/pobtext";
-  import CalcText from "./CalcText.svelte";
+  import PobText from "./PobText.svelte";
   import { m } from "$lib/paraglide/messages";
 
   let { sections }: { sections: BreakdownSection[] } = $props();
@@ -66,19 +66,19 @@
             class:lead={i === 0 && s.lines.length > 1}
             class:formula={isFormulaLine(line)}
             class:note={isNoteLine(line)}
-          ><CalcText text={line} /></div>
+          ><PobText text={line} calcs /></div>
         {/each}
       </div>
     {:else if s.type === "table"}
       {@const columns = visibleColumns(s)}
       <div class="tbl">
-        {#if s.label}<div class="tlabel"><CalcText text={s.label} /></div>{/if}
+        {#if s.label}<div class="tlabel"><PobText text={s.label} calcs /></div>{/if}
         <div class="table-scroll">
           <table>
             <thead>
               <tr>
                 {#each columns as c}
-                  <th class:r={c.right} scope="col"><CalcText text={c.label} /></th>
+                  <th class:r={c.right} scope="col"><PobText text={c.label} calcs /></th>
                 {/each}
               </tr>
             </thead>
@@ -86,14 +86,14 @@
               {#each s.rows as row}
                 <tr>
                   {#each columns as c}
-                    <td class:r={c.right} class:wrap={cellWraps(row[c.key] ?? "")}><CalcText text={row[c.key] ?? ""} /></td>
+                    <td class:r={c.right} class:wrap={cellWraps(row[c.key] ?? "")}><PobText text={row[c.key] ?? ""} calcs /></td>
                   {/each}
                 </tr>
               {/each}
             </tbody>
           </table>
         </div>
-        {#if s.footer}<div class="tfoot"><CalcText text={s.footer} /></div>{/if}
+        {#if s.footer}<div class="tfoot"><PobText text={s.footer} calcs /></div>{/if}
       </div>
     {:else if s.type === "radius"}
       <figure class="radius">

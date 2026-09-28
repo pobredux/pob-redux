@@ -431,7 +431,7 @@
                                 class:pinned
                                 aria-pressed={pinned}
                                 disabled={!cell.hasBreakdown}
-                                onmouseenter={(e) => showBreakdown(e.currentTarget, sec, sub.index, row.index, cell.index, stripPobText(row.label ?? ""), false)}
+                                onmouseenter={(e) => cell.hasBreakdown && showBreakdown(e.currentTarget, sec, sub.index, row.index, cell.index, stripPobText(row.label ?? ""), false)}
                                 onmouseleave={leaveBreakdown}
                                 onclick={(e) => showBreakdown(e.currentTarget, sec, sub.index, row.index, cell.index, stripPobText(row.label ?? ""), true)}
                               >
@@ -454,7 +454,7 @@
                             class:pinned
                             aria-pressed={pinned}
                             disabled={!hero.hasBreakdown}
-                            onmouseenter={(e) => showBreakdown(e.currentTarget, sec, hero.sub, hero.row, hero.col, stripPobText(hero.label), false)}
+                            onmouseenter={(e) => hero.hasBreakdown && showBreakdown(e.currentTarget, sec, hero.sub, hero.row, hero.col, stripPobText(hero.label), false)}
                             onmouseleave={leaveBreakdown}
                             onclick={(e) => showBreakdown(e.currentTarget, sec, hero.sub, hero.row, hero.col, stripPobText(hero.label), true)}
                           >
@@ -491,9 +491,9 @@
                                   class:span
                                   aria-pressed={pinned}
                                   disabled={!cell.hasBreakdown}
-                                  title={isSkillHitDamageRow(sec, row) ? stripPobText(cell.text) : undefined}
+                                  title={isSkillHitDamageRow(sec, row) && !cell.hasBreakdown ? stripPobText(cell.text) : undefined}
                                   style:grid-column={span ? `${i + 2} / -1` : null}
-                                  onmouseenter={(e) => showBreakdown(e.currentTarget, sec, sub.index, row.index, cell.index, stripPobText(`${sub.label} · ${row.label ?? ""}`), false)}
+                                  onmouseenter={(e) => cell.hasBreakdown && showBreakdown(e.currentTarget, sec, sub.index, row.index, cell.index, stripPobText(`${sub.label} · ${row.label ?? ""}`), false)}
                                   onmouseleave={leaveBreakdown}
                                   onclick={(e) => showBreakdown(e.currentTarget, sec, sub.index, row.index, cell.index, stripPobText(`${sub.label} · ${row.label ?? ""}`), true)}
                                 >
@@ -959,9 +959,6 @@
   .cell.link:hover {
     color: var(--focus);
     background: var(--bg-hover);
-  }
-  .cell.pinned {
-    padding-right: 22px;
   }
   .pinmark {
     display: grid;

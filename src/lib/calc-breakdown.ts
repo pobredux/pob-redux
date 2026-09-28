@@ -59,32 +59,53 @@ export function chooseBreakdownPosition(
   const clampY = (value: number) => Math.max(42, Math.min(value, maxY));
   const rightX = clampX(anchor.right + 8);
   const leftX = clampX(anchor.left - width - 8);
+  const centerX = clampX((anchor.left + anchor.right - width) / 2);
   const baseY = clampY(anchor.top - 8);
   const visible = blockers.filter((popup) => popup.key !== excludeKey && popup.ready && popup.height > 0);
-  if (visible.length === 0 || height === 0) {
-    const x = anchor.right + 8 + width <= viewport.width - 12 ? rightX : leftX;
+  if (height === 0) {
+    const rightFits = anchor.right + 8 + width <= viewport.width - 12;
+    const leftFits = anchor.left - width - 8 >= 12;
+    const x = rightFits ? rightX : leftFits ? leftX : centerX;
     return { x, y: baseY };
   }
 
-  const xs = [...new Set([rightX, leftX])];
-  const ys = new Set([baseY]);
+  const xs = [...new Set([rightX, leftX, centerX])];
+  const ys = new Set([baseY, clampY(anchor.top - height - 8), clampY(anchor.bottom + 8)]);
   for (const popup of visible) {
     ys.add(clampY(popup.y - height - 8));
     ys.add(clampY(popup.y + popup.height + 8));
   }
 
-  const rowY = (anchor.top + anchor.bottom) / 2;
+  const overlapArea = (x: number, y: number, blocker: BreakdownAnchor) => {
+    const overlapX = Math.max(0, Math.min(x + width, blocker.right + 8) - Math.max(x, blocker.left - 8));
+    const overlapY = Math.max(0, Math.min(y + height, blocker.bottom + 8) - Math.max(y, blocker.top - 8));
+    return overlapX * overlapY;
+  };
+  const anchorCenterX = (anchor.left + anchor.right) / 2;
   const candidates = xs.flatMap((x) => [...ys].map((y) => {
-    let overlap = 0;
+    const anchorOverlap = overlapArea(x, y, anchor);
+    let popupOverlap = 0;
     for (const popup of visible) {
-      const overlapX = Math.max(0, Math.min(x + width, popup.x + popup.width + 8) - Math.max(x, popup.x - 8));
-      const overlapY = Math.max(0, Math.min(y + height, popup.y + popup.height + 8) - Math.max(y, popup.y - 8));
-      overlap += overlapX * overlapY;
+      popupOverlap += overlapArea(x, y, {
+        left: popup.x,
+        right: popup.x + popup.width,
+        top: popup.y,
+        bottom: popup.y + popup.height,
+      });
     }
-    const rowGap = rowY < y ? y - rowY : rowY > y + height ? rowY - y - height : 0;
-    const distance = Math.abs(y - baseY) + rowGap * 3 + (x === rightX ? 0 : 4);
-    return { x, y, overlap, distance };
+    const gapX = x >= anchor.right ? x - anchor.right : x + width <= anchor.left ? anchor.left - x - width : 0;
+    const gapY = y >= anchor.bottom ? y - anchor.bottom : y + height <= anchor.top ? anchor.top - y - height : 0;
+    const alignedSide = gapX > 0 && gapY === 0;
+    const alignment = alignedSide ? Math.abs(y - baseY) : Math.abs(x + width / 2 - anchorCenterX);
+    const distance = gapX + gapY + alignment * 0.1 + (alignedSide ? (x === leftX ? 4 : 0) : 8);
+    return { x, y, anchorOverlap, popupOverlap, distance };
   }));
-  const best = candidates.sort((a, b) => Number(a.overlap > 0) - Number(b.overlap > 0) || a.overlap - b.overlap || a.distance - b.distance)[0];
+  const best = candidates.sort((a, b) =>
+    Number(a.anchorOverlap > 0) - Number(b.anchorOverlap > 0)
+    || Number(a.popupOverlap > 0) - Number(b.popupOverlap > 0)
+    || a.anchorOverlap - b.anchorOverlap
+    || a.popupOverlap - b.popupOverlap
+    || a.distance - b.distance
+  )[0];
   return { x: best.x, y: best.y };
 }

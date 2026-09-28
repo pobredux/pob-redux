@@ -37,7 +37,7 @@ const DAMAGE_DETAILS = [
 ].join("|");
 
 const typedDamage = (type: string) => `${type}(?:\\s+(?:${DAMAGE_DETAILS}))?`;
-const colourRule = (colour: string, labels: string) => ({ colour, pattern: new RegExp(`\\b(?:${labels})\\b`, "gi") });
+const colourRule = (colour: string, labels: string) => ({ colour, pattern: new RegExp(`\\b(?:${labels})\\b`, "g") });
 const LABEL_RULES = [
   colourRule("var(--c-physical)", `${typedDamage("Physical")}|Bleed(?:ing|s)?|Corrupted Blood`),
   colourRule("var(--c-fire)", `${typedDamage("Fire")}|Ignite[ds]?|Igniting|Burning(?: Damage)?|Scorch(?:ed)?`),
@@ -53,6 +53,7 @@ const LABEL_RULES = [
 
 export function parseCalcText(value: string | null | undefined): Span[] {
   return parsePobText(value).flatMap((span) => {
+    if (span.color !== null) return [span];
     const matches = LABEL_RULES.flatMap((rule) => [...span.text.matchAll(rule.pattern)].map((match) => ({
       colour: rule.colour,
       index: match.index ?? 0,

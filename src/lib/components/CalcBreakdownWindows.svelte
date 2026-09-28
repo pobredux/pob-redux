@@ -10,8 +10,8 @@
   } from "$lib/calc-breakdown";
   import { m } from "$lib/paraglide/messages";
   import BreakdownPanel from "./BreakdownPanel.svelte";
-  import CalcText from "./CalcText.svelte";
   import Icon from "./Icon.svelte";
+  import PobText from "./PobText.svelte";
 
   type BreakdownWindow = {
     sections: BreakdownSection[];
@@ -34,8 +34,8 @@
   type Props = { revision: number; onpinnedchange?: (keys: Set<string>) => void };
 
   let { revision, onpinnedchange }: Props = $props();
-  let hover = $state<BreakdownWindow | null>(null);
-  let pinned = $state<PinnedBreakdown[]>([]);
+  let hover = $state.raw<BreakdownWindow | null>(null);
+  let pinned = $state.raw<PinnedBreakdown[]>([]);
   let hoverElement = $state<HTMLElement>();
   const pinnedElements = new Map<string, HTMLElement>();
   const requests = new Map<string, number>();
@@ -43,7 +43,6 @@
   let hoverTimer = 0;
   let hoverRequest = 0;
   let pinRequest = 0;
-  let topZ = 20;
   let stopPointerTracking: (() => void) | null = null;
 
   const viewport = () => ({ width: window.innerWidth, height: window.innerHeight });
@@ -58,7 +57,7 @@
       cache.clear();
       hoverRequest++;
       hover = null;
-      for (const popup of pinned) void refreshPinned(popup);
+      for (const popup of pinned) void fetchPinned(popup);
     });
   });
 
@@ -89,12 +88,18 @@
   }
 
   function updatePinned(key: string, update: (popup: PinnedBreakdown) => PinnedBreakdown) {
-    pinned = pinned.map((popup) => popup.key === key ? update(popup) : popup);
+    const index = pinned.findIndex((popup) => popup.key === key);
+    if (index < 0) return;
+    const next = update(pinned[index]);
+    if (next === pinned[index]) return;
+    pinned = [...pinned.slice(0, index), next, ...pinned.slice(index + 1)];
   }
 
   function closePinned(key: string) {
     requests.delete(key);
-    pinned = pinned.filter((popup) => popup.key !== key);
+    pinned = pinned.filter((popup) => popup.key !== key)
+      .sort((a, b) => a.z - b.z)
+      .map((popup, index) => popup.z === index + 1 ? popup : { ...popup, z: index + 1 });
     notifyPinned();
   }
 
@@ -103,7 +108,11 @@
   }
 
   function bringToFront(key: string) {
-    updatePinned(key, (popup) => ({ ...popup, z: ++topZ }));
+    const ordered = [...pinned].sort((a, b) => a.z - b.z);
+    const target = ordered.find((popup) => popup.key === key);
+    if (!target || ordered.at(-1)?.key === key) return;
+    pinned = [...ordered.filter((popup) => popup.key !== key), target]
+      .map((popup, index) => popup.z === index + 1 ? popup : { ...popup, z: index + 1 });
   }
 
   async function placeHover(node: HTMLElement, key: string) {
@@ -113,49 +122,81 @@
     hover = { ...hover, ...position(node, hover.width, height), height, ready: true };
   }
 
-  async function placePinned(node: HTMLElement, key: string) {
+  async function measurePinned(key: string, node?: HTMLElement) {
     await tick();
     const popup = pinned.find((candidate) => candidate.key === key);
     const element = pinnedElements.get(key);
     if (!popup || !element) return;
     const height = element.getBoundingClientRect().height;
+    const nextPosition = node
+      ? position(node, popup.width, height, key)
+      : clampBreakdownPosition(popup, popup.width, height, viewport());
     updatePinned(key, (current) => ({
       ...current,
-      ...position(node, popup.width, height, key),
+      ...nextPosition,
       height,
       defaultHeight: current.heightCustom ? current.defaultHeight : height,
       ready: true,
     }));
   }
 
-  async function settlePinned(key: string) {
-    await tick();
-    const popup = pinned.find((candidate) => candidate.key === key);
-    const element = pinnedElements.get(key);
-    if (!popup || !element) return;
-    const height = element.getBoundingClientRect().height;
-    const settled = clampBreakdownPosition(popup, popup.width, height, viewport());
+  function applyPinnedSections(key: string, title: string, sections: BreakdownSection[], node?: HTMLElement) {
+    const width = calcBreakdownWidth(sections, title, window.innerWidth);
     updatePinned(key, (current) => ({
       ...current,
-      ...settled,
-      height,
-      defaultHeight: current.heightCustom ? current.defaultHeight : height,
-      ready: true,
+      sections,
+      width: current.widthCustom ? current.width : width,
+      defaultWidth: width,
+      ready: false,
     }));
+    void measurePinned(key, node);
   }
 
-  function trackPointer(move: (event: PointerEvent) => void) {
+  async function fetchPinned(popup: PinnedBreakdown, node?: HTMLElement) {
+    const request = ++pinRequest;
+    requests.set(popup.key, request);
+    try {
+      const result = await engine.calcCellBreakdown(popup.ref);
+      if (requests.get(popup.key) !== request || !isPinned(popup.key)) return;
+      cache.set(cacheKey(popup.key), result.sections);
+      applyPinnedSections(popup.key, popup.title, result.sections, node);
+    } catch {
+      if (requests.get(popup.key) === request) closePinned(popup.key);
+    }
+  }
+
+  function clampPinnedWindows() {
+    const bounds = viewport();
+    let changed = false;
+    const next = pinned.map((popup) => {
+      const defaultWidth = calcBreakdownWidth(popup.sections, popup.title, bounds.width);
+      const width = Math.min(popup.widthCustom ? popup.width : defaultWidth, Math.max(1, bounds.width - 24));
+      const height = Math.min(popup.height, Math.max(1, Math.min(bounds.height * 0.6, bounds.height - 54)));
+      const nextPosition = clampBreakdownPosition(popup, width, height, bounds);
+      if (popup.defaultWidth === defaultWidth && popup.width === width && popup.height === height
+        && popup.x === nextPosition.x && popup.y === nextPosition.y) return popup;
+      changed = true;
+      return { ...popup, ...nextPosition, width, height, defaultWidth };
+    });
+    if (changed) pinned = next;
+  }
+
+  function trackPointer(event: PointerEvent, move: (event: PointerEvent) => void) {
     stopPointerTracking?.();
+    const target = event.currentTarget as HTMLElement;
+    const pointerId = event.pointerId;
     const stop = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", stop);
-      window.removeEventListener("pointercancel", stop);
+      if (target.hasPointerCapture(pointerId)) target.releasePointerCapture(pointerId);
+      target.removeEventListener("pointermove", move);
+      target.removeEventListener("pointerup", stop);
+      target.removeEventListener("pointercancel", stop);
       stopPointerTracking = null;
     };
     stopPointerTracking = stop;
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", stop, { once: true });
-    window.addEventListener("pointercancel", stop, { once: true });
+    target.setPointerCapture(pointerId);
+    target.addEventListener("pointermove", move);
+    target.addEventListener("pointerup", stop, { once: true });
+    target.addEventListener("pointercancel", stop, { once: true });
   }
 
   function startDrag(event: PointerEvent, key: string) {
@@ -164,14 +205,13 @@
     const popup = pinned.find((candidate) => candidate.key === key);
     if (!popup) return;
     event.preventDefault();
-    bringToFront(key);
     const offsetX = event.clientX - popup.x;
     const offsetY = event.clientY - popup.y;
     const move = (next: PointerEvent) => updatePinned(key, (current) => ({
       ...current,
       ...clampBreakdownPosition({ x: next.clientX - offsetX, y: next.clientY - offsetY }, current.width, current.height, viewport()),
     }));
-    trackPointer(move);
+    trackPointer(event, move);
   }
 
   function startResize(event: PointerEvent, key: string, corner: "nw" | "ne" | "sw" | "se") {
@@ -214,31 +254,12 @@
         heightCustom,
       };
     });
-    trackPointer(move);
+    trackPointer(event, move);
   }
 
   function handlePointerDown(event: PointerEvent, key: string) {
     bringToFront(key);
     startDrag(event, key);
-  }
-
-  async function refreshPinned(popup: PinnedBreakdown) {
-    const request = ++pinRequest;
-    requests.set(popup.key, request);
-    try {
-      const result = await engine.calcCellBreakdown(popup.ref);
-      if (requests.get(popup.key) !== request || !isPinned(popup.key)) return;
-      cache.set(cacheKey(popup.key), result.sections);
-      const width = calcBreakdownWidth(result.sections, popup.title, window.innerWidth);
-      updatePinned(popup.key, (current) => ({
-        ...current,
-        sections: result.sections,
-        width: current.widthCustom ? current.width : width,
-        defaultWidth: width,
-        ready: false,
-      }));
-      void settlePinned(popup.key);
-    } catch {}
   }
 
   export function show(node: HTMLElement, ref: CalcBreakdownRef, title: string, pin: boolean) {
@@ -253,7 +274,7 @@
         return;
       }
       const width = Math.min(560, window.innerWidth - 24);
-      pinned = [...pinned, {
+      const popup: PinnedBreakdown = {
         sections: [],
         title,
         key,
@@ -266,25 +287,14 @@
         widthCustom: false,
         heightCustom: false,
         ready: false,
-        z: ++topZ,
-      }];
+        z: pinned.length + 1,
+      };
+      pinned = [...pinned, popup];
       notifyPinned();
       if (cached) {
-        const fittedWidth = calcBreakdownWidth(cached, title, window.innerWidth);
-        updatePinned(key, (popup) => ({ ...popup, sections: cached, width: fittedWidth, defaultWidth: fittedWidth }));
-        void placePinned(node, key);
+        applyPinnedSections(key, title, cached, node);
       } else {
-        const request = ++pinRequest;
-        requests.set(key, request);
-        void engine.calcCellBreakdown(ref).then((result) => {
-          if (requests.get(key) !== request || !isPinned(key)) return;
-          cache.set(cacheKey(key), result.sections);
-          const fittedWidth = calcBreakdownWidth(result.sections, title, window.innerWidth);
-          updatePinned(key, (popup) => ({ ...popup, sections: result.sections, width: fittedWidth, defaultWidth: fittedWidth }));
-          void placePinned(node, key);
-        }).catch(() => {
-          if (requests.get(key) === request) closePinned(key);
-        });
+        void fetchPinned(popup, node);
       }
       return;
     }
@@ -320,62 +330,73 @@
   }
 </script>
 
-{#if hover}
-  <aside
-    bind:this={hoverElement}
-    class="bdpop"
-    class:ready={hover.ready}
-    style:left={`${hover.x}px`}
-    style:top={`${hover.y}px`}
-    style:width={`${hover.width}px`}
-    role="tooltip"
-  >
-    <div class="bdhead">
-      <span class="label"><CalcText text={hover.title} /></span>
-    </div>
-    <div class="bdscroll">
-      <BreakdownPanel sections={hover.sections} />
-    </div>
-  </aside>
-{/if}
+<svelte:window onresize={clampPinnedWindows} />
 
-{#each pinned as popup (popup.key)}
-  <div
-    use:registerPinned={popup.key}
-    class="bdpop pinned"
-    class:ready={popup.ready}
-    style:left={`${popup.x}px`}
-    style:top={`${popup.y}px`}
-    style:width={`${popup.width}px`}
-    style:height={popup.heightCustom ? `${popup.height}px` : undefined}
-    style:z-index={popup.z}
-    role="dialog"
-    tabindex="-1"
-    aria-label={popup.title}
-    onpointerdown={(event) => handlePointerDown(event, popup.key)}
-  >
-    <div class="bdhead">
-      <span class="bdtitle">
-        <span class="bdpin"><Icon name="push-pin" size={12} /></span>
-        <span class="label"><CalcText text={popup.title} /></span>
-      </span>
-      <button class="btn sm ghost" onclick={() => closePinned(popup.key)}>{m.common_close()}</button>
+<div class="breakdown-layer">
+  {#if hover}
+    <aside
+      bind:this={hoverElement}
+      class="bdpop hover"
+      class:ready={hover.ready}
+      style:left={`${hover.x}px`}
+      style:top={`${hover.y}px`}
+      style:width={`${hover.width}px`}
+      style:z-index={pinned.length + 1}
+      role="tooltip"
+    >
+      <div class="bdhead">
+        <span class="label"><PobText text={hover.title} calcs /></span>
+      </div>
+      <div class="bdscroll">
+        <BreakdownPanel sections={hover.sections} />
+      </div>
+    </aside>
+  {/if}
+
+  {#each pinned as popup (popup.key)}
+    <div
+      use:registerPinned={popup.key}
+      class="bdpop pinned"
+      class:ready={popup.ready}
+      style:left={`${popup.x}px`}
+      style:top={`${popup.y}px`}
+      style:width={`${popup.width}px`}
+      style:height={popup.heightCustom ? `${popup.height}px` : undefined}
+      style:z-index={popup.z}
+      role="dialog"
+      tabindex="-1"
+      aria-label={popup.title}
+      onpointerdown={(event) => handlePointerDown(event, popup.key)}
+    >
+      <div class="bdhead">
+        <span class="bdtitle">
+          <span class="bdpin"><Icon name="push-pin" size={12} /></span>
+          <span class="label"><PobText text={popup.title} calcs /></span>
+        </span>
+        <button class="btn sm ghost" onclick={() => closePinned(popup.key)}>{m.common_close()}</button>
+      </div>
+      <div class="bdscroll">
+        <BreakdownPanel sections={popup.sections} />
+      </div>
+      {#each ["nw", "ne", "sw", "se"] as corner}
+        <button
+          class={`resize-handle ${corner}`}
+          tabindex="-1"
+          aria-label={popup.title}
+          onpointerdown={(event) => startResize(event, popup.key, corner as "nw" | "ne" | "sw" | "se")}
+        ></button>
+      {/each}
     </div>
-    <div class="bdscroll">
-      <BreakdownPanel sections={popup.sections} />
-    </div>
-    {#each ["nw", "ne", "sw", "se"] as corner}
-      <button
-        class={`resize-handle ${corner}`}
-        tabindex="-1"
-        aria-label={popup.title}
-        onpointerdown={(event) => startResize(event, popup.key, corner as "nw" | "ne" | "sw" | "se")}
-      ></button>
-    {/each}
-  </div>
-{/each}
+  {/each}
+</div>
 
 <style>
+  .breakdown-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    pointer-events: none;
+  }
   .bdpop {
     position: fixed;
     box-sizing: border-box;
@@ -388,7 +409,6 @@
     border-radius: var(--r-2);
     box-shadow: var(--shadow-tooltip);
     backdrop-filter: blur(8px);
-    z-index: 20;
     pointer-events: none;
     visibility: hidden;
   }

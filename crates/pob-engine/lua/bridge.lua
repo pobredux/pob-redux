@@ -1314,9 +1314,12 @@ M.calc_cell_breakdown = function(p)
 	local colData = rowData and rowData[tonumber(p.col) or -1]
 	if not colData then error("unknown calc cell", 0) end
 	local ctl = build.controls.breakdown
-	ctl:SetBreakdownData(colData, false, p.actor == "minion" and "minion" or nil)
-	local sections = breakdownSections(ctl)
+	local ok, sections = pcall(function()
+		ctl:SetBreakdownData(colData, false, p.actor == "minion" and "minion" or nil)
+		return breakdownSections(ctl)
+	end)
 	ctl:SetBreakdownData()
+	if not ok then error(sections, 0) end
 	return { sections = sections, rev = build.outputRevision }
 end
 
