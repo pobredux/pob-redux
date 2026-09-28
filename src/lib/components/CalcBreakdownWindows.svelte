@@ -97,9 +97,9 @@
 
   function closePinned(key: string) {
     requests.delete(key);
+    const closed = pinned.find((popup) => popup.key === key);
     pinned = pinned.filter((popup) => popup.key !== key)
-      .sort((a, b) => a.z - b.z)
-      .map((popup, index) => popup.z === index + 1 ? popup : { ...popup, z: index + 1 });
+      .map((popup) => closed && popup.z > closed.z ? { ...popup, z: popup.z - 1 } : popup);
     notifyPinned();
   }
 
@@ -108,11 +108,11 @@
   }
 
   function bringToFront(key: string) {
-    const ordered = [...pinned].sort((a, b) => a.z - b.z);
-    const target = ordered.find((popup) => popup.key === key);
-    if (!target || ordered.at(-1)?.key === key) return;
-    pinned = [...ordered.filter((popup) => popup.key !== key), target]
-      .map((popup, index) => popup.z === index + 1 ? popup : { ...popup, z: index + 1 });
+    const target = pinned.find((popup) => popup.key === key);
+    if (!target || target.z === pinned.length) return;
+    pinned = pinned.map((popup) => popup.key === key
+      ? { ...popup, z: pinned.length }
+      : popup.z > target.z ? { ...popup, z: popup.z - 1 } : popup);
   }
 
   async function placeHover(node: HTMLElement, key: string) {
