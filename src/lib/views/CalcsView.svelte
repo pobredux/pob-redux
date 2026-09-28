@@ -827,6 +827,13 @@
     letter-spacing: 0.06em;
     text-transform: uppercase;
   }
+  .stat-hero.pinned .stat-hero-label {
+    max-width: calc(100% - 18px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transform: translateX(-7px);
+  }
   .stat-hero-value {
     max-width: 100%;
     font-size: 22px;
@@ -951,6 +958,9 @@
   .wide .ct {
     display: inline-block;
     min-width: var(--colw);
+  }
+  .wide .cell.pinned .ct {
+    transform: translateX(-12px);
   }
   .cell.link {
     cursor: pointer;
