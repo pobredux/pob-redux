@@ -506,7 +506,7 @@
                                       {/if}
                                     {/if}
                                   </span>
-                                  {#if pinned}<span class="pinmark cell-pin" title={m.sidebar_breakdown_pinned()}><Icon name="push-pin" size={11} /></span>{/if}
+                                  {#if pinned}<span class="pinmark cell-pin" title={m.sidebar_breakdown_pinned()}><Icon name="push-pin" size={10} /></span>{/if}
                                 </button>
                               {/each}
                             </div>
@@ -959,9 +959,6 @@
     display: inline-block;
     min-width: var(--colw);
   }
-  .wide .cell.pinned .ct {
-    transform: translateX(-12px);
-  }
   .cell.link {
     cursor: pointer;
     border-radius: 3px;
@@ -985,5 +982,9 @@
     top: 50%;
     right: 5px;
     transform: translateY(-50%);
+  }
+  /* Sit inside the 10px right padding so pinned numbers stay on their column. */
+  .wide .cell-pin {
+    right: 0;
   }
 </style>

@@ -44,7 +44,7 @@ const LABEL_RULES = [
   colourRule("var(--c-cold)", `${typedDamage("Cold")}|Chill(?:ed|ing)?|Freeze|Freez(?:es|ing)|Frozen|Brittle`),
   colourRule("var(--c-lightning)", `${typedDamage("Lightning")}|Shock(?:ed|ing|s)?|Sap(?:ped)?`),
   colourRule("var(--c-chaos)", `${typedDamage("Chaos")}|Poison(?:ed|ing|s)?|Decay`),
-  colourRule("var(--bad)", "Strength"),
+  colourRule("var(--c-life)", "Strength"),
   colourRule("var(--ok)", "Dexterity|Frenzy(?: Charges?)?"),
   colourRule("var(--c-mana)", "Intelligence|Power(?: Charges?)?"),
   colourRule("var(--c-rare)", "Omniscience"),
