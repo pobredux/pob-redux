@@ -78,6 +78,7 @@
   --backdrop: rgb(0 0 0 / 0.55);
   --shadow-pop: 0 8px 30px rgba(0, 0, 0, 0.55);
   --shadow-modal: 0 12px 40px rgba(0, 0, 0, 0.5);
+  --shadow-tooltip: 0 20px 70px rgba(0, 0, 0, 0.9), 0 6px 24px rgba(0, 0, 0, 0.75);
 }
 
 /* Light: warm paper, warm ink. Chrome sits a step darker than the work area.
@@ -137,6 +138,7 @@
   --backdrop: rgb(40 40 50 / 0.35);
   --shadow-pop: 0 8px 30px rgba(30, 30, 40, 0.16);
   --shadow-modal: 0 12px 40px rgba(30, 30, 40, 0.2);
+  --shadow-tooltip: var(--shadow-modal);
 }
 
 /* Wraeclast: candlelit parchment over brown, with Path of Exile's red as the
@@ -195,6 +197,7 @@
   --backdrop: rgb(12 14 20 / 0.45);
   --shadow-pop: 0 8px 30px rgba(12, 14, 20, 0.45);
   --shadow-modal: 0 12px 40px rgba(12, 14, 20, 0.4);
+  --shadow-tooltip: 0 16px 56px rgba(12, 14, 20, 0.65), 0 4px 18px rgba(12, 14, 20, 0.5);
 }
 
 :root {

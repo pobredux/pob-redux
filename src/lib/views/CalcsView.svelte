@@ -1,12 +1,15 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import { engine, type BreakdownSection, type CalcEffect, type CalcRow, type CalcSection, type CalcSkillSelection, type CalcSubSection } from "$lib/engine.svelte";
+  import { engine, type CalcEffect, type CalcRow, type CalcSection, type CalcSkillSelection, type CalcSubSection } from "$lib/engine.svelte";
   import { build } from "$lib/state/build.svelte";
   import { game } from "$lib/state/game.svelte";
   import { statusEffectArtUrls } from "$lib/item-art";
+  import Icon from "$lib/components/Icon.svelte";
   import PobText from "$lib/components/PobText.svelte";
+  import CalcBreakdownWindows from "$lib/components/CalcBreakdownWindows.svelte";
   import { stripPobText } from "$lib/pobtext";
-  import BreakdownPanel from "$lib/components/BreakdownPanel.svelte";
+  import { calcBreakdownKey, type CalcBreakdownRef } from "$lib/calc-breakdown";
+  import { CHARGE_COLOURS, ROW_COLOURS } from "$lib/calc-colours";
   import { m } from "$lib/paraglide/messages";
 
   let actor = $state<"player" | "minion">("player");
@@ -70,24 +73,11 @@
   let effects = $state<CalcEffect[]>([]);
   let effectArt = $state<Record<string, string>>({});
   let effectRequest = 0;
-  let bd = $state<{ sections: BreakdownSection[]; title: string } | null>(null);
+  let breakdownWindows = $state<ReturnType<typeof CalcBreakdownWindows>>();
+  let pinnedBreakdownKeys = $state(new Set<string>());
   const CHARGE_ART = ["Endurance Charge", "Frenzy Charge", "Power Charge"];
   const TOTAL_SECTION_IDS = new Set(["Life", "Mana", "EnergyShield", "Ward", "Armour", "Evasion"]);
   const DEFENCE_RESOURCE_IDS = new Set(["Life", "EnergyShield", "Ward"]);
-  const ROW_COLOURS: Record<string, Record<string, string>> = {
-    Resist: {
-      "Fire Resist": "^xB97123",
-      "Cold Resist": "^x3F6DB3",
-      "Lightning Resist": "^xADAA47",
-      "Chaos Resist": "^xD02090",
-    },
-    Attributes: {
-      Strength: "^xE05030",
-      Dexterity: "^x70FF70",
-      Intelligence: "^x7070FF",
-      Omniscience: "^xFFFF77",
-    },
-  };
   const ATTRIBUTE_REQUIREMENTS: Record<string, string> = {
     Strength: "Str. Required",
     Dexterity: "Dex. Required",
@@ -95,11 +85,6 @@
     Omniscience: "Omni. Required",
   };
   const ATTRIBUTE_REQUIREMENT_LABELS = new Set(Object.values(ATTRIBUTE_REQUIREMENTS));
-  const CHARGE_COLOURS: Record<string, string> = {
-    Endurance: "^xFF9922",
-    Frenzy: "^x33FF77",
-    Power: "^x7070FF",
-  };
 
   $effect(() => {
     build.rev;
@@ -117,7 +102,6 @@
           if (request === effectRequest) effectArt = art;
         })
         .catch(() => {});
-      bd = null;
     });
   });
 
@@ -191,13 +175,24 @@
     ].filter((band) => band.sections.length > 0);
   });
 
-  async function openCell(sec: CalcSection, sub: number, row: number, col: number, title: string) {
-    try {
-      const r = await engine.calcCellBreakdown({ section: sec.index, sub, row, col, actor });
-      bd = { sections: r.sections, title };
-    } catch {
-      bd = null;
-    }
+  function breakdownKey(sec: CalcSection, sub: number, row: number, col: number) {
+    return calcBreakdownKey(breakdownRef(sec, sub, row, col));
+  }
+
+  function breakdownRef(sec: CalcSection, sub: number, row: number, col: number): CalcBreakdownRef {
+    return { section: sec.index, sub, row, col, actor };
+  }
+
+  function isPinned(key: string) {
+    return pinnedBreakdownKeys.has(key);
+  }
+
+  function showBreakdown(node: HTMLElement, sec: CalcSection, sub: number, row: number, col: number, title: string, pin: boolean) {
+    breakdownWindows?.show(node, breakdownRef(sec, sub, row, col), title, pin);
+  }
+
+  function leaveBreakdown() {
+    breakdownWindows?.leave();
   }
 
   function isHitDamageHero(sec: CalcSection, row: CalcRow) {
@@ -429,12 +424,18 @@
                           {#each sub.rows.filter((row) => isHitDamageHero(sec, row)) as row (row.index)}
                             {@const cell = row.cells[0]}
                             {#if cell}
+                              {@const pinned = isPinned(breakdownKey(sec, sub.index, row.index, cell.index))}
                               <button
                                 class="stat-hero"
                                 class:link={cell.hasBreakdown}
+                                class:pinned
+                                aria-pressed={pinned}
                                 disabled={!cell.hasBreakdown}
-                                onclick={() => openCell(sec, sub.index, row.index, cell.index, stripPobText(row.label ?? ""))}
+                                onmouseenter={(e) => showBreakdown(e.currentTarget, sec, sub.index, row.index, cell.index, stripPobText(row.label ?? ""), false)}
+                                onmouseleave={leaveBreakdown}
+                                onclick={(e) => showBreakdown(e.currentTarget, sec, sub.index, row.index, cell.index, stripPobText(row.label ?? ""), true)}
                               >
+                                {#if pinned}<span class="pinmark hero-pin" title={m.sidebar_breakdown_pinned()}><Icon name="push-pin" size={12} /></span>{/if}
                                 <span class="stat-hero-label"><PobText text={row.label ?? ""} /></span>
                                 <span class="stat-hero-value num"><PobText text={cell.text} /></span>
                               </button>
@@ -446,12 +447,18 @@
                     {#if damageHeroes.length > 0}
                       <div class="damage-heroes">
                         {#each damageHeroes as hero (hero.key)}
+                          {@const pinned = isPinned(breakdownKey(sec, hero.sub, hero.row, hero.col))}
                           <button
                             class="stat-hero"
                             class:link={hero.hasBreakdown}
+                            class:pinned
+                            aria-pressed={pinned}
                             disabled={!hero.hasBreakdown}
-                            onclick={() => openCell(sec, hero.sub, hero.row, hero.col, stripPobText(hero.label))}
+                            onmouseenter={(e) => showBreakdown(e.currentTarget, sec, hero.sub, hero.row, hero.col, stripPobText(hero.label), false)}
+                            onmouseleave={leaveBreakdown}
+                            onclick={(e) => showBreakdown(e.currentTarget, sec, hero.sub, hero.row, hero.col, stripPobText(hero.label), true)}
                           >
+                            {#if pinned}<span class="pinmark hero-pin" title={m.sidebar_breakdown_pinned()}><Icon name="push-pin" size={12} /></span>{/if}
                             <span class="stat-hero-label"><PobText text={hero.label} /></span>
                             <span class="stat-hero-value num"><PobText text={hero.value} /></span>
                           </button>
@@ -476,14 +483,19 @@
                               <span class="rlabel">{#if row.label}<PobText text={calcRowLabel(sec, row.label)} />{/if}</span>
                               {#each row.cells as cell, i (cell.index)}
                                 {@const span = cols > 1 && i === row.cells.length - 1 && row.cells.length < cols}
+                                {@const pinned = isPinned(breakdownKey(sec, sub.index, row.index, cell.index))}
                                 <button
                                   class="cell num"
                                   class:link={cell.hasBreakdown}
+                                  class:pinned
                                   class:span
+                                  aria-pressed={pinned}
                                   disabled={!cell.hasBreakdown}
                                   title={isSkillHitDamageRow(sec, row) ? stripPobText(cell.text) : undefined}
                                   style:grid-column={span ? `${i + 2} / -1` : null}
-                                  onclick={() => openCell(sec, sub.index, row.index, cell.index, stripPobText(`${sub.label} · ${row.label ?? ""}`))}
+                                  onmouseenter={(e) => showBreakdown(e.currentTarget, sec, sub.index, row.index, cell.index, stripPobText(`${sub.label} · ${row.label ?? ""}`), false)}
+                                  onmouseleave={leaveBreakdown}
+                                  onclick={(e) => showBreakdown(e.currentTarget, sec, sub.index, row.index, cell.index, stripPobText(`${sub.label} · ${row.label ?? ""}`), true)}
                                 >
                                   <span class="ct">
                                     {#if cell.text}
@@ -494,6 +506,7 @@
                                       {/if}
                                     {/if}
                                   </span>
+                                  {#if pinned}<span class="pinmark cell-pin" title={m.sidebar_breakdown_pinned()}><Icon name="push-pin" size={11} /></span>{/if}
                                 </button>
                               {/each}
                             </div>
@@ -521,17 +534,11 @@
           </div>
         {/each}
       </div>
-      {#if bd}
-        <aside class="bdside">
-          <div class="bdhead">
-            <span class="label">{bd.title}</span>
-            <button class="btn sm ghost" onclick={() => (bd = null)}>{m.common_close()}</button>
-          </div>
-          <div class="bdscroll">
-            <BreakdownPanel sections={bd.sections} />
-          </div>
-        </aside>
-      {/if}
+      <CalcBreakdownWindows
+        bind:this={breakdownWindows}
+        revision={build.rev}
+        onpinnedchange={(keys) => (pinnedBreakdownKeys = keys)}
+      />
   </div>
 </div>
 
@@ -799,6 +806,7 @@
   }
   .stat-hero {
     appearance: none;
+    position: relative;
     min-width: 0;
     display: flex;
     flex-direction: column;
@@ -915,6 +923,7 @@
   }
   .cell {
     appearance: none;
+    position: relative;
     border: 0;
     background: none;
     padding: 2px 4px;
@@ -951,24 +960,23 @@
     color: var(--focus);
     background: var(--bg-hover);
   }
-  .bdside {
-    width: 560px;
-    max-width: 45vw;
-    display: flex;
-    flex-direction: column;
-    border-left: 1px solid var(--line-0);
-    background: var(--bg-1);
+  .cell.pinned {
+    padding-right: 22px;
   }
-  .bdhead {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--line-0);
+  .pinmark {
+    display: grid;
+    place-items: center;
+    color: var(--focus);
   }
-  .bdscroll {
-    flex: 1;
-    overflow-y: auto;
-    padding: 10px 12px;
+  .hero-pin {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+  }
+  .cell-pin {
+    position: absolute;
+    top: 50%;
+    right: 5px;
+    transform: translateY(-50%);
   }
 </style>

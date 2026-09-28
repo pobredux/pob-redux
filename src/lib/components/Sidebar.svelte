@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import PobText from "./PobText.svelte";
   import BreakdownPanel from "./BreakdownPanel.svelte";
   import Icon from "./Icon.svelte";
@@ -48,9 +49,18 @@
   }
 
   // breakdown popup for hovered/pinned stat rows
-  let bd = $state<{ sections: BreakdownSection[]; row: number; y: number; pinned: boolean } | null>(null);
+  let bd = $state<{ sections: BreakdownSection[]; row: number; y: number; pinned: boolean; ready: boolean } | null>(null);
+  let bdPop = $state<HTMLElement>();
   let bdTimer = 0;
   const bdCache = new Map<string, BreakdownSection[]>();
+
+  async function placeBreakdown(row: number, clientY: number) {
+    await tick();
+    if (!bd || bd.row !== row || !bdPop) return;
+    const height = bdPop.getBoundingClientRect().height;
+    const y = Math.max(40, Math.min(clientY - 40, window.innerHeight - height - 12));
+    bd = { ...bd, y, ready: true };
+  }
 
   function rowBreakdown(clientY: number, rowIndex: number, pin: boolean) {
     clearTimeout(bdTimer);
@@ -58,10 +68,11 @@
       bd = null;
       return;
     }
-    const y = Math.max(40, Math.min(clientY - 40, window.innerHeight - 420));
+    const y = Math.max(40, clientY - 40);
     const key = `${rowIndex}:${build.rev}`;
     const apply = (sections: BreakdownSection[]) => {
-      bd = { sections, row: rowIndex, y, pinned: pin || (bd?.pinned && bd.row === rowIndex) || false };
+      bd = { sections, row: rowIndex, y, pinned: pin || (bd?.pinned && bd.row === rowIndex) || false, ready: false };
+      void placeBreakdown(rowIndex, clientY);
     };
     const cached = bdCache.get(key);
     if (cached) {
@@ -420,10 +431,11 @@
                   {:else if k === "center"}
                     <div class="scenter"><PobText text={r.lhs} defaultColor="var(--fg-2)" /></div>
                   {:else}
+                    {@const pinned = bd?.pinned && bd.row === rowIndex + 1}
                     <div
                       class="srow"
                       class:hasbd={r.hasBreakdown}
-                      class:pinnedrow={bd?.pinned && bd.row === rowIndex + 1}
+                      aria-pressed={pinned}
                       role="button"
                       tabindex={r.hasBreakdown ? 0 : -1}
                       onmouseenter={(e) => r.hasBreakdown && rowBreakdown(e.clientY, rowIndex + 1, false)}
@@ -432,7 +444,10 @@
                       onkeydown={(e) => e.key === "Enter" && r.hasBreakdown && rowBreakdown(200, rowIndex + 1, true)}
                     >
                       <span class="k"><PobText text={r.lhs?.replace(/:\s*$/, "")} defaultColor="var(--fg-1)" /></span>
-                      <span class="v num"><PobText text={r.rhs} /></span>
+                      <span class="svalue">
+                        <span class="v num"><PobText text={r.rhs} /></span>
+                        {#if pinned}<span class="pinmark" title={m.sidebar_breakdown_pinned()}><Icon name="push-pin" size={11} /></span>{/if}
+                      </span>
                     </div>
                   {/if}
                 {/each}
@@ -466,10 +481,10 @@
   {/if}
 
   {#if bd}
-    <div class="bdpop" style:top={`${bd.y}px`}>
+    <div bind:this={bdPop} class="bdpop" class:ready={bd.ready} style:top={`${bd.y}px`}>
       <div class="bdhead">
         <span class="label">{m.sidebar_breakdown()}</span>
-        {#if bd.pinned}<span class="dim small">{m.sidebar_breakdown_pinned()}</span>{/if}
+        {#if bd.pinned}<span class="bdpin" title={m.sidebar_breakdown_pinned()}><Icon name="push-pin" size={12} /></span>{/if}
       </div>
       <div class="bdscroll">
         <BreakdownPanel sections={bd.sections} />
@@ -760,47 +775,59 @@
     white-space: nowrap;
     color: var(--fg-0);
   }
+  .svalue {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .pinmark,
+  .bdpin {
+    display: grid;
+    place-items: center;
+    color: var(--focus);
+  }
   .srow.hasbd {
     cursor: default;
   }
-  .srow.hasbd:hover,
-  .srow.pinnedrow {
+  .srow.hasbd:hover {
     background: var(--bg-2);
     margin: 0 -6px;
     padding: 1px 6px;
   }
-  .srow.pinnedrow {
-    box-shadow: inset 2px 0 0 var(--focus);
-  }
   .bdpop {
     position: fixed;
     left: calc(var(--sidebar-w) + 8px);
-    width: 560px;
-    max-width: calc(100vw - var(--sidebar-w) - 24px);
+    width: min(720px, calc(100vw - var(--sidebar-w) - 24px));
     max-height: 60vh;
     display: flex;
     flex-direction: column;
     background: color-mix(in srgb, var(--bg-1) 96%, transparent);
     border: 1px solid var(--line-1);
     border-radius: var(--r-2);
-    box-shadow: var(--shadow-pop);
+    box-shadow: var(--shadow-tooltip);
     backdrop-filter: blur(8px);
     z-index: 20;
     pointer-events: none;
+    visibility: hidden;
+  }
+  .bdpop.ready {
+    visibility: visible;
   }
   .bdhead {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    padding: 8px 12px 6px;
+    padding: 8px 12px;
     border-bottom: 1px solid var(--line-0);
+    border-radius: var(--r-2) var(--r-2) 0 0;
+    background: var(--bg-3);
+    color: var(--fg-0);
+    font-weight: 700;
   }
   .bdscroll {
     padding: 10px 12px;
     overflow-y: auto;
-  }
-  .small {
-    font-size: var(--fs-xs);
   }
   .warnings {
     display: flex;
