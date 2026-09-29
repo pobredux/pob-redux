@@ -1193,6 +1193,7 @@ pub fn run() {
         }
     }
     diagnostics::install_panic_hook();
+    pob_engine::install_tls_provider();
 
     tauri::Builder::default()
         .plugin(diagnostics::log_plugin())

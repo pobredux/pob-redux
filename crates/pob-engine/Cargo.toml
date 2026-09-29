@@ -22,7 +22,8 @@ cli = ["dep:clap", "dep:env_logger", "dep:mimalloc"]
 mlua = { version = "0.12", features = ["luajit", "vendored", "serde", "error-send"] }
 flate2 = "1"
 glob = "0.3"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "gzip", "blocking"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "system-proxy", "gzip", "blocking"] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

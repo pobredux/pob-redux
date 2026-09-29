@@ -35,3 +35,8 @@ pub enum Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+// reqwest's rustls-no-provider panics without a process default; ring is what tauri-plugin-updater installs.
+pub fn install_tls_provider() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+}

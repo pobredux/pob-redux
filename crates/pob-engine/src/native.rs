@@ -84,6 +84,7 @@ pub fn build_table(lua: &Lua, epoch: Instant) -> LuaResult<Table> {
     t.set(
         "http_get",
         lua.create_function(|lua, (url, ua): (String, Option<String>)| {
+            crate::install_tls_provider();
             let client = match reqwest::blocking::Client::builder()
                 .user_agent(ua.unwrap_or_else(|| "Path of Building".into()))
                 .timeout(std::time::Duration::from_secs(30))
