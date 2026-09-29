@@ -3541,7 +3541,7 @@ dependencies = [
  "mlua",
  "serde",
  "serde_json",
- "toml 0.8.2",
+ "toml 1.1.6+spec-1.1.0",
  "walkdir",
  "webp",
  "zstd",
