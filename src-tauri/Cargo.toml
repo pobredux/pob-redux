@@ -37,7 +37,7 @@ rmcp = { version = "3.2", default-features = false, features = ["server", "trans
 axum = "0.8"
 getrandom = "0.3"
 regex = "1"
-sha2 = "0.10"
+sha2 = "0.11"
 zip = { version = "4", default-features = false, features = ["deflate"] }
 tauri-plugin-log = "2"
 tokio = { version = "1", features = ["net", "rt", "sync", "macros", "process", "io-util", "time"] }
