@@ -38,7 +38,7 @@ axum = "0.8"
 getrandom = "0.3"
 regex = "1"
 sha2 = "0.10"
-zip = { version = "4", default-features = false, features = ["deflate"] }
+zip = { version = "8", default-features = false, features = ["deflate"] }
 tauri-plugin-log = "2"
 tokio = { version = "1", features = ["net", "rt", "sync", "macros", "process", "io-util", "time"] }
 
