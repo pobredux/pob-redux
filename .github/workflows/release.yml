@@ -120,7 +120,7 @@ jobs:
 
       # Builds, signs the updater artifacts with the minisign key, creates or
       # updates the release, and generates latest.json from the signatures.
-      - uses: tauri-apps/tauri-action@v0
+      - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
