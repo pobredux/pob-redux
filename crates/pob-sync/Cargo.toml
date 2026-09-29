@@ -12,7 +12,7 @@ serde.workspace = true
 serde_json.workspace = true
 walkdir.workspace = true
 toml = "1"
-zstd = "0.13"
+zstd = "0.14"
 image_dds = { version = "0.7", default-features = false, features = ["ddsfile", "image"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
 webp = { version = "0.3", default-features = false }
