@@ -218,11 +218,11 @@ fn open_stream() -> Result<(cpal::Stream, Buffer, Arc<AtomicU32>, u32), String> 
     let level = Arc::new(AtomicU32::new(0));
     let cap = rate as usize * MAX_SECONDS;
     let stream = match format {
-        cpal::SampleFormat::F32 => build::<f32>(&device, &config, channels, cap, &buf, &level),
-        cpal::SampleFormat::I16 => build::<i16>(&device, &config, channels, cap, &buf, &level),
-        cpal::SampleFormat::I32 => build::<i32>(&device, &config, channels, cap, &buf, &level),
-        cpal::SampleFormat::U16 => build::<u16>(&device, &config, channels, cap, &buf, &level),
-        cpal::SampleFormat::U8 => build::<u8>(&device, &config, channels, cap, &buf, &level),
+        cpal::SampleFormat::F32 => build::<f32>(&device, config, channels, cap, &buf, &level),
+        cpal::SampleFormat::I16 => build::<i16>(&device, config, channels, cap, &buf, &level),
+        cpal::SampleFormat::I32 => build::<i32>(&device, config, channels, cap, &buf, &level),
+        cpal::SampleFormat::U16 => build::<u16>(&device, config, channels, cap, &buf, &level),
+        cpal::SampleFormat::U8 => build::<u8>(&device, config, channels, cap, &buf, &level),
         other => return Err(format!("The microphone uses a sample format this app cannot read ({other:?}).")),
     }
     .map_err(|e| format!("The microphone could not be opened: {e}"))?;
@@ -232,12 +232,12 @@ fn open_stream() -> Result<(cpal::Stream, Buffer, Arc<AtomicU32>, u32), String> 
 
 fn build<T>(
     device: &cpal::Device,
-    config: &cpal::StreamConfig,
+    config: cpal::StreamConfig,
     channels: usize,
     cap: usize,
     buf: &Buffer,
     level: &Arc<AtomicU32>,
-) -> Result<cpal::Stream, cpal::BuildStreamError>
+) -> Result<cpal::Stream, cpal::Error>
 where
     T: cpal::SizedSample,
     f32: cpal::FromSample<T>,
