@@ -41,7 +41,7 @@ sha2 = "0.11"
 zip = { version = "4", default-features = false, features = ["deflate"] }
 tauri-plugin-log = "2"
 tokio = { version = "1", features = ["net", "rt", "sync", "macros", "process", "io-util", "time"] }
-cpal = "0.17"
+cpal = "0.18"
 whisper-rs = { version = "0.16", features = ["log_backend"] }
 
 # The updater has no mobile target, so it is scoped to desktop.
