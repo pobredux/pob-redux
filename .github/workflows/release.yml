@@ -131,7 +131,7 @@ jobs:
           releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: true
           prerelease: false
-          includeUpdaterJson: true
+          uploadUpdaterJson: true
           args: --bundles ${{ matrix.bundles }}
 
       # Launch the AppImage on a virtual display and refuse a black window, the
