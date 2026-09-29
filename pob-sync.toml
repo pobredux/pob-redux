@@ -8,7 +8,7 @@
 
 [poe2]
 source_path = "../PathOfBuilding-PoE2"
-commit = "ce566eac45ea8a86477f513c7ee65a1ebe60014e"
+commit = "630bb3d5446331044502bb846f2a9efc6a313d6f"
 
 [poe1]
 source_path = "../PathOfBuilding"
