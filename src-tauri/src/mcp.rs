@@ -10,7 +10,7 @@ use rmcp::model::{
     CallToolRequestParams, CallToolResponse, CallToolResult, CacheScope, ContentBlock,
     CreateTaskResult, ElicitRequestParams, ElicitationSchema, GetTaskParams, GetTaskResult,
     Implementation, InputRequiredResult, JsonObject, ListToolsResult, PaginatedRequestParams,
-    ProtocolVersion, ServerCapabilities, ServerInfo, Tool, ToolAnnotations, UpdateTaskParams,
+    ProtocolVersion, ServerCapabilities, ServerConfig, Tool, ToolAnnotations, UpdateTaskParams,
     CancelTaskParams,
 };
 use rmcp::service::RequestContext;
@@ -324,8 +324,8 @@ fn to_response(out: Result<(Value, bool), ToolError>) -> Result<CallToolResult, 
 }
 
 impl ServerHandler for PobMcp {
-    fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().enable_tasks().build())
+    fn get_info(&self) -> ServerConfig {
+        ServerConfig::new(ServerCapabilities::builder().enable_tools().enable_tasks().build())
             .with_server_info(Implementation::new("pob-redux", env!("CARGO_PKG_VERSION")))
             .with_instructions(instructions(self.ctx.game()))
     }
