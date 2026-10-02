@@ -5,6 +5,49 @@ use serde_json::{Value, json};
 
 const RING: &str = "Rarity: Rare\nPreview Ring\nIron Ring\nItem Level: 80\nImplicits: 0\n+70 to maximum Life\n20% increased Cast Speed";
 
+fn draft_params(engine: &Engine, item: Value, mut edits: Value) -> Value {
+    let draft = if item.is_string() {
+        engine
+            .call("item_draft_create", &json!({"raw":item,"normalise":false}))
+            .unwrap()
+    } else {
+        item
+    };
+    for key in ["itemId", "draftId", "draftRevision", "generation"] {
+        if !draft[key].is_null() {
+            edits[key] = draft[key].clone();
+        }
+    }
+    edits
+}
+
+fn with_target(mut data: Value, target: &Value) -> Value {
+    for key in ["itemId", "draftId", "draftRevision", "generation"] {
+        if !target[key].is_null() {
+            data[key] = target[key].clone();
+        }
+    }
+    data
+}
+
+fn customization(engine: &Engine, target: &Value) -> pob_engine::Result<Value> {
+    engine
+        .call("item_customization", target)
+        .map(|data| with_target(data, target))
+}
+
+fn customize(engine: &Engine, params: &Value) -> pob_engine::Result<Value> {
+    if params["draftId"].is_string() {
+        engine
+            .call("item_draft_customize", params)
+            .map(|draft| with_target(draft["customization"].clone(), &draft))
+    } else {
+        engine
+            .call("item_customize", params)
+            .map(|data| with_target(data, params))
+    }
+}
+
 fn snapshot(engine: &Engine) -> Value {
     // Save first: canonicalization must not count as a preview mutation.
     let xml = engine.call("save_build_xml", &Value::Null).unwrap();
@@ -64,8 +107,8 @@ fn preview_is_temporary_and_commit_matches_candidate() {
     let generation = before["build"]["generation"].clone();
     let first = engine
         .call(
-            "item_preview",
-            &json!({ "raw": RING, "generation": generation }),
+            "item_draft_get",
+            &draft_params(&engine, json!(RING), json!({ "generation": generation })),
         )
         .unwrap();
     assert!(lines(&first).contains("Equipping this item in Ring 1"));
@@ -101,21 +144,24 @@ fn preview_is_temporary_and_commit_matches_candidate() {
     let edited = RING.replace("+70", "+120");
     let second = engine
         .call(
-            "item_preview",
-            &json!({ "raw": edited, "generation": generation }),
+            "item_draft_get",
+            &draft_params(&engine, json!(edited), json!({ "generation": generation })),
         )
         .unwrap();
     assert_ne!(lines(&first), lines(&second));
-    for raw in ["", "not an item", "Rarity: Rare\nInvalid\nUnknown Base"] {
+    for raw in ["not an item", "Rarity: Rare\nInvalid\nUnknown Base"] {
         assert!(
             engine
-                .call(
-                    "item_preview",
-                    &json!({ "raw": raw, "generation": generation })
-                )
-                .is_err()
+                .call("item_draft_create", &json!({"raw":raw}))
+                .unwrap()
+                .is_null()
         );
     }
+    assert!(
+        engine
+            .call("item_draft_create", &json!({"raw":""}))
+            .is_err()
+    );
     assert_eq!(
         snapshot(&engine),
         before,
@@ -139,7 +185,10 @@ fn preview_is_temporary_and_commit_matches_candidate() {
         .call("stat_differences", &json!({ "show": false }))
         .unwrap();
     let hidden = engine
-        .call("item_preview", &json!({ "raw": edited }))
+        .call(
+            "item_draft_get",
+            &draft_params(&engine, json!(edited), json!({})),
+        )
         .unwrap();
     assert!(!lines(&hidden).contains("Equipping this item"));
     engine
@@ -187,8 +236,23 @@ fn preview_is_temporary_and_commit_matches_candidate() {
         .call("new_build", &json!({ "name": "Preview test" }))
         .unwrap();
     let replaced = snapshot(&engine);
-    for method in ["item_preview", "item_edit", "equip_item_raw"] {
-        assert!(engine.call(method, &json!({ "raw": edited, "text": edited, "slot": "Ring 1", "generation": generation })).is_err());
+    assert!(
+        engine
+            .call(
+                "item_draft_get",
+                &draft_params(&engine, first.clone(), json!({}))
+            )
+            .is_err()
+    );
+    for method in ["item_edit", "equip_item_raw"] {
+        assert!(
+            engine
+                .call(
+                    method,
+                    &json!({"text":edited,"slot":"Ring 1","generation":generation})
+                )
+                .is_err()
+        );
     }
     assert_eq!(snapshot(&engine), replaced);
 
@@ -214,7 +278,10 @@ fn preview_is_temporary_and_commit_matches_candidate() {
     for &(raw, jewel) in cases {
         let before = snapshot(&engine);
         let preview = engine
-            .call("item_preview", &json!({ "raw": raw }))
+            .call(
+                "item_draft_get",
+                &draft_params(&engine, json!(raw), json!({})),
+            )
             .unwrap_or_else(|e| panic!("previewing {raw:?}: {e}"));
         assert!(!preview["tooltip"]["lines"].as_array().unwrap().is_empty());
         assert_eq!(snapshot(&engine), before);
@@ -239,8 +306,12 @@ fn preview_is_temporary_and_commit_matches_candidate() {
         let before = snapshot(&engine);
         let weapon = engine
             .call(
-                "item_preview",
-                &json!({ "raw": format!("Rarity: Normal\n{weapon_base}\nQuality: 0") }),
+                "item_draft_get",
+                &draft_params(
+                    &engine,
+                    json!(format!("Rarity: Normal\n{weapon_base}\nQuality: 0")),
+                    json!({}),
+                ),
             )
             .unwrap();
         assert!(!weapon["slots"].as_array().unwrap().is_empty());
@@ -281,21 +352,20 @@ fn customization_edits_drafts_and_commits_saved_items() {
         .unwrap();
     let before = snapshot(&engine);
     let generation = before["build"]["generation"].clone();
-    let mut data = engine
-        .call(
-            "item_customization",
-            &json!({ "raw": RING, "generation": generation }),
-        )
-        .unwrap();
+    let mut data = customization(
+        &engine,
+        &draft_params(&engine, json!(RING), json!({ "generation": generation })),
+    )
+    .unwrap();
     for edit in [
         json!({ "operation": "props", "itemLevel": 85, "corrupted": true }),
         json!({ "operation": "props", "corrupted": false }),
         json!({ "operation": "add_modifier", "text": "+(10-20)% to Fire Resistance" }),
     ] {
         let mut params = edit;
-        params["raw"] = data["raw"].clone();
+        params = draft_params(&engine, data.clone(), params);
         params["generation"] = generation.clone();
-        data = engine.call("item_customize", &params).unwrap();
+        data = customize(&engine, &params).unwrap();
         assert_eq!(snapshot(&engine), before);
     }
     assert_eq!(data["itemLevel"], 85);
@@ -308,14 +378,25 @@ fn customization_edits_drafts_and_commits_saved_items() {
         .clone();
     assert!(modifier["range"].is_number());
     let rolled = engine
-        .call("item_preview", &json!({"raw":data["raw"]}))
+        .call(
+            "item_draft_get",
+            &draft_params(&engine, json!(data), json!({})),
+        )
         .unwrap();
     assert!(
         lines(&rolled).contains("+15% to Fire Resistance"),
         "preview should show the selected roll, not a database range"
     );
     assert!(!lines(&rolled).contains("(10-20)"));
-    let unknown = engine.call("item_customize", &json!({"raw":data["raw"],"operation":"add_modifier","text":"This is not a supported modifier"})).unwrap();
+    let unknown = customize(
+        &engine,
+        &draft_params(
+            &engine,
+            json!(data),
+            json!({"operation":"add_modifier","text":"This is not a supported modifier"}),
+        ),
+    )
+    .unwrap();
     let unknown_line = unknown["modifiers"]
         .as_array()
         .unwrap()
@@ -323,7 +404,7 @@ fn customization_edits_drafts_and_commits_saved_items() {
         .find(|m| m["text"] == "This is not a supported modifier")
         .unwrap();
     assert_eq!(unknown_line["parsed"], false);
-    let corrected = engine.call("item_customize", &json!({"raw":unknown["raw"],"operation":"modifier","section":unknown_line["section"],"index":unknown_line["index"],"text":"+20 to Strength"})).unwrap();
+    let corrected = customize(&engine, &draft_params(&engine, json!(unknown), json!({"operation":"modifier","section":unknown_line["section"],"index":unknown_line["index"],"text":"+20 to Strength"}))).unwrap();
     assert!(
         corrected["modifiers"]
             .as_array()
@@ -332,6 +413,7 @@ fn customization_edits_drafts_and_commits_saved_items() {
             .any(|m| m["text"] == "+20 to Strength" && m["parsed"] == true)
     );
     assert_eq!(snapshot(&engine), before);
+    data = corrected;
 
     for patch in [
         json!({"range":1.0}),
@@ -340,17 +422,20 @@ fn customization_edits_drafts_and_commits_saved_items() {
         json!({"text":"+33% to Fire Resistance"}),
         json!({"remove":true}),
     ] {
-        let mut params = json!({ "raw": data["raw"], "generation": generation, "operation":"modifier", "section":modifier["section"], "index":modifier["index"] });
+        let mut params = draft_params(
+            &engine,
+            data.clone(),
+            json!({ "operation":"modifier", "section":modifier["section"], "index":modifier["index"] }),
+        );
         for (key, value) in patch.as_object().unwrap() {
             params[key] = value.clone();
         }
-        data = engine.call("item_customize", &params).unwrap();
-        let parsed = engine
-            .call("item_customization", &json!({"raw":data["raw"]}))
-            .unwrap();
+        data = customize(&engine, &params).unwrap();
+        let parsed =
+            customization(&engine, &draft_params(&engine, json!(data), json!({}))).unwrap();
         assert_eq!(
             parsed["modifiers"], data["modifiers"],
-            "modifiers must survive text round-trip"
+            "reading the draft must retain modifiers"
         );
         assert_eq!(snapshot(&engine), before);
     }
@@ -358,17 +443,24 @@ fn customization_edits_drafts_and_commits_saved_items() {
     let options = engine
         .call(
             "item_modifier_options",
-            &json!({"raw":data["raw"],"source":"Prefix","query":"maximum Life"}),
+            &draft_params(
+                &engine,
+                json!(data),
+                json!({"source":"Prefix","query":"maximum Life"}),
+            ),
         )
         .unwrap();
     let option = &options["options"][0]["id"];
     assert!(option.is_string(), "expected real prefix choices");
-    data = engine
-        .call(
-            "item_customize",
-            &json!({"raw":data["raw"],"operation":"add_modifier","modId":option}),
-        )
-        .unwrap();
+    data = customize(
+        &engine,
+        &draft_params(
+            &engine,
+            json!(data),
+            json!({"operation":"add_modifier","modId":option}),
+        ),
+    )
+    .unwrap();
     assert_eq!(snapshot(&engine), before);
     for invalid in [
         json!({"operation":"add_modifier","modId":"does-not-exist"}),
@@ -377,43 +469,62 @@ fn customization_edits_drafts_and_commits_saved_items() {
         json!({"operation":"rune","index":1,"name":"does-not-exist"}),
     ] {
         let mut p = invalid;
-        p["raw"] = data["raw"].clone();
-        assert!(engine.call("item_customize", &p).is_err());
+        p = draft_params(&engine, data.clone(), p);
+        assert!(customize(&engine, &p).is_err());
         assert_eq!(snapshot(&engine), before);
     }
     let crafted =
         "Rarity: Rare\nCrafted candidate\nIron Ring\nCrafted: true\nItem Level: 80\nImplicits: 0";
-    let crafted_data = engine
-        .call("item_customization", &json!({"raw":crafted}))
-        .unwrap();
+    let crafted_data =
+        customization(&engine, &draft_params(&engine, json!(crafted), json!({}))).unwrap();
     assert_eq!(crafted_data["affixes"]["crafted"], true);
     let poe1 = engine.call("version", &Value::Null).unwrap()["game"] == "poe1";
     let paired_base = if poe1 { "Iron Ring" } else { "Prismatic Ring" };
     let paired_raw = format!(
         "Rarity: Rare\nPaired roll\n{paired_base}\nCrafted: true\nItem Level: 80\nPrefix: {{range:0.1,0.9}}AddedPhysicalDamage2\nImplicits: 0"
     );
-    let paired = engine
-        .call("item_customization", &json!({"raw":paired_raw}))
-        .unwrap();
+    let paired = customization(
+        &engine,
+        &draft_params(&engine, json!(paired_raw), json!({})),
+    )
+    .unwrap();
     let paired_slot = &paired["affixes"]["prefixes"][0];
     assert_eq!(paired_slot["range"], 0.1);
     assert_eq!(paired_slot["rangeIsTable"], true);
     assert_eq!(
         paired_slot["value"],
-        if poe1 { "Adds 2 to 5 Physical Damage to Attacks" } else { "Adds 2 to 6 Physical Damage to Attacks" }
+        if poe1 {
+            "Adds 2 to 5 Physical Damage to Attacks"
+        } else {
+            "Adds 2 to 6 Physical Damage to Attacks"
+        }
     );
     assert!(paired["raw"].as_str().unwrap().contains("{range:0.1,0.9}"));
-    let edited = engine
-        .call("item_customize", &json!({
-            "raw":paired["raw"], "operation":"affix", "table":"prefixes", "index":1,
-            "modId":"AddedPhysicalDamage2", "range":0.4
-        }))
-        .unwrap();
+    let edited = customize(
+        &engine,
+        &draft_params(
+            &engine,
+            json!(paired),
+            json!({ "operation":"affix", "table":"prefixes", "index":1,
+                "modId":"AddedPhysicalDamage2", "range":0.4
+            }),
+        ),
+    )
+    .unwrap();
     assert_eq!(edited["affixes"]["prefixes"][0]["range"], 0.4);
     assert_eq!(edited["affixes"]["prefixes"][0]["rangeIsTable"], false);
-    assert!(edited["raw"].as_str().unwrap().contains("{range:0.4}AddedPhysicalDamage2"));
+    assert!(
+        edited["raw"]
+            .as_str()
+            .unwrap()
+            .contains("{range:0.4}AddedPhysicalDamage2")
+    );
     assert_eq!(snapshot(&engine), before);
-    let ranged_group = if poe1 { "IncreasedLife" } else { "IncreasedAccuracy" };
+    let ranged_group = if poe1 {
+        "IncreasedLife"
+    } else {
+        "IncreasedAccuracy"
+    };
     let ranged_affix = crafted_data["affixes"]["prefixes"][0]["options"]
         .as_array()
         .unwrap()
@@ -426,34 +537,78 @@ fn customization_edits_drafts_and_commits_saved_items() {
                 .any(|id| id.as_str().unwrap().starts_with(ranged_group))
         })
         .unwrap();
-    let rolls = engine.call("item_affix_rolls", &json!({
-        "raw": crafted, "table": "prefixes", "index": 1, "seriesId": ranged_affix["id"]
-    })).unwrap();
+    let rolls = engine
+        .call(
+            "item_affix_rolls",
+            &draft_params(
+                &engine,
+                json!(crafted),
+                json!({ "table": "prefixes", "index": 1, "seriesId": ranged_affix["id"]
+                }),
+            ),
+        )
+        .unwrap();
     let ranged_tiers = rolls["tiers"].as_array().unwrap();
     assert!(ranged_tiers.len() > 1);
     assert_eq!(
-        ranged_tiers.iter().map(|tier| &tier["modId"]).collect::<Vec<_>>(),
-        ranged_affix["modIds"].as_array().unwrap().iter().collect::<Vec<_>>()
+        ranged_tiers
+            .iter()
+            .map(|tier| &tier["modId"])
+            .collect::<Vec<_>>(),
+        ranged_affix["modIds"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .collect::<Vec<_>>()
     );
     let low_level = crafted.replace("Item Level: 80", "Item Level: 1");
-    let low_level_rolls = engine.call("item_affix_rolls", &json!({
-        "raw": low_level, "table": "prefixes", "index": 1, "seriesId": ranged_affix["id"]
-    })).unwrap();
-    assert_eq!(low_level_rolls["tiers"].as_array().unwrap().len(), ranged_tiers.len());
+    let low_level_rolls = engine
+        .call(
+            "item_affix_rolls",
+            &draft_params(
+                &engine,
+                json!(low_level),
+                json!({ "table": "prefixes", "index": 1, "seriesId": ranged_affix["id"]
+                }),
+            ),
+        )
+        .unwrap();
+    assert_eq!(
+        low_level_rolls["tiers"].as_array().unwrap().len(),
+        ranged_tiers.len()
+    );
     assert_eq!(ranged_tiers[0]["tier"], ranged_tiers.len());
     assert_eq!(ranged_tiers.last().unwrap()["tier"], 1);
-    assert!(ranged_tiers.iter().all(|tier| tier["steps"].as_array().unwrap().len() > 1));
-    let value_fragment = if poe1 { "maximum Life" } else { "Accuracy Rating" };
-    assert!(ranged_tiers[0]["steps"][0]["value"].as_str().unwrap().contains(value_fragment));
-    let amulet = "Rarity: Rare\nAffix candidate\nJade Amulet\nCrafted: true\nItem Level: 80\nImplicits: 0";
-    let amulet_data = engine.call("item_customization", &json!({"raw": amulet})).unwrap();
+    assert!(
+        ranged_tiers
+            .iter()
+            .all(|tier| tier["steps"].as_array().unwrap().len() > 1)
+    );
+    let value_fragment = if poe1 {
+        "maximum Life"
+    } else {
+        "Accuracy Rating"
+    };
+    assert!(
+        ranged_tiers[0]["steps"][0]["value"]
+            .as_str()
+            .unwrap()
+            .contains(value_fragment)
+    );
+    let amulet =
+        "Rarity: Rare\nAffix candidate\nJade Amulet\nCrafted: true\nItem Level: 80\nImplicits: 0";
+    let amulet_data =
+        customization(&engine, &draft_params(&engine, json!(amulet), json!({}))).unwrap();
     let special = if poe1 {
         "Rarity: Rare\nAffix candidate\nJade Amulet\nElder Item\nCrafted: true\nItem Level: 80\nImplicits: 0"
     } else {
         "Rarity: Rare\nAffix candidate\nTime-Lost Ruby\nCrafted: true\nItem Level: 80\nImplicits: 0"
     };
-    let special_data = engine.call("item_customization", &json!({"raw": special})).unwrap();
-    let special_series = special_data["affixes"]["prefixes"][0]["options"].as_array().unwrap();
+    let special_data =
+        customization(&engine, &draft_params(&engine, json!(special), json!({}))).unwrap();
+    let special_series = special_data["affixes"]["prefixes"][0]["options"]
+        .as_array()
+        .unwrap();
     let separate_mods = if poe1 {
         ["MaximumZombiesUber1", "MaximumSkeletonsUber1"]
     } else {
@@ -464,31 +619,62 @@ fn customization_edits_drafts_and_commits_saved_items() {
             .iter()
             .find(|series| series["modIds"] == json!([mod_id]))
             .unwrap();
-        let rolls = engine.call("item_affix_rolls", &json!({
-            "raw": special, "table": "prefixes", "index": 1, "seriesId": series["id"]
-        })).unwrap();
+        let rolls = engine
+            .call(
+                "item_affix_rolls",
+                &draft_params(
+                    &engine,
+                    json!(special),
+                    json!({ "table": "prefixes", "index": 1, "seriesId": series["id"]
+                    }),
+                ),
+            )
+            .unwrap();
         assert_eq!(rolls["tiers"].as_array().unwrap().len(), 1);
         assert_eq!(rolls["tiers"][0]["modId"], mod_id);
     }
-    let retained_mod = if poe1 { "MaximumZombiesUber1" } else { "JewelRadiusMediumSize" };
+    let retained_mod = if poe1 {
+        "MaximumZombiesUber1"
+    } else {
+        "JewelRadiusMediumSize"
+    };
     let retained_base = if poe1 { "Jade Amulet" } else { "Ruby" };
     let retained = format!(
         "Rarity: Rare\nRetained affix\n{retained_base}\nCrafted: true\nItem Level: 80\nPrefix: {{range:0.5}}{retained_mod}\nImplicits: 0"
     );
-    let retained_data = engine.call("item_customization", &json!({"raw": retained})).unwrap();
+    let retained_data =
+        customization(&engine, &draft_params(&engine, json!(retained), json!({}))).unwrap();
     let retained_slot = &retained_data["affixes"]["prefixes"][0];
     assert_eq!(retained_slot["modId"], retained_mod);
     assert_eq!(
-        retained_slot["options"].as_array().unwrap().iter().any(|series| {
-            series["modIds"].as_array().unwrap().contains(&json!(retained_mod))
-        }),
+        retained_slot["options"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|series| {
+                series["modIds"]
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!(retained_mod))
+            }),
         poe1
     );
-    let removed = engine.call("item_customize", &json!({
-        "raw": retained, "operation": "affix", "table": "prefixes", "index": 1, "modId": "None"
-    })).unwrap();
+    let removed = customize(
+        &engine,
+        &draft_params(
+            &engine,
+            json!(retained),
+            json!({ "operation": "affix", "table": "prefixes", "index": 1, "modId": "None"
+            }),
+        ),
+    )
+    .unwrap();
     assert_eq!(removed["affixes"]["prefixes"][0]["modId"], "None");
-    let discrete_group = if poe1 { "LifeGainPerTarget" } else { "GlobalSpellGemsLevel" };
+    let discrete_group = if poe1 {
+        "LifeGainPerTarget"
+    } else {
+        "GlobalSpellGemsLevel"
+    };
     let discrete_affix = amulet_data["affixes"]["suffixes"][0]["options"]
         .as_array()
         .unwrap()
@@ -501,50 +687,80 @@ fn customization_edits_drafts_and_commits_saved_items() {
                 .any(|id| id.as_str().unwrap().starts_with(discrete_group))
         })
         .unwrap();
-    let discrete = engine.call("item_affix_rolls", &json!({
-        "raw": amulet, "table": "suffixes", "index": 1, "seriesId": discrete_affix["id"]
-    })).unwrap();
+    let discrete = engine
+        .call(
+            "item_affix_rolls",
+            &draft_params(
+                &engine,
+                json!(amulet),
+                json!({ "table": "suffixes", "index": 1, "seriesId": discrete_affix["id"]
+                }),
+            ),
+        )
+        .unwrap();
     assert!(discrete["tiers"].as_array().unwrap().len() > 1);
-    assert!(discrete["tiers"].as_array().unwrap().iter().all(|tier| tier["steps"].as_array().unwrap().len() == 1));
+    assert!(
+        discrete["tiers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|tier| tier["steps"].as_array().unwrap().len() == 1)
+    );
     let affix = &crafted_data["affixes"]["prefixes"][0]["options"][0]["modIds"][0];
     assert!(affix.is_string());
-    let crafted_data=engine.call("item_customize",&json!({"raw":crafted,"operation":"affix","table":"prefixes","index":1,"modId":affix,"range":1.0})).unwrap();
+    let crafted_data = customize(
+        &engine,
+        &draft_params(
+            &engine,
+            json!(crafted),
+            json!({"operation":"affix","table":"prefixes","index":1,"modId":affix,"range":1.0}),
+        ),
+    )
+    .unwrap();
     assert_eq!(crafted_data["affixes"]["prefixes"][0]["modId"], *affix);
     assert!(crafted_data["affixes"]["prefixes"][0]["value"].is_string());
     assert_eq!(snapshot(&engine), before);
 
     let variant = "Rarity: Rare\nVariant candidate\nIron Ring\nVariant: Small\nVariant: Large\nSelected Variant: 1\nImplicits: 0\n{variant:1}+10 to maximum Life\n{variant:2}+90 to maximum Life";
-    let variants = engine
-        .call(
-            "item_customize",
-            &json!({"raw":variant,"operation":"variant","picks":[2]}),
-        )
-        .unwrap();
+    let variants = customize(
+        &engine,
+        &draft_params(
+            &engine,
+            json!(variant),
+            json!({"operation":"variant","picks":[2]}),
+        ),
+    )
+    .unwrap();
     assert_eq!(variants["variants"]["picks"][0], 2);
     assert_eq!(snapshot(&engine), before);
 
     let weapon = "Rarity: Normal\nCrude Bow\nQuality: 0";
-    let weapon = engine
-        .call(
-            "item_customize",
-            &json!({"raw":weapon,"operation":"props","quality":7}),
-        )
-        .unwrap();
+    let weapon = customize(
+        &engine,
+        &draft_params(
+            &engine,
+            json!(weapon),
+            json!({"operation":"props","quality":7}),
+        ),
+    )
+    .unwrap();
     assert_eq!(weapon["quality"], 7);
-    let normalized = engine
-        .call(
-            "item_customize",
-            &json!({"raw":weapon["raw"],"operation":"normalize"}),
-        )
-        .unwrap();
+    let normalized = customize(
+        &engine,
+        &draft_params(&engine, json!(weapon), json!({"operation":"normalize"})),
+    )
+    .unwrap();
     assert!(normalized["quality"].as_i64().unwrap() > 7);
     if weapon["runeSocketLimit"].as_u64().unwrap() > 0 {
-        let socketed = engine
-            .call(
-                "item_customize",
-                &json!({"raw":weapon["raw"],"operation":"rune_sockets","count":1}),
-            )
-            .unwrap();
+        let socketed = customize(
+            &engine,
+            &draft_params(
+                &engine,
+                json!(weapon["raw"]),
+                json!({"operation":"rune_sockets","count":1}),
+            ),
+        )
+        .unwrap();
         assert_eq!(socketed["runes"]["socketCount"], 1);
         let rune = socketed["runes"]["options"]
             .as_array()
@@ -552,12 +768,15 @@ fn customization_edits_drafts_and_commits_saved_items() {
             .iter()
             .find(|r| r["name"] != "None")
             .unwrap();
-        let runed = engine
-            .call(
-                "item_customize",
-                &json!({"raw":socketed["raw"],"operation":"rune","index":1,"name":rune["name"]}),
-            )
-            .unwrap();
+        let runed = customize(
+            &engine,
+            &draft_params(
+                &engine,
+                json!(socketed),
+                json!({"operation":"rune","index":1,"name":rune["name"]}),
+            ),
+        )
+        .unwrap();
         assert_eq!(runed["runes"]["runes"][0], rune["name"]);
     }
     assert_eq!(snapshot(&engine), before);
@@ -566,7 +785,7 @@ fn customization_edits_drafts_and_commits_saved_items() {
         .call("item_edit", &json!({"text":data["raw"]}))
         .unwrap();
     let saved_before = snapshot(&engine);
-    let saved=engine.call("item_customize",&json!({"itemId":added["itemId"],"generation":generation,"operation":"props","itemLevel":99})).unwrap();
+    let saved=customize(&engine,&json!({"itemId":added["itemId"],"generation":generation,"operation":"props","itemLevel":99})).unwrap();
     assert_eq!(saved["itemLevel"], 99);
     let saved_after = snapshot(&engine);
     assert_eq!(saved_after["items"]["items"].as_array().unwrap().len(), 1);
@@ -577,7 +796,10 @@ fn customization_edits_drafts_and_commits_saved_items() {
     assert_ne!(saved_before["xml"], saved_after["xml"]);
     let amulet = "Rarity: Rare\nCandidate amulet\nJade Amulet\nImplicits: 0";
     let anoints = engine
-        .call("item_anoints", &json!({"raw":amulet,"withNodes":true}))
+        .call(
+            "item_anoints",
+            &draft_params(&engine, json!(amulet), json!({"withNodes":true})),
+        )
         .unwrap();
     let node = anoints["nodes"][0]["name"].as_str().unwrap();
     let source = format!("{amulet}\n{{enchant}}Allocates {node}");
@@ -585,12 +807,15 @@ fn customization_edits_drafts_and_commits_saved_items() {
         .call("equip_item_raw", &json!({"text":source,"slot":"Amulet"}))
         .unwrap();
     let before_copy = snapshot(&engine);
-    let copied = engine
-        .call(
-            "item_customize",
-            &json!({"raw":amulet,"operation":"copy_anoints","sourceSlot":"Amulet"}),
-        )
-        .unwrap();
+    let copied = customize(
+        &engine,
+        &draft_params(
+            &engine,
+            json!(amulet),
+            json!({"operation":"copy_anoints","sourceSlot":"Amulet"}),
+        ),
+    )
+    .unwrap();
     assert!(
         copied["raw"]
             .as_str()
@@ -599,24 +824,30 @@ fn customization_edits_drafts_and_commits_saved_items() {
     );
     assert_eq!(snapshot(&engine), before_copy);
     if weapon["runeSocketLimit"].as_u64().unwrap() > 0 {
-        let socketed = engine
-            .call(
-                "item_customize",
-                &json!({"raw":weapon["raw"],"operation":"rune_sockets","count":1}),
-            )
-            .unwrap();
+        let socketed = customize(
+            &engine,
+            &draft_params(
+                &engine,
+                json!(weapon["raw"]),
+                json!({"operation":"rune_sockets","count":1}),
+            ),
+        )
+        .unwrap();
         let rune = socketed["runes"]["options"]
             .as_array()
             .unwrap()
             .iter()
             .find(|r| r["name"] != "None")
             .unwrap();
-        let runed = engine
-            .call(
-                "item_customize",
-                &json!({"raw":socketed["raw"],"operation":"rune","index":1,"name":rune["name"]}),
-            )
-            .unwrap();
+        let runed = customize(
+            &engine,
+            &draft_params(
+                &engine,
+                json!(socketed),
+                json!({"operation":"rune","index":1,"name":rune["name"]}),
+            ),
+        )
+        .unwrap();
         engine
             .call(
                 "equip_item_raw",
@@ -624,23 +855,29 @@ fn customization_edits_drafts_and_commits_saved_items() {
             )
             .unwrap();
         let before_copy = snapshot(&engine);
-        let copied = engine
-            .call(
-                "item_customize",
-                &json!({"raw":weapon["raw"],"operation":"copy_augments","sourceSlot":"Weapon 1"}),
-            )
-            .unwrap();
+        let copied = customize(
+            &engine,
+            &draft_params(
+                &engine,
+                json!(weapon["raw"]),
+                json!({"operation":"copy_augments","sourceSlot":"Weapon 1"}),
+            ),
+        )
+        .unwrap();
         assert_eq!(copied["runes"]["runes"][0], rune["name"]);
         assert_eq!(snapshot(&engine), before_copy);
     }
     engine.call("new_build", &json!({})).unwrap();
     assert!(
-        engine
-            .call(
-                "item_customize",
-                &json!({"raw":data["raw"],"generation":generation,"operation":"props","quality":20})
+        customize(
+            &engine,
+            &draft_params(
+                &engine,
+                json!(data),
+                json!({"generation":generation,"operation":"props","quality":20})
             )
-            .is_err()
+        )
+        .is_err()
     );
     drop(engine);
     std::fs::remove_dir_all(user_dir).unwrap();
@@ -656,7 +893,8 @@ fn affix_family_edit_chooses_and_returns_rolls_in_one_command() {
     if !root.join("Launch.lua").is_file() {
         return;
     }
-    let user_dir = std::env::temp_dir().join(format!("pob-affix-family-edit-{}", std::process::id()));
+    let user_dir =
+        std::env::temp_dir().join(format!("pob-affix-family-edit-{}", std::process::id()));
     let engine = Engine::boot(EngineConfig {
         pob_root: root,
         user_dir: user_dir.clone(),
@@ -664,10 +902,9 @@ fn affix_family_edit_chooses_and_returns_rolls_in_one_command() {
     .unwrap();
     engine.call("new_build", &json!({})).unwrap();
     let before = snapshot(&engine);
-    let crafted = "Rarity: Rare\nFamily edit\nIron Ring\nCrafted: true\nItem Level: 80\nImplicits: 0";
-    let data = engine
-        .call("item_customization", &json!({"raw":crafted}))
-        .unwrap();
+    let crafted =
+        "Rarity: Rare\nFamily edit\nIron Ring\nCrafted: true\nItem Level: 80\nImplicits: 0";
+    let data = customization(&engine, &draft_params(&engine, json!(crafted), json!({}))).unwrap();
     assert!(data["affixes"]["prefixes"][0]["rolls"].is_null());
     let poe1 = engine.call("version", &Value::Null).unwrap()["game"] == "poe1";
     let prefix = if poe1 {
@@ -687,44 +924,78 @@ fn affix_family_edit_chooses_and_returns_rolls_in_one_command() {
                 .any(|id| id.as_str().unwrap().starts_with(prefix))
         })
         .unwrap();
-    let mut raw = json!(crafted);
+    let mut raw = data.clone();
     for position in [0.0, 0.25, 0.5, 0.75, 1.0] {
-        let edited = engine
-            .call("item_customize", &json!({
-                "raw":raw, "operation":"affix", "table":"prefixes", "index":1,
-                "seriesId":ranged_family["id"], "relativePosition":position
-            }))
+        let edited = customize(
+            &engine,
+            &draft_params(
+                &engine,
+                json!(raw),
+                json!({ "operation":"affix", "table":"prefixes", "index":1,
+                    "seriesId":ranged_family["id"], "relativePosition":position
+                }),
+            ),
+        )
+        .unwrap();
+        let tiers = edited["affixes"]["prefixes"][0]["rolls"]["tiers"]
+            .as_array()
             .unwrap();
-        let tiers = edited["affixes"]["prefixes"][0]["rolls"]["tiers"].as_array().unwrap();
         let scaled = position * tiers.len() as f64;
         let tier_index = (scaled.ceil() as usize).max(1) - 1;
         let tier = &tiers[tier_index];
         let range = scaled - tier_index as f64;
-        let expected_range = if tier["flipped"] == true { 1.0 - range } else { range };
-        assert_eq!(edited["affixes"]["prefixes"][0]["rolls"]["seriesId"], ranged_family["id"]);
+        let expected_range = if tier["flipped"] == true {
+            1.0 - range
+        } else {
+            range
+        };
+        assert_eq!(
+            edited["affixes"]["prefixes"][0]["rolls"]["seriesId"],
+            ranged_family["id"]
+        );
         assert_eq!(edited["affixes"]["prefixes"][0]["modId"], tier["modId"]);
-        assert!((edited["affixes"]["prefixes"][0]["range"].as_f64().unwrap() - expected_range).abs() < 1e-9);
-        let reloaded = engine.call("item_customization", &json!({"raw":edited["raw"]})).unwrap();
-        assert!((reloaded["affixes"]["prefixes"][0]["range"].as_f64().unwrap() - expected_range).abs() < 1e-9);
+        assert!(
+            (edited["affixes"]["prefixes"][0]["range"].as_f64().unwrap() - expected_range).abs()
+                < 1e-9
+        );
+        let reloaded =
+            customization(&engine, &draft_params(&engine, json!(edited), json!({}))).unwrap();
+        assert!(
+            (reloaded["affixes"]["prefixes"][0]["range"]
+                .as_f64()
+                .unwrap()
+                - expected_range)
+                .abs()
+                < 1e-9
+        );
         assert_eq!(
             reloaded["affixes"]["prefixes"][0]["rolls"]["tiers"],
             edited["affixes"]["prefixes"][0]["rolls"]["tiers"]
         );
         assert_eq!(snapshot(&engine), before);
-        raw = edited["raw"].clone();
+        raw = edited;
     }
     for (series, position) in [(ranged_family["id"].clone(), 1.1), (json!("missing"), 0.5)] {
-        assert!(engine.call("item_customize", &json!({
-            "raw":raw, "operation":"affix", "table":"prefixes", "index":1,
-            "seriesId":series, "relativePosition":position
-        })).is_err());
+        assert!(
+            customize(
+                &engine,
+                &draft_params(
+                    &engine,
+                    json!(raw),
+                    json!({ "operation":"affix", "table":"prefixes", "index":1,
+                        "seriesId":series, "relativePosition":position
+                    })
+                )
+            )
+            .is_err()
+        );
     }
     assert_eq!(snapshot(&engine), before);
 
-    let amulet = "Rarity: Rare\nDiscrete roll\nJade Amulet\nCrafted: true\nItem Level: 80\nImplicits: 0";
-    let amulet_data = engine
-        .call("item_customization", &json!({"raw":amulet}))
-        .unwrap();
+    let amulet =
+        "Rarity: Rare\nDiscrete roll\nJade Amulet\nCrafted: true\nItem Level: 80\nImplicits: 0";
+    let amulet_data =
+        customization(&engine, &draft_params(&engine, json!(amulet), json!({}))).unwrap();
     let discrete = if poe1 {
         "LifeGainPerTarget"
     } else {
@@ -742,42 +1013,72 @@ fn affix_family_edit_chooses_and_returns_rolls_in_one_command() {
                 .any(|id| id.as_str().unwrap().starts_with(discrete))
         })
         .unwrap();
-    let discrete_edit = engine.call("item_customize", &json!({
-        "raw":amulet, "operation":"affix", "table":"suffixes", "index":1,
-        "seriesId":discrete_family["id"], "relativePosition":0.5
-    })).unwrap();
-    let tiers = discrete_edit["affixes"]["suffixes"][0]["rolls"]["tiers"].as_array().unwrap();
-    assert!(tiers.iter().all(|tier| tier["steps"].as_array().unwrap().len() == 1));
-    assert!(tiers
-        .iter()
-        .any(|tier| tier["modId"] == discrete_edit["affixes"]["suffixes"][0]["modId"]));
+    let discrete_edit = customize(
+        &engine,
+        &draft_params(
+            &engine,
+            json!(amulet),
+            json!({ "operation":"affix", "table":"suffixes", "index":1,
+                "seriesId":discrete_family["id"], "relativePosition":0.5
+            }),
+        ),
+    )
+    .unwrap();
+    let tiers = discrete_edit["affixes"]["suffixes"][0]["rolls"]["tiers"]
+        .as_array()
+        .unwrap();
+    assert!(
+        tiers
+            .iter()
+            .all(|tier| tier["steps"].as_array().unwrap().len() == 1)
+    );
+    assert!(
+        tiers
+            .iter()
+            .any(|tier| tier["modId"] == discrete_edit["affixes"]["suffixes"][0]["modId"])
+    );
     assert_eq!(snapshot(&engine), before);
 
     if poe1 {
         let charm = "Rarity: Rare\nExposure charm\nCorvine Charm\nCrafted: true\nItem Level: 80\nImplicits: 0";
-        let charm_data = engine
-            .call("item_customization", &json!({"raw":charm}))
-            .unwrap();
+        let charm_data =
+            customization(&engine, &draft_params(&engine, json!(charm), json!({}))).unwrap();
         let exposure = charm_data["affixes"]["prefixes"][0]["options"]
             .as_array()
             .unwrap()
             .iter()
             .find(|series| {
-                series["modIds"] == json!([
-                    "AnimalCharmExposureExtraResistance1",
-                    "AnimalCharmExposureExtraResistance2"
-                ])
+                series["modIds"]
+                    == json!([
+                        "AnimalCharmExposureExtraResistance1",
+                        "AnimalCharmExposureExtraResistance2"
+                    ])
             })
             .unwrap();
-        let rolls = engine.call("item_affix_rolls", &json!({
-            "raw":charm, "table":"prefixes", "index":1, "seriesId":exposure["id"]
-        })).unwrap();
+        let rolls = engine
+            .call(
+                "item_affix_rolls",
+                &draft_params(
+                    &engine,
+                    json!(charm),
+                    json!({ "table":"prefixes", "index":1, "seriesId":exposure["id"]
+                    }),
+                ),
+            )
+            .unwrap();
         assert_eq!(rolls["tiers"][0]["flipped"], false);
         assert_eq!(rolls["tiers"][1]["flipped"], true);
-        let edited = engine.call("item_customize", &json!({
-            "raw":charm, "operation":"affix", "table":"prefixes", "index":1,
-            "seriesId":exposure["id"], "relativePosition":0.0
-        })).unwrap();
+        let edited = customize(
+            &engine,
+            &draft_params(
+                &engine,
+                json!(charm),
+                json!({ "operation":"affix", "table":"prefixes", "index":1,
+                    "seriesId":exposure["id"], "relativePosition":0.0
+                }),
+            ),
+        )
+        .unwrap();
         assert_eq!(
             edited["affixes"]["prefixes"][0]["modId"],
             "AnimalCharmExposureExtraResistance1"
@@ -786,23 +1087,34 @@ fn affix_family_edit_chooses_and_returns_rolls_in_one_command() {
         assert_eq!(snapshot(&engine), before);
     }
 
-    let saved = engine.call("item_edit", &json!({"text":raw})).unwrap();
-    let edited = engine
-        .call("item_customize", &json!({
+    let saved = engine
+        .call("item_edit", &json!({"text":raw["raw"]}))
+        .unwrap();
+    let edited = customize(
+        &engine,
+        &json!({
             "itemId":saved["itemId"], "operation":"affix", "table":"prefixes", "index":1,
             "seriesId":ranged_family["id"], "relativePosition":0.0
-        }))
-        .unwrap();
+        }),
+    )
+    .unwrap();
     assert_eq!(
         edited["affixes"]["prefixes"][0]["modId"],
         edited["affixes"]["prefixes"][0]["rolls"]["tiers"][0]["modId"]
     );
     let first_tier = &edited["affixes"]["prefixes"][0]["rolls"]["tiers"][0];
-    let expected_range = if first_tier["flipped"] == true { 1.0 } else { 0.0 };
-    assert_eq!(edited["affixes"]["prefixes"][0]["range"].as_f64().unwrap(), expected_range);
+    let expected_range = if first_tier["flipped"] == true {
+        1.0
+    } else {
+        0.0
+    };
+    assert_eq!(
+        edited["affixes"]["prefixes"][0]["range"].as_f64().unwrap(),
+        expected_range
+    );
     assert_eq!(
         edited["raw"],
-        engine.call("item_customization", &json!({"itemId":saved["itemId"]})).unwrap()["raw"]
+        customization(&engine, &json!({"itemId":saved["itemId"]})).unwrap()["raw"]
     );
     drop(engine);
     std::fs::remove_dir_all(user_dir).unwrap();
@@ -830,7 +1142,10 @@ fn advanced_customization_has_saved_and_draft_parity() {
     let generation = engine.call("get_build", &Value::Null).unwrap()["generation"].clone();
     let amulet = "Rarity: Rare\nParity Amulet\nJade Amulet\nImplicits: 0\n+40 to maximum Life";
     let anoints = engine
-        .call("item_anoints", &json!({"raw":amulet,"withNodes":true}))
+        .call(
+            "item_anoints",
+            &draft_params(&engine, json!(amulet), json!({"withNodes":true})),
+        )
         .unwrap();
     let node = &anoints["nodes"][0];
     let mut cases = vec![
@@ -847,7 +1162,10 @@ fn advanced_customization_has_saved_and_draft_parity() {
         ),
     ];
     let corruption = engine
-        .call("item_corruptions", &json!({"raw":amulet}))
+        .call(
+            "item_corruptions",
+            &draft_params(&engine, json!(amulet), json!({})),
+        )
         .unwrap();
     assert!(!corruption["mods"].as_array().unwrap().is_empty());
     cases.push((
@@ -861,9 +1179,7 @@ fn advanced_customization_has_saved_and_draft_parity() {
     ));
     let weapon =
         "Rarity: Rare\nParity Bow\nCrude Bow\nItem Level: 85\nImplicits: 0\n+20 to Dexterity";
-    let detail = engine
-        .call("item_customization", &json!({"raw":weapon}))
-        .unwrap();
+    let detail = customization(&engine, &draft_params(&engine, json!(weapon), json!({}))).unwrap();
     let poe1 = detail["shape"]["socketLimit"].as_u64().unwrap() > 0;
     if poe1 {
         cases.push((weapon.to_owned(), json!({"operation":"shape","influences":["shaper","elder"],"sockets":[{"colour":"R","group":0},{"colour":"G","group":0},{"colour":"B","group":1}]})));
@@ -884,13 +1200,23 @@ fn advanced_customization_has_saved_and_draft_parity() {
         ));
         let cluster =
             "Rarity: Rare\nParity Cluster\nLarge Cluster Jewel\nItem Level: 85\nImplicits: 0";
-        let shape = engine.call("item_shape", &json!({"raw":cluster})).unwrap();
+        let shape = engine
+            .call(
+                "item_shape",
+                &draft_params(&engine, json!(cluster), json!({})),
+            )
+            .unwrap();
         cases.push((cluster.to_owned(), json!({"operation":"shape","clusterSkill":shape["cluster"]["skills"][0]["id"],"clusterNodeCount":shape["cluster"]["minNodes"]})));
         let boots = "Rarity: Rare\nParity Boots\nRawhide Boots\nImplicits: 0\n+20 to maximum Life";
-        let enchants = engine.call("item_enchants", &json!({"raw":boots})).unwrap();
+        let enchants = engine
+            .call(
+                "item_enchants",
+                &draft_params(&engine, json!(boots), json!({})),
+            )
+            .unwrap();
         assert_eq!(enchants["available"], true);
         cases.push((boots.to_owned(), json!({"operation":"enchant","line":enchants["lines"][0],"slot":1,"source":enchants["source"]})));
-        let enchanted = engine.call("item_customize", &json!({"raw":boots,"operation":"enchant","line":enchants["lines"][0],"slot":1,"source":enchants["source"]})).unwrap();
+        let enchanted = customize(&engine, &draft_params(&engine, json!(boots), json!({"operation":"enchant","line":enchants["lines"][0],"slot":1,"source":enchants["source"]}))).unwrap();
         cases.push((
             enchanted["raw"].as_str().unwrap().to_owned(),
             json!({"operation":"enchant","remove":true,"slot":1}),
@@ -902,20 +1228,17 @@ fn advanced_customization_has_saved_and_draft_parity() {
     for (raw, edit) in cases {
         let added = engine.call("item_edit", &json!({"text":raw})).unwrap();
         let before = snapshot(&engine);
-        let mut draft_params = edit.clone();
-        draft_params["raw"] = json!(raw);
-        draft_params["generation"] = generation.clone();
-        let draft = engine
-            .call("item_customize", &draft_params)
-            .unwrap_or_else(|e| panic!("{edit}: {e}"));
+        let mut draft_edit = edit.clone();
+        draft_edit = draft_params(&engine, json!(raw), draft_edit);
+        draft_edit["generation"] = generation.clone();
+        let draft = customize(&engine, &draft_edit).unwrap_or_else(|e| panic!("{edit}: {e}"));
         assert_eq!(
             snapshot(&engine),
             before,
             "draft operation {edit} changed build state"
         );
-        let original = engine
-            .call("item_customization", &json!({"raw":raw}))
-            .unwrap();
+        let original =
+            customization(&engine, &draft_params(&engine, json!(raw), json!({}))).unwrap();
         assert_ne!(
             draft["raw"], original["raw"],
             "{edit} did not edit the candidate"
@@ -953,7 +1276,10 @@ fn advanced_customization_has_saved_and_draft_parity() {
             "crucible" => assert_eq!(draft["crucible"]["selected"], edit["selected"]),
             "enchant" => {
                 let info = engine
-                    .call("item_enchants", &json!({"raw":draft["raw"]}))
+                    .call(
+                        "item_enchants",
+                        &draft_params(&engine, json!(draft), json!({})),
+                    )
                     .unwrap();
                 assert_eq!(
                     info["current"].as_array().unwrap().is_empty(),
@@ -964,19 +1290,38 @@ fn advanced_customization_has_saved_and_draft_parity() {
         }
         engine
             .call(
-                "item_preview",
-                &json!({"raw":draft["raw"],"generation":generation}),
+                "item_draft_get",
+                &draft_params(&engine, json!(draft), json!({"generation":generation})),
             )
             .unwrap();
         assert_eq!(snapshot(&engine), before);
-        let roundtrip = engine
-            .call("item_customization", &json!({"raw":draft["raw"]}))
+        let reloaded =
+            customization(&engine, &draft_params(&engine, json!(draft), json!({}))).unwrap();
+        assert_eq!(draft, reloaded, "{edit} was not retained in the draft");
+        let imported = engine
+            .call(
+                "item_draft_create",
+                &json!({"raw":draft["raw"],"normalise":false}),
+            )
             .unwrap();
-        assert_eq!(draft, roundtrip, "{edit} did not survive raw serialization");
+        let mut expected = draft.clone();
+        for key in ["itemId", "draftId", "draftRevision", "generation"] {
+            expected.as_object_mut().unwrap().remove(key);
+        }
+        assert_eq!(
+            expected, imported["customization"],
+            "{edit} did not survive raw serialization"
+        );
+        engine
+            .call(
+                "item_draft_dispose",
+                &json!({"draftId":imported["draftId"]}),
+            )
+            .unwrap();
         let mut saved_params = edit.clone();
         saved_params["itemId"] = added["itemId"].clone();
         saved_params["generation"] = generation.clone();
-        let saved = engine.call("item_customize", &saved_params).unwrap();
+        let saved = customize(&engine, &saved_params).unwrap();
         assert_eq!(
             saved["raw"], draft["raw"],
             "saved/draft mismatch for {edit}"
@@ -996,9 +1341,7 @@ fn advanced_customization_has_saved_and_draft_parity() {
                 &json!({"text":draft["raw"],"generation":generation}),
             )
             .unwrap();
-        let committed = engine
-            .call("item_customization", &json!({"itemId":committed["itemId"]}))
-            .unwrap();
+        let committed = customization(&engine, &json!({"itemId":committed["itemId"]})).unwrap();
         assert_eq!(committed["raw"], draft["raw"]);
     }
     let added = engine.call("item_edit", &json!({"text":amulet})).unwrap();
@@ -1010,14 +1353,17 @@ fn advanced_customization_has_saved_and_draft_parity() {
         json!({"operation":"enchant","line":"not-an-enchant","slot":1}),
         json!({"operation":"crucible","selected":["not-a-node"]}),
     ] {
-        for target in [json!({"raw":amulet}), json!({"itemId":added["itemId"]})] {
+        for target in [
+            draft_params(&engine, json!(amulet), json!({})),
+            json!({"itemId":added["itemId"]}),
+        ] {
             let before = snapshot(&engine);
             let mut params = edit.clone();
             params
                 .as_object_mut()
                 .unwrap()
                 .extend(target.as_object().unwrap().clone());
-            assert!(engine.call("item_customize", &params).is_err(), "{params}");
+            assert!(customize(&engine, &params).is_err(), "{params}");
             assert_eq!(
                 snapshot(&engine),
                 before,
@@ -1049,16 +1395,17 @@ fn crafted_customization_preserves_custom_edits_across_affix_changes() {
     engine.call("new_build", &json!({})).unwrap();
     let raw =
         "Rarity: Rare\nCrafted candidate\nIron Ring\nCrafted: true\nItem Level: 80\nImplicits: 0";
-    let initial = engine
-        .call("item_customization", &json!({"raw":raw}))
-        .unwrap();
+    let initial = customization(&engine, &draft_params(&engine, json!(raw), json!({}))).unwrap();
     let prefix = &initial["affixes"]["prefixes"][0]["options"][0]["modIds"][0];
-    let initial = engine
-        .call(
-            "item_customize",
-            &json!({"raw":raw,"operation":"affix","table":"prefixes","index":1,"modId":prefix}),
-        )
-        .unwrap();
+    let initial = customize(
+        &engine,
+        &draft_params(
+            &engine,
+            json!(raw),
+            json!({"operation":"affix","table":"prefixes","index":1,"modId":prefix}),
+        ),
+    )
+    .unwrap();
     assert!(
         initial["modifiers"]
             .as_array()
@@ -1087,14 +1434,13 @@ fn crafted_customization_preserves_custom_edits_across_affix_changes() {
             if saved {
                 p["itemId"] = item_id.clone();
             } else {
-                p["raw"] = initial["raw"].clone();
+                p = draft_params(&engine, initial.clone(), p);
             }
             p.as_object_mut()
                 .unwrap()
                 .extend(change.as_object().unwrap().clone());
             assert!(
-                engine
-                    .call("item_customize", &p)
+                customize(&engine, &p)
                     .unwrap_err()
                     .to_string()
                     .contains("affix controls")
@@ -1106,9 +1452,9 @@ fn crafted_customization_preserves_custom_edits_across_affix_changes() {
             if saved {
                 p["itemId"] = item_id.clone();
             } else {
-                p["raw"] = data["raw"].clone();
+                p = draft_params(&engine, data.clone(), p);
             }
-            let result = engine.call("item_customize", &p).unwrap();
+            let result = customize(&engine, &p).unwrap();
             if !saved {
                 assert_eq!(snapshot(&engine), before);
             }
@@ -1166,10 +1512,9 @@ fn crafted_customization_preserves_custom_edits_across_affix_changes() {
                 .all(|m| m["section"] != "explicit")
         );
         assert!(!data["raw"].as_str().unwrap().contains("+27 to Dexterity"));
-        let roundtrip = engine
-            .call("item_customization", &json!({"raw":data["raw"]}))
-            .unwrap();
-        assert_eq!(data["raw"], roundtrip["raw"]);
+        let reloaded =
+            customization(&engine, &draft_params(&engine, json!(data), json!({}))).unwrap();
+        assert_eq!(data["raw"], reloaded["raw"]);
     }
     drop(engine);
     std::fs::remove_dir_all(user_dir).unwrap();
@@ -1179,11 +1524,16 @@ fn prepared_like_legacy(engine: &Engine, raw: &str, normalise: bool) -> Value {
     let before = snapshot(engine);
     let prepared = engine
         .call(
-            "item_prepare_preview",
+            "item_draft_create",
             &json!({"raw":raw,"normalise":normalise}),
         )
         .unwrap();
-    let preview = engine.call("item_preview", &prepared).unwrap();
+    let preview = engine
+        .call(
+            "item_draft_get",
+            &draft_params(engine, prepared.clone(), json!({})),
+        )
+        .unwrap();
     assert_eq!(
         snapshot(engine),
         before,
@@ -1210,7 +1560,7 @@ fn prepared_like_legacy(engine: &Engine, raw: &str, normalise: bool) -> Value {
             .join("\n"),
         legacy["tooltip"].as_str().unwrap()
     );
-    engine.call("item_customization", &prepared).unwrap()
+    with_target(prepared["customization"].clone(), &prepared)
 }
 
 #[test]
@@ -1248,24 +1598,30 @@ fn paste_defaults_match_legacy() {
     prepared_like_legacy(&engine, &armour.replace("+7%", "+30%"), true);
 
     let source = if poe2 {
-        let socketed = engine
-            .call(
-                "item_customize",
-                &json!({"raw":armour,"operation":"rune_sockets","count":1}),
-            )
-            .unwrap();
+        let socketed = customize(
+            &engine,
+            &draft_params(
+                &engine,
+                json!(armour),
+                json!({"operation":"rune_sockets","count":1}),
+            ),
+        )
+        .unwrap();
         let rune = socketed["runes"]["options"]
             .as_array()
             .unwrap()
             .iter()
             .find(|r| r["name"] != "None")
             .unwrap();
-        engine
-            .call(
-                "item_customize",
-                &json!({"raw":socketed["raw"],"operation":"rune","index":1,"name":rune["name"]}),
-            )
-            .unwrap()["raw"]
+        customize(
+            &engine,
+            &draft_params(
+                &engine,
+                json!(socketed),
+                json!({"operation":"rune","index":1,"name":rune["name"]}),
+            ),
+        )
+        .unwrap()["raw"]
             .as_str()
             .unwrap()
             .to_owned()
@@ -1317,7 +1673,10 @@ fn paste_defaults_match_legacy() {
 
     let amulet = "Rarity: Rare\nPaste Amulet\nJade Amulet\nImplicits: 0\n+40 to maximum Life";
     let anoints = engine
-        .call("item_anoints", &json!({"raw":amulet,"withNodes":true}))
+        .call(
+            "item_anoints",
+            &draft_params(&engine, json!(amulet), json!({"withNodes":true})),
+        )
         .unwrap();
     let node = anoints["nodes"][0]["name"].as_str().unwrap();
     engine
@@ -1347,19 +1706,23 @@ fn paste_defaults_match_legacy() {
     );
     prepared_like_legacy(&engine, amulet, false);
 
-    let edited = engine
+    let edited = customize(
+        &engine,
+        &draft_params(
+            &engine,
+            json!(migrated),
+            json!({"operation":"props","quality":3}),
+        ),
+    )
+    .unwrap();
+    engine
         .call(
-            "item_customize",
-            &json!({"raw":migrated["raw"],"operation":"props","quality":3}),
+            "item_draft_get",
+            &draft_params(&engine, json!(edited), json!({})),
         )
         .unwrap();
-    engine
-        .call("item_preview", &json!({"raw":edited["raw"]}))
-        .unwrap();
     assert_eq!(
-        engine
-            .call("item_customization", &json!({"raw":edited["raw"]}))
-            .unwrap()["quality"],
+        customization(&engine, &draft_params(&engine, json!(edited), json!({}))).unwrap()["quality"],
         3
     );
     let added = engine
@@ -1369,34 +1732,34 @@ fn paste_defaults_match_legacy() {
         )
         .unwrap();
     assert_eq!(
-        engine
-            .call("item_customization", &json!({"itemId":added["itemId"]}))
-            .unwrap()["raw"],
+        customization(&engine, &json!({"itemId":added["itemId"]})).unwrap()["raw"],
         edited["raw"]
     );
     let before_invalid = snapshot(&engine);
-    for raw in [
-        "",
-        "   ",
-        "not an item",
-        "Rarity: Rare\nInvalid\nUnknown Base",
-    ] {
-        assert_eq!(
+    for raw in ["not an item", "Rarity: Rare\nInvalid\nUnknown Base"] {
+        assert!(
             engine
-                .call("item_prepare_preview", &json!({"raw":raw}))
-                .unwrap(),
-            json!({})
+                .call("item_draft_create", &json!({"raw":raw}))
+                .unwrap()
+                .is_null()
         );
         assert_eq!(snapshot(&engine), before_invalid);
     }
+    for raw in ["", "   "] {
+        assert!(
+            engine
+                .call("item_draft_create", &json!({"raw":raw}))
+                .is_err()
+        );
+    }
     assert!(
         engine
-            .call("item_prepare_preview", &json!({"raw":"Item Class: Rings"}))
+            .call("item_draft_create", &json!({"raw":"Item Class: Rings"}))
             .is_err()
     );
     assert!(
         engine
-            .call("item_prepare_preview", &json!({"raw":42}))
+            .call("item_draft_create", &json!({"raw":42}))
             .is_err()
     );
     assert_eq!(snapshot(&engine), before_invalid);
@@ -1405,7 +1768,7 @@ fn paste_defaults_match_legacy() {
     assert!(
         engine
             .call(
-                "item_prepare_preview",
+                "item_draft_create",
                 &json!({"raw":armour,"generation":generation})
             )
             .is_err()

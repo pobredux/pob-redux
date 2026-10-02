@@ -648,7 +648,7 @@ local function encodeCode(xml)
 	return common.base64.encode(deflated):gsub("+", "-"):gsub("/", "_")
 end
 
-local M = {}
+local M = { _draft = { entries = {}, byItem = {}, sequence = 0, count = 0, setters = {} } }
 
 -- ---------------------------------------------------------------------------
 -- Meta
@@ -704,6 +704,7 @@ end
 
 local function loaded()
 	main.__reduxBuildGeneration = main.__reduxBuildGeneration + 1
+	M._draft.entries, M._draft.byItem, M._draft.count = {}, {}, 0
 	build = main.modes["BUILD"]
 	ensureBuild()
 	local changed = calcsSelection.startOnMainSkill()
@@ -2958,6 +2959,14 @@ local function resolveSlotName(name)
 	error("unknown slot " .. raw .. "; slots: " .. table.concat(names, ", "), 0)
 end
 
+local function addItem(item, slotName)
+	build.itemsTab:AddItem(item, true)
+	if slotName then build.itemsTab.slots[slotName]:SetSelItemId(item.id) end
+	build.itemsTab:PopulateSlots()
+	build.itemsTab:AddUndoState()
+	refresh()
+end
+
 M.equip_item_raw = function(p)
 	ensureBuild(p)
 	if not p or type(p.text) ~= "string" then error("params.text (raw item text) is required", 0) end
@@ -2978,10 +2987,7 @@ M.equip_item_raw = function(p)
 	if not slotName or not build.itemsTab.slots[slotName] then
 		error("no compatible slot found for this item; pass params.slot", 0)
 	end
-	build.itemsTab:AddItem(item, true)
-	build.itemsTab.slots[slotName]:SetSelItemId(item.id)
-	build.itemsTab:AddUndoState()
-	refresh()
+	addItem(item, slotName)
 	return { ok = true, itemId = item.id, slot = slotName, itemName = item.name }
 end
 
@@ -4217,7 +4223,97 @@ M.item_db_list = function(p)
 	return { items = page, total = total, offset = offset, types = typeList }
 end
 
+do
+	local D = M._draft
+	local accessSequence = 0
+	function D.get(p, mutation)
+		ensureBuild(p)
+		if p.raw ~= nil or p.itemId ~= nil or p.db ~= nil then error("provide only one item target", 0) end
+		if p.generation ~= main.__reduxBuildGeneration then error("the build changed; paste the item again", 0) end
+		local entry = M._draft.entries[p.draftId]
+		if not entry then error("item preview expired; paste the item again", 0) end
+		if mutation and p.draftRevision ~= entry.revision then
+			error("item preview changed; refresh it before editing", 0)
+		end
+		accessSequence = accessSequence + 1
+		entry.lastUsed = accessSequence
+		return entry
+	end
+	function D.remove(entry)
+		M._draft.entries[entry.id], M._draft.byItem[entry.item] = nil, nil
+		M._draft.count = M._draft.count - 1
+	end
+	local function checkpoint(item, owner)
+		local seen, saved = {}, {}
+		local itemMeta = getmetatable(item)
+		if owner then
+			seen[main], seen[data] = true, true
+			if owner.data then seen[owner.data] = true end
+			for _, spec in ipairs(owner.treeTab.specList) do seen[spec.tree] = true end
+			seen[owner.calcsTab.calcs] = true
+		end
+		local function capture(tbl)
+			if seen[tbl] then return end
+			if getmetatable(tbl) == itemMeta then
+				for _, key in ipairs({ "base", "affixes", "enchantments", "rareLikeUnique", "clusterJewel", "mutatedLines" }) do
+					if type(tbl[key]) == "table" then seen[tbl[key]] = true end
+				end
+			end
+			seen[tbl] = true
+			saved[tbl] = copyTableSafe(tbl, true, true)
+			for key, value in pairs(tbl) do
+				if type(key) == "table" then capture(key) end
+				if type(value) == "table" then capture(value) end
+			end
+		end
+		capture(item)
+		if owner then capture(owner) end
+		return function()
+			for tbl, fields in pairs(saved) do
+				wipeTable(tbl)
+				for key, value in pairs(fields) do rawset(tbl, key, value) end
+				setmetatable(tbl, getmetatable(fields))
+			end
+		end
+	end
+	function D.mutate(p, fn)
+		local entry = D.get(p, true)
+		local restore = checkpoint(entry.item)
+		local ok, result = pcall(fn, entry)
+		if not ok then
+			restore()
+			error(result, 0)
+		end
+		entry.revision = entry.revision + 1
+		if type(result) == "table" then result.draftId, result.draftRevision = entry.id, entry.revision end
+		return result
+	end
+	function D.snapshot(entry, customization)
+		local target = { draftId = entry.id, generation = main.__reduxBuildGeneration, draftRevision = entry.revision }
+		local result = M.item_preview(target)
+		result.draftId, result.draftRevision = entry.id, entry.revision
+		result.customization = customization or M.item_customization(target)
+		result.raw = result.customization.raw
+		return result
+	end
+	function D.commit(entry, slotName)
+		local item = entry.item
+		local restore = checkpoint(item, build)
+		local showErrMsg = rawget(launch, "ShowErrMsg")
+		local ok, result = pcall(function()
+			launch.ShowErrMsg = function(_, fmt, ...) error(string.format(fmt, ...), 0) end
+			addItem(item, slotName)
+			return { ok = true, itemId = item.id, name = item.name, slot = slotName }
+		end)
+		launch.ShowErrMsg = showErrMsg
+		if not ok then restore(); error(result, 0) end
+		D.remove(entry)
+		return result
+	end
+end
+
 local function resolveItem(p)
+	if p.draftId ~= nil then return M._draft.get(p).item, true end
 	if p.itemId then
 		local item = build.itemsTab.items[tonumber(p.itemId)]
 		if not item then error("unknown item id " .. tostring(p.itemId), 0) end
@@ -4230,69 +4326,120 @@ local function resolveItem(p)
 		return item, true
 	end
 	if p.raw then
-		local item = new("Item"):Item(p.raw)
-		if not item.base then error("unrecognised item text", 0) end
-		return item, true
+		error("create an item draft before previewing raw text", 0)
 	end
-	error("params.itemId, params.db+name or params.raw is required", 0)
+	error("params.itemId, params.db+name or params.draftId is required", 0)
 end
 
 -- PoB's full item tooltip, including the "Equipping this item in X will give
 -- you" comparison sections when a slot is given (or the item's primary slot).
-M.item_tooltip = function(p)
-	ensureBuild()
-	p = p or {}
-	local item, dbMode = resolveItem(p)
-	local slot
-	if p.slotName ~= false then
-		local slotName = p.slotName or item:GetPrimarySlot()
-		slot = slotName and build.itemsTab.slots[slotName] or nil
-	end
-	local tt = new("Tooltip"):Tooltip()
-	build.itemsTab:AddItemTooltip(tt, item, slot, dbMode and p.itemId == nil and p.dbMode ~= false)
-	local r = tooltipPayload(tt)
-	-- PoB's Shift-hover tip describes its own window; there is no such hover here.
-	local kept = array({})
-	for _, l in ipairs(r.lines) do
-		if not (type(l.text) == "string" and l.text:find("Tip: Hold Shift", 1, true)) then kept[#kept + 1] = l end
-	end
-	r.lines = kept
-	r.rarity = opt(item.rarity)
-	r.itemArt = { game = GAME, name = opt(item.title or item.name), baseName = opt(item.baseName), rarity = opt(item.rarity) }
-	return r
-end
-
-M.item_prepare_preview = function(p)
-	ensureBuild(p)
-	if not p or type(p.raw) ~= "string" then
-		error("item text is required", 0)
-	end
-	local item
-	-- Capture PoB's candidate without updating the legacy display controls.
-	local tab = setmetatable({ SetDisplayItem = function(_, candidate) item = candidate end }, { __index = build.itemsTab })
-	tab:CreateDisplayItemFromRaw(p.raw, p.normalise ~= false)
-	return { raw = item and item:BuildRaw() }
-end
-
-M.item_preview = function(p)
-	ensureBuild(p)
-	if not p or type(p.raw) ~= "string" or not p.raw:match("%S") then
-		error("item text is required", 0)
-	end
-	local item = resolveItem({ raw = p.raw })
-	local slots = array({})
-	local tab = build.itemsTab
-	-- Jewel/socket availability is normally updated by the legacy draw path.
-	M.list_slots()
-	local weaponSet = build.calcsTab.mainEnv.weaponSet or (tab.activeItemSet.useSecondWeaponSet and 2 or 1)
-	for _, slot in ipairs(tab.orderedSlots) do
-		if not slot.inactive and (not slot.weaponSet or slot.weaponSet == weaponSet)
-			and (slot.weaponSet or slot.shown()) and tab:IsItemValidForSlot(item, slot.slotName) then
-			slots[#slots + 1] = { slot = slot.slotName, label = slot.label or slot.slotName }
+do
+	local function itemTooltip(item, dbMode, p)
+		local slot
+		if p.slotName ~= false then
+			local slotName = p.slotName or item:GetPrimarySlot()
+			slot = slotName and build.itemsTab.slots[slotName] or nil
 		end
+		local tt = new("Tooltip"):Tooltip()
+		build.itemsTab:AddItemTooltip(tt, item, slot, dbMode and p.itemId == nil and p.dbMode ~= false)
+		local r = tooltipPayload(tt)
+		-- PoB's Shift-hover tip describes its own window; there is no such hover here.
+		local kept = array({})
+		for _, l in ipairs(r.lines) do
+			if not (type(l.text) == "string" and l.text:find("Tip: Hold Shift", 1, true)) then kept[#kept + 1] = l end
+		end
+		r.lines = kept
+		r.rarity = opt(item.rarity)
+		r.itemArt = { game = GAME, name = opt(item.title or item.name), baseName = opt(item.baseName), rarity = opt(item.rarity) }
+		return r
 	end
-	return { tooltip = M.item_tooltip({ raw = p.raw, slotName = false, dbMode = false }), slots = slots,
-		generation = main.__reduxBuildGeneration, rev = build.outputRevision }
+
+	M.item_tooltip = function(p)
+		ensureBuild(p)
+		p = p or {}
+		local item, dbMode = resolveItem(p)
+		return itemTooltip(item, dbMode, p)
+	end
+
+	M.item_preview = function(p)
+		ensureBuild(p)
+		if not p or p.draftId == nil then
+			error("params.draftId is required", 0)
+		end
+		local item = resolveItem(p)
+		local slots = array({})
+		local tab = build.itemsTab
+		-- Jewel/socket availability is normally updated by the legacy draw path.
+		M.list_slots()
+		local weaponSet = build.calcsTab.mainEnv.weaponSet or (tab.activeItemSet.useSecondWeaponSet and 2 or 1)
+		for _, slot in ipairs(tab.orderedSlots) do
+			if not slot.inactive and (not slot.weaponSet or slot.weaponSet == weaponSet)
+				and (slot.weaponSet or slot.shown()) and tab:IsItemValidForSlot(item, slot.slotName) then
+				slots[#slots + 1] = { slot = slot.slotName, label = slot.label or slot.slotName }
+			end
+		end
+		return { tooltip = itemTooltip(item, true, { slotName = false, dbMode = false }), slots = slots,
+			generation = main.__reduxBuildGeneration, rev = build.outputRevision }
+	end
+
+end
+
+M.item_draft_create = function(p)
+	ensureBuild(p)
+	if not p or type(p.raw) ~= "string" or not p.raw:match("%S") then error("item text is required", 0) end
+	local item
+	local tab = setmetatable({ SetDisplayItem = function(_, candidate) item = candidate end }, { __index = build.itemsTab })
+	local copyName = IS_POE2 and "CopyAnointsAndAugments" or "CopyAnointsAndEldritchImplicits"
+	tab[copyName] = function(self, candidate, ...)
+		build.itemsTab[copyName](self, candidate, ...)
+		candidate.enchantModLines = copyTableSafe(candidate.enchantModLines, false, true)
+	end
+	tab:CreateDisplayItemFromRaw(p.raw, p.normalise ~= false)
+	if not item then return null end
+	M._draft.sequence = M._draft.sequence + 1
+	local id = __reduxEngineId .. ":" .. M._draft.sequence
+	local entry = { id = id, item = item, revision = 0 }
+	M._draft.entries[id], M._draft.byItem[item] = entry, entry
+	M._draft.count = M._draft.count + 1
+	local ok, result = pcall(M._draft.snapshot, entry)
+	if not ok then M._draft.remove(entry); error(result, 0) end
+	if M._draft.count > 64 then
+		local oldest
+		for _, candidate in pairs(M._draft.entries) do
+			if not oldest or candidate.lastUsed < oldest.lastUsed then oldest = candidate end
+		end
+		M._draft.remove(oldest)
+	end
+	return result
+end
+
+M.item_draft_get = function(p)
+	return M._draft.snapshot(M._draft.get(p))
+end
+
+M.item_draft_customize = function(p)
+	return M._draft.mutate(p, function(entry)
+		return M._draft.snapshot(entry, M._draft.customize(entry.item, p))
+	end)
+end
+
+M.item_draft_dispose = function(p)
+	local entry = p and M._draft.entries[p.draftId]
+	if entry then M._draft.remove(entry) end
+	return { ok = true }
+end
+
+M.item_draft_commit = function(p)
+	local entry = M._draft.get(p, true)
+	if p.buildRevision ~= build.outputRevision then error("the build changed; refresh the item preview", 0) end
+	local item = entry.item
+	local slotName
+	if p.equip then
+		slotName = resolveSlotName(p.slot)
+		if not slotName or not build.itemsTab.slots[slotName] then error("select a compatible item slot", 0) end
+		if not build.itemsTab:IsItemValidForSlot(item, slotName) then error(item.name .. " does not fit " .. slotName, 0) end
+	end
+	return M._draft.commit(entry, slotName)
 end
 
 -- PoB's Ctrl+D: whether item tooltips carry the "removing this item" lines.
@@ -4349,27 +4496,20 @@ M.item_edit = function(p)
 		if not build.itemsTab.items[tonumber(p.itemId)] then error("unknown item id", 0) end
 		item.id = tonumber(p.itemId)
 	end
-	build.itemsTab:AddItem(item, true)
-	build.itemsTab:PopulateSlots()
-	build.itemsTab:AddUndoState()
-	refresh()
+	addItem(item)
 	return { ok = true, itemId = item.id, name = item.name }
 end
 
 local requireItem, commitItemEdit
 do
-	local requests = setmetatable({}, { __mode = "k" })
-	local drafts = setmetatable({}, { __mode = "k" })
-	requireItem = function(p)
+	requireItem = function(p, savedOnly)
 		ensureBuild(p)
+		if p and p.draftId ~= nil then
+			if savedOnly then error("use item_draft_customize to edit previews", 0) end
+			return M._draft.get(p).item
+		end
 		if p and p.raw ~= nil then
-			if p.itemId ~= nil then error("provide raw or itemId, not both", 0) end
-			if not requests[p] then
-				if type(p.raw) ~= "string" then error("raw item text is required", 0) end
-				requests[p] = resolveItem({ raw = p.raw })
-				drafts[requests[p]] = true
-			end
-			return requests[p]
+			error("create an item draft before customizing raw text", 0)
 		end
 		local item = build.itemsTab.items[tonumber(p and p.itemId) or -1]
 		if not item then error("unknown item id " .. tostring(p and p.itemId), 0) end
@@ -4377,7 +4517,7 @@ do
 	end
 	commitItemEdit = function(item)
 		item:BuildAndParseRaw()
-		if drafts[item] then return end
+		if M._draft.byItem[item] then return end
 		build.itemsTab:PopulateSlots()
 		build.itemsTab:AddUndoState()
 		refresh()
@@ -4487,7 +4627,7 @@ local function makeCraftedItem(base, rarity, title, range)
 	return item
 end
 
-local function equipFirstValid(item, slotName)
+local function firstValidSlot(item, slotName)
 	slotName = resolveSlotName(slotName)
 	if slotName then
 		local slot = build.itemsTab.slots[slotName]
@@ -4495,12 +4635,10 @@ local function equipFirstValid(item, slotName)
 		if not build.itemsTab:IsItemValidForSlot(item, slotName) then
 			error(item.baseName .. " does not fit slot " .. slotName, 0)
 		end
-		slot:SetSelItemId(item.id)
 		return slotName
 	end
 	for _, slot in ipairs(build.itemsTab.orderedSlots) do
 		if not slot.inactive and build.itemsTab:IsItemValidForSlot(item, slot.slotName) then
-			slot:SetSelItemId(item.id)
 			return slot.slotName
 		end
 	end
@@ -4512,11 +4650,7 @@ M.craft_item = function(p)
 	if not p or not p.type or not p.baseName then error("params.type and params.baseName are required", 0) end
 	local entry = findBase(p.type, p.baseName)
 	local item = makeCraftedItem(entry, p.rarity, p.title)
-	build.itemsTab:AddItem(item, true)
-	if p.equip then equipFirstValid(item) end
-	build.itemsTab:PopulateSlots()
-	build.itemsTab:AddUndoState()
-	refresh()
+	addItem(item, p.equip and firstValidSlot(item) or nil)
 	return { ok = true, itemId = item.id, name = item.name, crafted = item.crafted == true }
 end
 
@@ -4735,12 +4869,9 @@ M.craft_rare = function(p)
 		item:UpdateRunes()
 	end
 	item:BuildAndParseRaw()
-	build.itemsTab:AddItem(item, true)
 	local slotName
-	if p.equip ~= false then slotName = equipFirstValid(item, p.slot) end
-	build.itemsTab:PopulateSlots()
-	build.itemsTab:AddUndoState()
-	refresh()
+	if p.equip ~= false then slotName = firstValidSlot(item, p.slot) end
+	addItem(item, slotName)
 	local lines = array({})
 	for _, m in ipairs(item.explicitModLines) do lines[#lines + 1] = m.line end
 	return {
@@ -5019,9 +5150,7 @@ M.item_runes = function(p)
 	return { socketCount = sockets, runes = runes, options = options }
 end
 
-M.set_item_rune = function(p)
-	ensureBuild()
-	local item = requireItem(p)
+M._draft.setters.rune = function(item, p)
 	local index = tonumber(p and p.index)
 	if not index or index % 1 ~= 0 or index < 1 or index > (item.itemSocketCount or 0) then error("rune index out of range", 0) end
 	local valid = false
@@ -5034,6 +5163,7 @@ M.set_item_rune = function(p)
 	commitItemEdit(item)
 	return M.item_runes(p)
 end
+M.set_item_rune = function(p) return M._draft.setters.rune(requireItem(p, true), p) end
 
 -- Catalysts (rings/amulets): same list and defaults as ItemsTab's dropdown.
 local catalystNames = {
@@ -5043,9 +5173,7 @@ local catalystNames = {
 	"Necrotic (Minion)",
 }
 
-M.set_item_props = function(p)
-	ensureBuild()
-	local item = requireItem(p)
+M._draft.setters.props = function(item, p)
 	if p.quality ~= nil and item.base and (item.base.quality or (not IS_POE2 and (item.base.weapon or item.base.armour or item.base.flask or item.base.tincture))) then
 		item.quality = math.max(0, math.min(tonumber(p.quality) or 0, 50))
 	end
@@ -5067,6 +5195,7 @@ M.set_item_props = function(p)
 	commitItemEdit(item)
 	return { ok = true }
 end
+M.set_item_props = function(p) return M._draft.setters.props(requireItem(p, true), p) end
 
 local function variantInfo(item)
 	local picks = array({})
@@ -5084,9 +5213,7 @@ M.item_variants = function(p)
 end
 
 -- params: { itemId, picks = { one variant per pick: its index, name or a substring } }
-M.set_item_variant = function(p)
-	ensureBuild()
-	local item = requireItem(p)
+M._draft.setters.variant = function(item, p)
 	if not item.variantList then error(item.name .. " has no variants", 0) end
 	local wanted = type(p.picks) == "table" and p.picks or {}
 	local picks, ordinal = {}, 0
@@ -5100,6 +5227,7 @@ M.set_item_variant = function(p)
 	commitItemEdit(item)
 	return variantInfo(item)
 end
+M.set_item_variant = function(p) return M._draft.setters.variant(requireItem(p, true), p) end
 
 -- ---------------------------------------------------------------------------
 -- PoE1 item shape: influence, sockets and links, and cluster jewel crafting.
@@ -5157,9 +5285,7 @@ M.item_shape = function(p)
 	}
 end
 
-M.set_item_shape = function(p)
-	ensureBuild()
-	local item = requireItem(p)
+M._draft.setters.shape = function(item, p)
 	if p.influences ~= nil then
 		if item.ResetInfluence then item:ResetInfluence() end
 		local byKey = {}
@@ -5197,6 +5323,7 @@ M.set_item_shape = function(p)
 	commitItemEdit(item)
 	return M.item_shape(p)
 end
+M.set_item_shape = function(p) return M._draft.setters.shape(requireItem(p, true), p) end
 
 -- ---------------------------------------------------------------------------
 -- Enchantments (PoE1): ItemsTab:EnchantDisplayItem. An item's enchantments
@@ -5254,9 +5381,7 @@ M.item_enchants = function(p)
 	}
 end
 
-M.set_item_enchant = function(p)
-	ensureBuild()
-	local item = requireItem(p)
+M._draft.setters.enchant = function(item, p)
 	local info = M.item_enchants(p)
 	if not info.available then error("this item has no enchantments", 0) end
 	local slot = tonumber(p.slot) or 1
@@ -5291,6 +5416,7 @@ M.set_item_enchant = function(p)
 	commitItemEdit(item)
 	return M.item_enchants(p)
 end
+M.set_item_enchant = function(p) return M._draft.setters.enchant(requireItem(p, true), p) end
 
 -- ---------------------------------------------------------------------------
 -- Crucible trees (PoE1): ItemsTab:AddCrucibleModifierToDisplayItem. A weapon
@@ -5370,9 +5496,7 @@ M.item_crucible = function(p)
 	}
 end
 
-M.set_item_crucible = function(p)
-	ensureBuild()
-	local item = requireItem(p)
+M._draft.setters.crucible = function(item, p)
 	local pool = build.data.crucible
 	if not pool then error("this game has no crucible mods", 0) end
 	if type(p.selected) ~= "table" then error("params.selected is required", 0) end
@@ -5404,6 +5528,7 @@ M.set_item_crucible = function(p)
 	commitItemEdit(item)
 	return M.item_crucible(p)
 end
+M.set_item_crucible = function(p) return M._draft.setters.crucible(requireItem(p, true), p) end
 
 M.catalyst_info = function(p)
 	ensureBuild()
@@ -5479,11 +5604,8 @@ do
 		return { options = result, total = total }
 	end
 
-	M.item_customize = function(p)
-		local item = requireItem(p)
-		local setters = { props = M.set_item_props, rune = M.set_item_rune, variant = M.set_item_variant,
-			shape = M.set_item_shape, crucible = M.set_item_crucible, enchant = M.set_item_enchant,
-			anoint = M.set_item_anoint, corruption = M.corrupt_item }
+	M._draft.customize = function(item, p)
+		local setters = M._draft.setters
 		local selectedRolls
 		if p.operation == "affix" then
 			local tableName, index = M._affix.resolveSlot(item, p)
@@ -5496,7 +5618,7 @@ do
 				M._affix.applyEdit(item, tableName, index, p.modId, p.range)
 			end
 		elseif setters[p.operation] then
-			setters[p.operation](p)
+			setters[p.operation](item, p)
 		else
 			if p.operation == "normalize" then
 				item:NormaliseQuality()
@@ -5548,6 +5670,7 @@ do
 		end
 		return M.item_customization(p, selectedRolls)
 	end
+	M.item_customize = function(p) return M._draft.customize(requireItem(p, true), p) end
 end
 
 -- ---------------------------------------------------------------------------
@@ -5582,9 +5705,7 @@ M.item_anoints = function(p)
 	return { anointable = anointable and true or false, current = current, slots = slots, nodes = nodes }
 end
 
-M.set_item_anoint = function(p)
-	ensureBuild()
-	local item = requireItem(p)
+M._draft.setters.anoint = function(item, p)
 	local info = M.item_anoints(p)
 	if not info.anointable then error("this item cannot be anointed", 0) end
 	local node
@@ -5599,6 +5720,7 @@ M.set_item_anoint = function(p)
 	commitItemEdit(item)
 	return M.item_anoints(p)
 end
+M.set_item_anoint = function(p) return M._draft.setters.anoint(requireItem(p, true), p) end
 
 -- ---------------------------------------------------------------------------
 -- Corruptions, mirroring ItemsTab:CorruptDisplayItem: corrupted implicits
@@ -5643,9 +5765,7 @@ M.item_corruptions = function(p)
 	}
 end
 
-M.corrupt_item = function(p)
-	ensureBuild()
-	local item = requireItem(p)
+M._draft.setters.corruption = function(item, p)
 	local info = M.item_corruptions(p)
 	if not info.corruptible and not info.corrupted then error("this item cannot be corrupted", 0) end
 	local allowed, groups = {}, {}
@@ -5704,6 +5824,7 @@ M.corrupt_item = function(p)
 	commitItemEdit(item)
 	return { ok = true }
 end
+M.corrupt_item = function(p) return M._draft.setters.corruption(requireItem(p, true), p) end
 
 -- ---------------------------------------------------------------------------
 -- Shared items (main.sharedItemList): PoB stores these in its own settings
@@ -7836,13 +7957,10 @@ M.compare_copy_item = function(p)
 	local raw = theirItem.raw or theirItem:BuildRaw()
 	local item = new("Item"):Item(raw)
 	if not item.base then error("could not read that item", 0) end
-	build.itemsTab:AddItem(item, true)
 	if not build.itemsTab:IsItemValidForSlot(item, slotName) then
 		error(item.name .. " does not fit " .. slotName, 0)
 	end
-	build.itemsTab.slots[slotName]:SetSelItemId(item.id)
-	build.itemsTab:AddUndoState()
-	refresh()
+	addItem(item, slotName)
 	return { ok = true, slot = slotName, itemName = item.name }
 end
 

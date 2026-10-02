@@ -6,6 +6,8 @@
     type CraftBase,
     type ItemCustomization,
     type ItemCustomizationEdit,
+    type ItemDraftPreview,
+    type ItemDraftTarget,
     type ItemDbRow,
     type ItemInfo,
     type ItemSetInfo,
@@ -52,10 +54,11 @@
   let editError = $state<string | null>(null);
   let editBusy = $state(false);
 
-  type Preview = Awaited<ReturnType<typeof engine.itemPreview>> & { text: string; customization: ItemCustomization };
+  type Preview = ItemDraftPreview;
   let preview = $state<Preview | null>(null);
   let previewError = $state<string | null>(null);
   let previewLoading = $state(false);
+  let previewEditing = $state(false);
   let previewCommitting = $state(false);
   let affixPending = $state(false);
   let detailLoading = $state(false);
@@ -72,18 +75,20 @@
   let alive = true;
   const generation = untrack(() => build.info!.generation);
   const previewStale = $derived(preview?.rev !== build.rev);
-  const itemTransitionBusy = $derived(affixPending || previewLoading || previewCommitting || detailLoading);
+  const itemTransitionBusy = $derived(affixPending || previewLoading || previewEditing || previewCommitting || detailLoading);
   const itemBusy = $derived(itemTransitionBusy || build.busy > 0);
 
   onDestroy(() => {
     alive = false;
     previewStamp++;
+    releasePreview(preview);
     clearTimeout(tipTimer);
   });
 
   function discardPreview() {
     previewStamp++;
     pendingPaste = null;
+    releasePreview(preview);
     preview = null;
     previewError = null;
     previewLoading = false;
@@ -142,66 +147,107 @@
     });
   });
 
+  function draftTarget(candidate: Preview): ItemDraftTarget {
+    return { draftId: candidate.draftId, draftRevision: candidate.draftRevision, generation: candidate.generation };
+  }
+
+  function releasePreview(candidate: Preview | null) {
+    if (candidate) void engine.disposeItemDraft(candidate.draftId).catch(() => {});
+  }
+
+  async function publishPreview(
+    result: Preview, stamp: number, differences: boolean | null, preserveScroll = false,
+  ) {
+    while (alive && stamp === previewStamp) {
+      if (result.rev === build.rev && differences === statDiff) {
+        const restoreScroll = holdDetailScroll(preserveScroll ? detailPane : undefined);
+        preview = result;
+        restoreScroll();
+        if (!result.slots.some((s) => s.slot === previewSlot)) previewSlot = result.slots[0]?.slot ?? "";
+        hideTip();
+        return true;
+      }
+      if (result.rev > build.rev) {
+        await build.sync();
+        continue;
+      }
+      differences = statDiff;
+      result = await engine.itemDraft(draftTarget(result));
+    }
+    return false;
+  }
+
   async function requestPreview(
-    text: string, stamp = ++previewStamp, normalise?: boolean, reportUnrecognized = false, updated?: ItemCustomization,
+    text: string, stamp = ++previewStamp, normalise = true, reportUnrecognized = false,
   ) {
     previewLoading = true;
     previewError = null;
+    let created: Preview | null = null;
+    let adopted = false;
     try {
-      if (normalise !== undefined) {
-        const prepared = await engine.prepareItemPreview(text, generation, normalise);
-        if (!alive || stamp !== previewStamp) return false;
-        if (prepared.raw == null) {
-          if (reportUnrecognized) previewError = m.items_text_unrecognized();
-          return false;
-        }
-        text = prepared.raw;
-      }
       if (!text.trim()) throw new Error(m.items_paste_empty());
-      let result: Awaited<ReturnType<typeof engine.itemPreview>>;
-      let customization: ItemCustomization;
-      for (;;) {
-        const showDifferences = statDiff;
-        const revision = build.rev;
-        [result, customization] = await Promise.all([
-          engine.itemPreview(text, generation),
-          updated?.raw === text ? updated : engine.itemCustomization({ raw: text, generation }),
-        ]);
-        if (!alive || stamp !== previewStamp) return false;
-        if (revision !== build.rev || showDifferences !== statDiff) continue;
-        break;
+      const differences = statDiff;
+      created = await engine.createItemDraft(text, generation, normalise);
+      if (!alive || stamp !== previewStamp) return false;
+      if (!created) {
+        if (reportUnrecognized) previewError = m.items_text_unrecognized();
+        return false;
       }
-      const pane = updated && preview ? detailPane : undefined;
-      const restoreScroll = holdDetailScroll(pane);
-      preview = { ...result, text, customization };
-      restoreScroll();
-      if (!result.slots.some((s) => s.slot === previewSlot)) previewSlot = result.slots[0]?.slot ?? "";
-      hideTip();
-      return true;
+      const previous = preview;
+      adopted = await publishPreview(created, stamp, differences);
+      if (adopted) releasePreview(previous);
+      return adopted;
     } catch (e) {
       if (alive && stamp === previewStamp) previewError = String(e);
       return false;
+    } finally {
+      if (created && !adopted) releasePreview(created);
+      if (alive && stamp === previewStamp) previewLoading = false;
+    }
+  }
+
+  async function refreshPreview() {
+    if (!preview || previewLoading || previewEditing || previewCommitting) return;
+    const candidate = preview;
+    const stamp = ++previewStamp;
+    previewLoading = true;
+    previewError = null;
+    try {
+      const differences = statDiff;
+      const result = await engine.itemDraft(draftTarget(candidate));
+      await publishPreview(result, stamp, differences, true);
+    } catch (e) {
+      if (alive && stamp === previewStamp) previewError = String(e);
     } finally {
       if (alive && stamp === previewStamp) previewLoading = false;
     }
   }
 
   async function customizePreview(edit: ItemCustomizationEdit) {
-    if (!preview || previewLoading || previewCommitting) return false;
+    if (!preview || previewLoading || previewEditing || previewCommitting) return false;
+    const candidate = preview;
     captureDetailScroll();
     const stamp = ++previewStamp;
     previewLoading = true;
+    previewEditing = true;
     previewError = null;
+    let updated: Preview | null = null;
     try {
-      const updated = await engine.customizeItem({ raw: preview.text, generation }, edit);
+      const differences = statDiff;
+      updated = await engine.customizeItemDraft(draftTarget(candidate), edit);
       if (alive && stamp === previewStamp) {
-        if (await requestPreview(updated.raw, stamp, undefined, false, updated)) return updated;
+        if (await publishPreview(updated, stamp, differences, true)) return updated.customization;
+      }
+      if (alive && preview?.draftId === updated.draftId) {
+        preview = updated;
       }
       return false;
     } catch (e) {
+      if (alive && updated && preview?.draftId === updated.draftId) preview = updated;
       if (alive && stamp === previewStamp) previewError = String(e);
       return false;
     } finally {
+      previewEditing = false;
       if (alive && stamp === previewStamp) previewLoading = false;
     }
   }
@@ -236,7 +282,7 @@
     if (itemTransitionBusy) return;
     editItemId = null;
     editingPreview = true;
-    editText = preview?.text ?? "";
+    editText = preview?.raw ?? "";
     editError = null;
     editOpen = true;
   }
@@ -251,9 +297,7 @@
     // Clear the committed draft before sync, which can fail independently.
     const result = await build.run(async () => {
       try {
-        return equip
-          ? await engine.equipItemRaw(candidate.text, slot, generation)
-          : await engine.itemEdit(candidate.text, undefined, generation);
+        return await engine.commitItemDraft(draftTarget(candidate), candidate.rev, equip, slot);
       } catch (e) {
         if (alive) previewError = String(e);
         throw e;
@@ -271,7 +315,7 @@
     build.rev;
     statDiff;
     untrack(() => {
-      if (preview && !previewCommitting && !previewLoading) void requestPreview(preview.text);
+      if (preview && !previewCommitting && !previewLoading && !previewEditing) void refreshPreview();
     });
   });
 
@@ -753,7 +797,7 @@
             {/if}
             <ItemCustomizationControls
               data={preview.customization}
-              target={{ raw: preview.text, generation }}
+              target={draftTarget(preview)}
               busy={itemBusy}
               sourceSlot={previewSlot || undefined}
               onchange={customizePreview}

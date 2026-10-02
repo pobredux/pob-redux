@@ -89,7 +89,7 @@
   </div>
   <div class="row">
     {#if data.canQuality}<button class="btn sm" onclick={() => onchange({ operation: "normalize" })}>{m.items_normalize_quality()}</button>{/if}
-    {#if target.raw !== undefined}
+    {#if target.itemId === undefined}
       {#if data.canCopyAnoints}<button class="btn sm" onclick={() => onchange({ operation: "copy_anoints", sourceSlot })}>{m.items_copy_anoints()}</button>{/if}
       {#if data.canCopyAugments}<button class="btn sm" onclick={() => onchange({ operation: "copy_augments", sourceSlot })}>{m.items_copy_augments()}</button>{/if}
     {/if}
@@ -182,7 +182,7 @@
   </details>
 </fieldset>
 
-{#key target.itemId ?? "draft"}
+{#key target.itemId ?? target.draftId ?? "draft"}
   <ItemAdvancedControls {data} {target} busy={controlsBusy} {onchange} />
 {/key}
 

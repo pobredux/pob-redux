@@ -1105,7 +1105,23 @@ export interface ItemRunes {
   options: RuneOption[];
 }
 
-export type ItemTarget = { itemId: number; raw?: never; generation?: number } | { raw: string; itemId?: never; generation: number };
+export interface ItemDraftTarget {
+  draftId: string;
+  draftRevision: number;
+  generation: number;
+}
+
+export interface ItemDraftPreview extends ItemDraftTarget {
+  raw: string;
+  rev: number;
+  tooltip: Tooltip;
+  slots: { slot: string; label: string }[];
+  customization: ItemCustomization;
+}
+
+export type ItemTarget =
+  | { itemId: number; draftId?: never; draftRevision?: never; generation?: number }
+  | (ItemDraftTarget & { itemId?: never });
 export type ItemCustomizationEdit =
   | { operation: "props"; quality?: number; itemLevel?: number; corrupted?: boolean; catalyst?: number; catalystQuality?: number }
   | { operation: "affix"; table: "prefixes" | "suffixes"; index: number; modId: string; range?: number }
@@ -1633,14 +1649,18 @@ export const engine = {
   itemDbList: (opts: { db: "unique" | "rare"; query?: string; type?: string; limit?: number; offset?: number }) =>
     call<{ items: ItemDbRow[]; total: number; offset: number; types: { type: string; count: number }[] }>("item_db_list", opts),
   statDifferences: (show?: boolean) => call<{ show: boolean }>("stat_differences", show === undefined ? undefined : { show }),
-  itemTooltip: (opts: { itemId?: number; db?: "unique" | "rare"; name?: string; raw?: string; slotName?: string | false }) =>
+  itemTooltip: (opts: { itemId?: number; db?: "unique" | "rare"; name?: string; slotName?: string | false }) =>
     call<Tooltip & { rarity: string | null }>("item_tooltip", opts),
-  prepareItemPreview: (raw: string, generation: number, normalise: boolean) =>
-    call<{ raw?: string }>("item_prepare_preview", { raw, generation, normalise }),
-  itemPreview: (raw: string, generation: number) =>
-    call<{ tooltip: Tooltip; slots: { slot: string; label: string }[]; generation: number; rev: number }>("item_preview", { raw, generation }),
+  createItemDraft: (raw: string, generation: number, normalise: boolean) =>
+    call<ItemDraftPreview | null>("item_draft_create", { raw, generation, normalise }),
+  itemDraft: (target: ItemDraftTarget) => call<ItemDraftPreview>("item_draft_get", target),
+  customizeItemDraft: (target: ItemDraftTarget, edit: ItemCustomizationEdit) =>
+    call<ItemDraftPreview>("item_draft_customize", { ...target, ...edit }),
+  disposeItemDraft: (draftId: string) => call<{ ok: boolean }>("item_draft_dispose", { draftId }),
+  commitItemDraft: (target: ItemDraftTarget, buildRevision: number, equip: boolean, slot?: string) =>
+    call<{ ok: boolean; itemId: number; name: string; slot?: string }>("item_draft_commit", { ...target, buildRevision, equip, slot }),
   itemCustomization: (target: ItemTarget) => call<ItemCustomization>("item_customization", target),
-  customizeItem: (target: ItemTarget, edit: ItemCustomizationEdit) => call<ItemCustomization>("item_customize", { ...target, ...edit }),
+  customizeItem: (target: Exclude<ItemTarget, ItemDraftTarget>, edit: ItemCustomizationEdit) => call<ItemCustomization>("item_customize", { ...target, ...edit }),
   itemModifierOptions: (target: ItemTarget, source: "Prefix" | "Suffix", query: string) =>
     call<{ options: { id: string; label: string; level: number }[]; total: number }>("item_modifier_options", { ...target, source, query }),
   /** `variants`: one entry per pick, a variant's name, a substring of it, or its index. */

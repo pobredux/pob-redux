@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use mlua::serde::{DeserializeOptions, SerializeOptions};
 use mlua::{Function, Lua, LuaOptions, LuaSerdeExt, StdLib, Table, Value as LuaValue};
@@ -7,6 +8,8 @@ use serde_json::Value;
 
 use crate::native;
 use crate::{Error, Result};
+
+static ENGINE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 const HOST_LUA: &str = include_str!("../lua/host.lua");
 const BRIDGE_LUA: &str = include_str!("../lua/bridge.lua");
@@ -65,6 +68,12 @@ impl Engine {
         globals.set("__pob_root", slash(&pob_root))?;
         globals.set("__user_dir", slash(&user_dir))?;
         globals.set("__native", native::build_table(&lua, t0)?)?;
+        let epoch = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let sequence = ENGINE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        globals.set("__reduxEngineId", format!("{epoch:x}-{sequence:x}"))?;
 
         lua.load(HOST_LUA).set_name("host.lua").exec()?;
         let boot: Function = globals.get("__pob_boot")?;
