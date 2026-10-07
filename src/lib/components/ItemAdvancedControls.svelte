@@ -3,6 +3,7 @@
   import { engine, type ItemCustomization, type ItemCustomizationEdit, type ItemTarget, type ItemSocket, type AnointInfo } from "$lib/engine.svelte";
   import { m } from "$lib/paraglide/messages";
   import EnchantDialog from "./EnchantDialog.svelte";
+  import SearchSelect from "./SearchSelect.svelte";
 
   let { data, target, busy, onchange }: {
     data: ItemCustomization;
@@ -185,12 +186,14 @@
           <span class="label">{m.items_crucible()}</span>
           <div class="crucnodes">
             {#each crucible.nodes as options, i (i)}
-              <select class="select xs crucsel" title={m.items_crucible_node({ index: i + 1 })} value={crucible.selected[i] ?? ""} onchange={(e) => setCrucible(i, (e.target as HTMLSelectElement).value)}>
-                <option value="">{m.items_crucible_node_empty({ index: i + 1 })}</option>
-                {#each options as o (o.id)}
-                  <option value={o.id}>T{o.tier} · {o.label}</option>
-                {/each}
-              </select>
+              <div class="crucsel">
+                <SearchSelect
+                  value={crucible.selected[i] ?? ""}
+                  options={[{ value: "", label: m.items_crucible_node_empty({ index: i + 1 }) }, ...options.map((o) => ({ value: o.id, label: `T${o.tier} · ${o.label}` }))]}
+                  label={m.items_crucible_node({ index: i + 1 })}
+                  onchange={(id) => setCrucible(i, id)}
+                />
+              </div>
             {/each}
           </div>
         </div>
@@ -198,16 +201,14 @@
       {#if shape.cluster}
         <div class="srow">
           <span class="label">{m.items_cluster()}</span>
-          <select
-            class="select xs"
-            value={shape.cluster.skill ?? ""}
-            onchange={(e) => onchange({ operation: "shape", clusterSkill: (e.target as HTMLSelectElement).value })}
-          >
-            <option value="">{m.items_cluster_default()}</option>
-            {#each shape.cluster.skills as sk (sk.id)}
-              <option value={sk.id}>{sk.name}</option>
-            {/each}
-          </select>
+          <div class="clusterpick">
+            <SearchSelect
+              value={shape.cluster.skill ?? ""}
+              options={[{ value: "", label: m.items_cluster_default() }, ...shape.cluster.skills.map((sk) => ({ value: sk.id, label: sk.name }))]}
+              label={m.items_cluster()}
+              onchange={(skill) => onchange({ operation: "shape", clusterSkill: skill })}
+            />
+          </div>
           <label class="fld-inline" title={m.items_cluster_passives_title()}>
             <span class="label">{m.items_cluster_passives()}</span>
             <input
@@ -265,12 +266,14 @@
         {#each corruptSel as sel, i}
           <div class="crow">
             <span class="clabel">{m.items_implicit_n({ index: i + 1 })}</span>
-            <select class="select grow2" value={sel} onchange={(e) => (corruptSel[i] = (e.target as HTMLSelectElement).value)}>
-              <option value="">{m.items_implicit_none()}</option>
-              {#each corruptOptions(i) as opt (opt.id)}
-                <option value={opt.id}>{opt.label}</option>
-              {/each}
-            </select>
+            <div class="grow2">
+              <SearchSelect
+                value={sel}
+                options={[{ value: "", label: m.items_implicit_none() }, ...corruptOptions(i).map((opt) => ({ value: opt.id, label: opt.label }))]}
+                label={m.items_implicit_n({ index: i + 1 })}
+                onchange={(id) => (corruptSel[i] = id)}
+              />
+            </div>
           </div>
         {/each}
         {#if corruptInfo.ranges.length}
@@ -376,6 +379,11 @@
   .crucsel {
     width: 100%;
     max-width: 440px;
+  }
+  .clusterpick {
+    flex: 1;
+    min-width: 160px;
+    max-width: 320px;
   }
   .socks {
     display: flex;

@@ -23,6 +23,7 @@
   import PobText from "$lib/components/PobText.svelte";
   import { stripPobText } from "$lib/pobtext";
   import ItemCustomizationControls from "$lib/components/ItemCustomizationControls.svelte";
+  import SearchSelect from "$lib/components/SearchSelect.svelte";
   import ItemFrame from "$lib/components/ItemFrame.svelte";
   import PobTooltip from "$lib/components/PobTooltip.svelte";
   import TraderWindow from "$lib/components/TraderWindow.svelte";
@@ -903,19 +904,24 @@
         {/if}
         <div class="crow">
           <span class="clabel">{m.items_type()}</span>
-          <select class="select" bind:value={craftType} onchange={() => (craftBase = craftData?.bases[craftType]?.[0]?.name ?? "")}>
-            {#each craftData?.types ?? [] as t}
-              <option value={t}>{t}</option>
-            {/each}
-          </select>
+          <SearchSelect
+            value={craftType}
+            options={(craftData?.types ?? []).map((t) => ({ value: t, label: t }))}
+            label={m.items_type()}
+            onchange={(t) => {
+              craftType = t;
+              craftBase = craftData?.bases[t]?.[0]?.name ?? "";
+            }}
+          />
         </div>
         <div class="crow">
           <span class="clabel">{m.items_base()}</span>
-          <select class="select" bind:value={craftBase}>
-            {#each craftData?.bases[craftType] ?? [] as b (b.name)}
-              <option value={b.name}>{b.name}{b.subType ? ` (${b.subType})` : ""}</option>
-            {/each}
-          </select>
+          <SearchSelect
+            value={craftBase}
+            options={(craftData?.bases[craftType] ?? []).map((b) => ({ value: b.name, label: b.subType ? `${b.name} (${b.subType})` : b.name }))}
+            label={m.items_base()}
+            onchange={(b) => (craftBase = b)}
+          />
         </div>
         <div class="crow">
           <span class="clabel"></span>

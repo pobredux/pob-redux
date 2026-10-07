@@ -2,6 +2,7 @@
   import { engine, type ItemCustomization, type ItemCustomizationEdit, type ItemTarget } from "$lib/engine.svelte";
   import ItemAdvancedControls from "./ItemAdvancedControls.svelte";
   import ItemAffixSelector from "./ItemAffixSelector.svelte";
+  import SearchSelect from "./SearchSelect.svelte";
   import { m } from "$lib/paraglide/messages";
 
   let { data, target, busy = false, sourceSlot, onchange, onpendingchange }: {
@@ -15,6 +16,9 @@
 
   let changingAffix = $state(false);
   const controlsBusy = $derived(busy || changingAffix);
+  const runeOptions = $derived(
+    data.runes.options.map((opt) => ({ value: opt.name, label: opt.name === "None" ? m.items_empty_socket() : `${opt.name} · ${opt.label ?? opt.lines[0] ?? ""}` })),
+  );
 
   function beginAffixChange(): boolean {
     if (controlsBusy) return false;
@@ -102,11 +106,12 @@
   {#if data.runes.socketCount > 0}
     <div class="label">{m.items_runes()}</div>
     {#each data.runes.runes as rune, index}
-      <select class="select" aria-label={m.items_rune_number({ index: index + 1 })} value={rune} onchange={(e) => onchange({ operation: "rune", index: index + 1, name: e.currentTarget.value })}>
-        {#each data.runes.options as opt (opt.name)}
-          <option value={opt.name}>{opt.name === "None" ? m.items_empty_socket() : `${opt.name} · ${opt.label ?? opt.lines[0] ?? ""}`}</option>
-        {/each}
-      </select>
+      <SearchSelect
+        value={rune}
+        options={runeOptions}
+        label={m.items_rune_number({ index: index + 1 })}
+        onchange={(name) => onchange({ operation: "rune", index: index + 1, name })}
+      />
     {/each}
   {/if}
 
@@ -130,12 +135,13 @@
   {/if}
 
   {#if data.catalyst.usable}
-    <label>{m.items_catalyst()}
-      <select class="select" value={data.catalyst.catalyst} onchange={(e) => onchange({ operation: "props", catalyst: Number(e.currentTarget.value) })}>
-        <option value="0">{m.items_catalyst_none()}</option>
-        {#each data.catalyst.names as name, i}<option value={i + 1}>{name}</option>{/each}
-      </select>
-    </label>
+    <div class="label">{m.items_catalyst()}</div>
+    <SearchSelect
+      value={String(data.catalyst.catalyst)}
+      options={[{ value: "0", label: m.items_catalyst_none() }, ...data.catalyst.names.map((name, i) => ({ value: String(i + 1), label: name }))]}
+      label={m.items_catalyst()}
+      onchange={(v) => onchange({ operation: "props", catalyst: Number(v) })}
+    />
     {#if data.catalyst.catalyst > 0}
       <label>{m.items_catalyst_quality_title()} <input class="input num" type="number" min="0" max="100" value={data.catalyst.quality} onchange={(e) => onchange({ operation: "props", catalystQuality: Number(e.currentTarget.value) })} /></label>
     {/if}

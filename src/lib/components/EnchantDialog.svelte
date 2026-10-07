@@ -1,6 +1,7 @@
 <script lang="ts">
   import { engine, type ItemEnchants, type ItemTarget, type ItemCustomizationEdit } from "$lib/engine.svelte";
   import { m } from "$lib/paraglide/messages";
+  import SearchSelect from "./SearchSelect.svelte";
 
   let { target, revision, busy, onchange, onclose }: {
     target: ItemTarget;
@@ -60,14 +61,17 @@
       {:else}
         <div class="filters">
           {#if info?.bySkill}
-            <label class="fld-inline">
+            <div class="skillpick">
               <span class="label">{m.enchant_skill()}</span>
-              <select class="select sm" value={skill ?? ""} onchange={(e) => (skill = (e.target as HTMLSelectElement).value)}>
-                {#each info?.skills ?? [] as s}
-                  <option value={s}>{s}</option>
-                {/each}
-              </select>
-            </label>
+              <div class="pick">
+                <SearchSelect
+                  value={skill ?? ""}
+                  options={(info?.skills ?? []).map((s) => ({ value: s, label: s }))}
+                  label={m.enchant_skill()}
+                  onchange={(s) => (skill = s)}
+                />
+              </div>
+            </div>
           {/if}
           <label class="fld-inline">
             <span class="label">{m.enchant_source()}</span>
@@ -170,6 +174,14 @@
     align-items: center;
     flex-wrap: wrap;
     gap: 8px;
+  }
+  .skillpick {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .pick {
+    width: 240px;
   }
   .filters .grow {
     flex: 1;
