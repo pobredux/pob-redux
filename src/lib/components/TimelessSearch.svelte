@@ -13,13 +13,24 @@
 
   let { onclose }: { onclose: () => void } = $props();
 
+  const LEAGUE_KEY = "pob-redux:trade-league";
+
+  function savedLeague() {
+    try {
+      return localStorage.getItem(LEAGUE_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  }
+
   let info = $state<TimelessInfo | null>(null);
   let jewelType = $state(2);
   let conqueror = $state(1);
   let socket = $state(0);
   let allocatedOnly = $state(false);
   let reach = $state(0);
-  let league = $state("Standard");
+  let league = $state(savedLeague());
+  let leagues = $state<{ id: string; text: string }[] | null>(null);
   let search = $state("");
   let wanted = $state<(TimelessWant & { name: string })[]>([]);
   let keep = $state<string[]>([]);
@@ -46,6 +57,19 @@
         if (!s && r.sockets.length) socket = (r.sockets.find((x) => x.allocated) ?? r.sockets[0]).id;
       })
       .catch((e) => (build.error = String(e)));
+  });
+
+  $effect(() => {
+    engine
+      .tradeLeagues()
+      .then((r) => {
+        leagues = r.leagues;
+        if (!r.leagues.some((l) => l.id === league) && r.leagues.length) league = r.leagues[0].id;
+      })
+      .catch(() => {
+        leagues = null;
+        if (!league) league = "Standard";
+      });
   });
 
   // The wanted list is written against one jewel's node ids, so it cannot
@@ -141,6 +165,9 @@
 
   async function trade() {
     if (!tradeSeeds.length) return;
+    try {
+      localStorage.setItem(LEAGUE_KEY, league);
+    } catch {}
     try {
       const r = await engine.timelessTradeUrl({ jewelType, seeds: tradeSeeds, conqueror, league });
       await tradeWindow.open(r.url);
@@ -326,7 +353,15 @@
 
     <div class="acts">
       {#if result && result.results.length}
-        <input class="input sm lg" bind:value={league} title={m.timeless_league_title()} />
+        {#if leagues}
+          <select class="select sm lg" bind:value={league} title={m.timeless_league_title()}>
+            {#each leagues as l (l.id)}
+              <option value={l.id}>{l.text}</option>
+            {/each}
+          </select>
+        {:else}
+          <input class="input sm lg" bind:value={league} title={m.timeless_league_title()} />
+        {/if}
         <button class="btn sm ghost" onclick={copySeeds}>{m.timeless_copy_seeds()}</button>
         <button class="btn sm" onclick={trade} title={m.timeless_trade_title()}>
           {m.timeless_trade({ count: tradeSeeds.length })}
