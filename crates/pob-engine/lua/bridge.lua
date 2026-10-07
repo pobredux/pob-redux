@@ -3124,6 +3124,8 @@ function itemUtil.resolveSlotName(name)
 	for slotName in pairs(build.itemsTab.slots) do
 		if slotName:lower():gsub("[%s_%-]", "") == norm then return slotName end
 	end
+	local nodeId = norm:match("^socket#?(%d+)$") or norm:match("^#?(%d+)$")
+	if nodeId and build.itemsTab.slots["Jewel " .. nodeId] then return "Jewel " .. nodeId end
 	local names = {}
 	for _, slot in ipairs(build.itemsTab.orderedSlots) do
 		if not slot.inactive then names[#names + 1] = slot.slotName end
@@ -3136,6 +3138,10 @@ M.equip_item_raw = function(p)
 	if not p or type(p.text) ~= "string" then error("params.text (raw item text) is required", 0) end
 	local item = new("Item"):Item(p.text)
 	if not item.base then error("could not parse item text (unrecognised base type or format)", 0) end
+	if item.baseName == "Timeless Jewel" and not (item.jewelData and item.jewelData.conqueredBy) then
+		error("this Timeless Jewel has no seed line, so it would change no passive"
+			.. (IS_POE2 and "" or "; use itemText from search_timeless_seeds"), 0)
+	end
 	local slotName = itemUtil.resolveSlotName(p.slot)
 	if slotName and not build.itemsTab:IsItemValidForSlot(item, slotName) then
 		error(item.name .. " does not fit " .. slotName, 0)
@@ -7315,6 +7321,16 @@ timelessUtil.TIMELESS_IGNORED = {
 
 timelessUtil.TIMELESS_TOTALS = { [2] = "Strength", [3] = "Dexterity", [4] = "Devotion" }
 
+-- Must match ModParser's seed patterns, which are what set conqueredBy.
+timelessUtil.TIMELESS_ITEM_LINES = {
+	[1] = { "Bathed in the blood of %d sacrificed in the name of %s", "Vaal" },
+	[2] = { "Commanded leadership over %d warriors under %s", "Karui" },
+	[3] = { "Denoted service of %d dekhara in the akhara of %s", "Maraketh" },
+	[4] = { "Carved to glorify %d new faithful converted by High Templar %s", "Templars" },
+	[5] = { "Commissioned %d coins to commemorate %s", "Eternal Empire" },
+	[6] = { "Remembrancing %d songworthy deeds by the line of %s", "Kalguur" },
+}
+
 -- Legion ids that roll into the "Total <stat>" pseudo-entry.
 timelessUtil.TIMELESS_TOTAL_MEMBERS = {
 	karui_notable_add_strength = true, karui_attribute_strength = true, karui_small_strength = true,
@@ -7366,7 +7382,35 @@ function timelessUtil.wantedId(candidates, wanted, jewelType)
 	for _, c in ipairs(candidates) do
 		if c.id:lower() == want or c.name:lower() == want then return c.id end
 	end
-	error("'" .. tostring(wanted) .. "' is not a node or stat " .. timelessUtil.timelessType(jewelType).label .. " can make", 0)
+	local close = {}
+	for _, c in ipairs(candidates) do
+		local text = (c.name .. " " .. table.concat(c.stats, " ")):lower()
+		local all = true
+		for word in want:gmatch("%w+") do
+			if not text:find(word, 1, true) then all = false break end
+		end
+		if all and #close < 5 then close[#close + 1] = c.name end
+	end
+	error("'" .. tostring(wanted) .. "' is not a node or stat " .. timelessUtil.timelessType(jewelType).label .. " can make"
+		.. (#close > 0 and ("; names that match: " .. table.concat(close, ", "))
+			or "; wanted takes what the jewel makes (list_timeless_options `nodes`), not a passive in range"), 0)
+end
+
+function timelessUtil.currentLeague()
+	if not timelessUtil.league then
+		local ok, r = pcall(M.trade_leagues)
+		timelessUtil.league = ok and r.leagues[1] and r.leagues[1].id or nil
+	end
+	return timelessUtil.league or "Standard"
+end
+
+function timelessUtil.itemText(jewelType, conqueror, seed)
+	local line = timelessUtil.TIMELESS_ITEM_LINES[jewelType]
+	local name = timelessUtil.TIMELESS_CONQUERORS[jewelType][math.max(conqueror, 2)]:match("^(%S+)")
+	return table.concat({
+		"Rarity: Unique", timelessUtil.timelessType(jewelType).label, "Timeless Jewel", "Limited to: 1 Historic",
+		"Radius: Large", "Implicits: 0", line[1]:format(seed, name), "Passives in radius are Conquered by the " .. line[2], "Historic",
+	}, "\n")
 end
 
 function timelessUtil.pathCost(nodeId)
@@ -7964,18 +8008,24 @@ M.timeless_find = function(p)
 	local out = timelessUtil.searchResult(t, math.max(math.min(tonumber(p.limit) or 10, 50), 1))
 	for _, r in ipairs(out.results) do
 		r.changes = timelessUtil.timelessChanges(t, r.seed)
+		r.itemText = timelessUtil.itemText(jewelType, conqueror, r.seed)
 	end
+	out.slot = "Jewel " .. t.socket
 	local radius = array({})
 	for _, n in ipairs(timelessUtil.timelessRadius(tree, t.socket)) do
 		if n.notable or n.keystone then radius[#radius + 1] = n end
 	end
 	out.radius = radius
 	out.conqueror = timelessUtil.TIMELESS_CONQUERORS[jewelType][conqueror]
-	if p.league and #out.results > 0 then
+	if #out.results > 0 then
 		local seeds = {}
 		for i = 1, math.min(#out.results, 10) do seeds[i] = out.results[i].seed end
-		local ok, trade = pcall(M.timeless_trade_url, { jewelType = jewelType, conqueror = conqueror, seeds = seeds, league = p.league })
-		if ok then out.tradeUrl = trade.url end
+		local league = p.league or timelessUtil.currentLeague()
+		local ok, trade = pcall(M.timeless_trade_url, { jewelType = jewelType, conqueror = conqueror, seeds = seeds, league = league })
+		if ok then
+			out.tradeUrl = trade.url
+			out.tradeLeague = league
+		end
 	end
 	return out
 end

@@ -735,7 +735,7 @@ fn adapt_for_poe1(defs: &mut Vec<ToolDef>) {
     });
     defs.push(ToolDef {
         name: "search_timeless_seeds",
-        description: "Search every seed of a timeless jewel in one socket, as the Tree view's timeless jewel search does, and rank the seeds by the summed weight of what they make in the radius. Each `wanted` entry names a node or stat from list_timeless_options with a `weight` per hit (default 1), `weight2` for a Glorious Vanity node's second stat, and `min`, the least summed weight a seed must reach for that entry. Each result has `seed`, `weight`, `nodes` (which passives made each wanted entry) and `changes`, one line per notable in range: \"Notable -> New notable: stats\" when the seed replaces it, \"Notable gains: stats\" when it adds to it. `radius` lists the notables and keystones in range with `cost`, the points to allocate each now. With `league`, `tradeUrl` searches the trade site for the top 10 seeds. Equips nothing: to see the build's numbers with a seed, equip the jewel with equip_item_raw.".into(),
+        description: "Search every seed of a timeless jewel in one socket, as the Tree view's timeless jewel search does, and rank the seeds by the summed weight of what they make in the radius. Each `wanted` entry names a node or stat from list_timeless_options with a `weight` per hit (default 1), `weight2` for a Glorious Vanity node's second stat, and `min`, the least summed weight a seed must reach for that entry. Each result has `seed`, `weight`, `nodes` (which passives made each wanted entry) and `changes`, one line per notable in range: \"Notable -> New notable: stats\" when the seed replaces it, \"Notable gains: stats\" when it adds to it. Each result also has `itemText`, the jewel with that seed; with conqueror any it names the first conqueror, which decides only a keystone in range. `radius` lists the notables and keystones in range with `cost`, the points to allocate each now. `tradeUrl` searches the trade site for the top 10 seeds in `tradeLeague`; give the user this link rather than building one. Equips nothing: to see the build's numbers with a seed, pass its `itemText` and the result's `slot` to equip_item_raw, never jewel text written by hand.".into(),
         schema: obj(
             json!({
                 "jewel": timeless_jewel(),
@@ -759,7 +759,7 @@ fn adapt_for_poe1(defs: &mut Vec<ToolDef>) {
                 "taken_only": prop("boolean", "Count only allocated passives, plus those within `reach` points"),
                 "reach": prop("integer", "With taken_only: also count passives this many points away (default 0)"),
                 "limit": prop("integer", "How many seeds to return (default 10, at most 50)"),
-                "league": prop("string", "Trade league for `tradeUrl`, such as \"Standard\"; leave out for no trade link"),
+                "league": prop("string", "Trade league for `tradeUrl`, exactly as the user names it (default: the current league)"),
             }),
             &["jewel", "socket", "wanted"],
         ),
@@ -767,7 +767,7 @@ fn adapt_for_poe1(defs: &mut Vec<ToolDef>) {
         read_only: true,
         destructive: false,
         idempotent: false,
-        open_world: false,
+        open_world: true,
         slow: false,
     });
     for d in defs.iter_mut() {

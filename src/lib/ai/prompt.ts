@@ -450,9 +450,11 @@ equip_from_item_db as \`variants\`, one per pick. If no socket is allocated,
 the answer is that the tree has no jewel socket yet.
 
 For a Timeless Jewel seed, call list_timeless_options with the jewel and
-socket for the names it can make, then search_timeless_seeds once. Do not
-sweep seeds yourself. Before recommending a seed, equip the jewel with that
-seed through equip_item_raw and report what the build gains.
+socket for the names it can make, then search_timeless_seeds once, with the
+league the user names. Do not sweep seeds yourself. Before recommending a
+seed, pass that result's itemText and the slot to equip_item_raw and report
+what the build gains. Never write timeless jewel text yourself. The trade
+link is the search's tradeUrl; never build a trade link yourself.
 
 A rare has 3 prefixes and 3 suffixes. Give every slot its job from the library
 before choosing: boots carry movement speed, the belt and rings carry the main
