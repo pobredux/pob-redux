@@ -635,7 +635,7 @@
     <select class="select" class:off={s.active === false && s.itemId !== 0} value={s.itemId} onchange={(e) => equipSlot(s.slot, e)} disabled={itemBusy} style:color={rarityColor[s.itemRarity ?? ""] ?? undefined}>
       <option value={0}>—</option>
       {#each items.filter((it) => it.compatibleSlots.includes(s.slot)) as it}
-        <option value={it.id}>{it.name}</option>
+        <option value={it.id} style:color={rarityColor[it.rarity ?? ""] ?? undefined}>{it.name}</option>
       {/each}
     </select>
     <button
