@@ -6136,7 +6136,7 @@ M.trade_leagues = function()
 end
 
 -- PoE1 only: the host fetches the character from pathofexile.com and PoB's ImportTab builds it.
-M.import_character = function(p)
+function cmpUtil.characterData(p)
 	if IS_POE2 then error("importing a character by account name works for Path of Exile 1 only", 0) end
 	if not p or type(p.character) ~= "table" or type(p.passives) ~= "string" or type(p.items) ~= "string" then
 		error("params.character, params.passives and params.items are required", 0)
@@ -6146,22 +6146,174 @@ M.import_character = function(p)
 	if type(passives) ~= "table" or type(items) ~= "table" then
 		error("the character data from pathofexile.com could not be read", 0)
 	end
-	main:SetMode("BUILD", false, (type(p.name) == "string" and p.name) or p.character.name or "Imported character")
-	frame()
-	build = main.modes["BUILD"]
-	ensureBuild()
+	return passives, items
+end
+
+function cmpUtil.importCharacterParts(p, passives, items, tree, gear)
 	local importTab = build.importTab
 	passives.bandit_choice = passives.bandit_choice or build.configTab.input.bandit
 	passives.pantheon_major = passives.pantheon_major or build.configTab.input.pantheonMajorGod
 	passives.pantheon_minor = passives.pantheon_minor or build.configTab.input.pantheonMinorGod
-	local treeData = copyTable(p.character)
-	treeData.passives = passives
-	treeData.jewels = passives.items
-	importTab:ImportPassiveTreeAndJewels(treeData, true)
-	local gearData = copyTable(p.character)
-	gearData.equipment = items.items
-	gearData.guardian = items.guardian
-	importTab:ImportItemsAndSkills(gearData, true, true, false)
+	if tree then
+		local treeData = copyTable(p.character)
+		treeData.passives = passives
+		treeData.jewels = passives.items
+		importTab:ImportPassiveTreeAndJewels(treeData, tree.deleteJewels)
+	end
+	if gear then
+		local gearData = copyTable(p.character)
+		gearData.equipment = items.items
+		gearData.guardian = items.guardian
+		importTab:ImportItemsAndSkills(gearData, gear.deleteEquipment, gear.deleteSkills, gear.ignoreWeaponSwap)
+	end
+end
+
+M.import_character = function(p)
+	local passives, items = cmpUtil.characterData(p)
+	main:SetMode("BUILD", false, (type(p.name) == "string" and p.name) or p.character.name or "Imported character")
+	frame()
+	build = main.modes["BUILD"]
+	ensureBuild()
+	cmpUtil.importCharacterParts(p, passives, items, { deleteJewels = true }, { deleteEquipment = true, deleteSkills = true, ignoreWeaponSwap = false })
+	refresh()
+	return M.get_build()
+end
+
+M.import_character_into = function(p)
+	ensureBuild()
+	local passives, items = cmpUtil.characterData(p)
+	if not p.tree and not p.gear then error("choose the passive tree, the items and skills, or both", 0) end
+	cmpUtil.importCharacterParts(p, passives, items,
+		p.tree and { deleteJewels = p.deleteJewels == true } or nil,
+		p.gear and { deleteEquipment = p.deleteEquipment == true, deleteSkills = p.deleteSkills == true, ignoreWeaponSwap = p.ignoreWeaponSwap == true } or nil)
+	build.itemsTab:AddUndoState()
+	build.modFlag = true
+	refresh()
+	return M.get_build()
+end
+
+function cmpUtil.copyItem(theirs)
+	local item = new("Item"):Item(theirs.raw or theirs:BuildRaw())
+	if not item.base then return nil end
+	local itemsTab = build.itemsTab
+	if item.uniqueID then
+		for id, existing in pairs(itemsTab.items) do
+			-- As PoB's own re-import does: the game's item id finds the copy the build already holds.
+			if existing.uniqueID == item.uniqueID then
+				item.id = id
+				itemsTab.items[id] = item
+				item:BuildModList()
+				return item
+			end
+		end
+	end
+	itemsTab:AddItem(item, true)
+	return item
+end
+
+function cmpUtil.socketKey(group)
+	local names = {}
+	for _, gem in ipairs(group.gemList or {}) do names[#names + 1] = gem.nameSpec or "" end
+	return (group.slot or "") .. "|" .. table.concat(names, ",")
+end
+
+-- poe.ninja hands over a whole PoB code rather than GGG's character data, so the re-import copies its parts across.
+M.merge_build = function(p)
+	ensureBuild()
+	p = p or {}
+	if not p.tree and not p.gear then error("choose the passive tree, the items and skills, or both", 0) end
+	local xml = p.xml or (p.code and decodeCode(p.code))
+	if type(xml) ~= "string" or xml == "" then error("params.code or params.xml is required", 0) end
+	local root = IS_POE2 and "PathOfBuilding2" or "PathOfBuilding"
+	if not xml:find("<" .. root .. "[%s>]") then
+		error("that build is not a " .. (IS_POE2 and "Path of Exile 2" or "Path of Exile 1") .. " build", 0)
+	end
+	local ok, entry = pcall(function() return new("CompareEntry"):CompareEntry(xml, "Import") end)
+	if not ok or not entry or not entry.itemsTab then
+		error("could not read that build" .. (ok and "" or (": " .. tostring(entry))), 0)
+	end
+	local itemsTab = build.itemsTab
+	if entry.characterLevel then
+		build.characterLevel = entry.characterLevel
+		build.characterLevelAutoMode = false
+	end
+
+	if p.tree then
+		if p.deleteJewels then
+			for _, slot in pairs(itemsTab.slots) do
+				local item = slot.nodeId and slot.selItemId ~= 0 and itemsTab.items[slot.selItemId]
+				if item then itemsTab:DeleteItem(item, true) end
+			end
+		end
+		local node = { elem = "Spec" }
+		entry.treeTab.specList[entry.treeTab.activeSpec]:Save(node)
+		for _, child in ipairs(node) do
+			if child.elem == "Sockets" then
+				for _, socket in ipairs(child) do
+					local theirs = entry.itemsTab.items[tonumber(socket.attrib.itemId) or 0]
+					local mine = theirs and cmpUtil.copyItem(theirs)
+					socket.attrib.itemId = tostring(mine and mine.id or 0)
+				end
+			end
+		end
+		local active = build.treeTab.activeSpec
+		local spec = new("PassiveSpec"):PassiveSpec(build, node.attrib.treeVersion or build.spec.treeVersion)
+		spec:Load(node, build.dbFileName)
+		spec.title = build.treeTab.specList[active].title
+		build.treeTab.specList[active] = spec
+		build.treeTab:SetActiveSpec(active)
+		if spec.PostLoad then spec:PostLoad() end
+	end
+
+	if p.gear then
+		if p.deleteEquipment then
+			for _, slot in pairs(itemsTab.slots) do
+				local item = not slot.nodeId and slot.selItemId ~= 0 and itemsTab.items[slot.selItemId]
+				if item then itemsTab:DeleteItem(item, true) end
+			end
+		end
+		for name, theirSlot in pairs(entry.itemsTab.slots) do
+			local theirs = not theirSlot.nodeId and theirSlot.selItemId ~= 0 and entry.itemsTab.items[theirSlot.selItemId]
+			if theirs and itemsTab.slots[name] and not (p.ignoreWeaponSwap and name:find("Swap")) then
+				local mine = cmpUtil.copyItem(theirs)
+				if mine then itemsTab.slots[name]:SetSelItemId(mine.id) end
+			end
+		end
+
+		local skillsTab = build.skillsTab
+		if p.deleteSkills then
+			wipeTable(skillsTab.socketGroupList)
+			skillsTab.controls.groupList.selIndex = nil
+			skillsTab.controls.groupList.selValue = nil
+		end
+		local have = {}
+		for _, group in ipairs(skillsTab.socketGroupList) do have[cmpUtil.socketKey(group)] = true end
+		local saved = { elem = "Skills" }
+		entry.skillsTab:Save(saved)
+		local before = #skillsTab.socketGroupList
+		for _, set in ipairs(saved) do
+			if set.elem == "SkillSet" and tonumber(set.attrib.id) == entry.skillsTab.activeSkillSetId then
+				for _, skill in ipairs(set) do
+					skillsTab:LoadSkill(skill, skillsTab.activeSkillSetId)
+					local added = skillsTab.socketGroupList[#skillsTab.socketGroupList]
+					if #skillsTab.socketGroupList > before and have[cmpUtil.socketKey(added)] then
+						table.remove(skillsTab.socketGroupList)
+					else
+						before = #skillsTab.socketGroupList
+					end
+				end
+			end
+		end
+		if p.deleteSkills then
+			build.mainSocketGroup = math.max(1, math.min(entry.mainSocketGroup or 1, #skillsTab.socketGroupList))
+		end
+		skillsTab:SetDisplayGroup()
+	end
+
+	itemsTab:PopulateSlots()
+	itemsTab:AddUndoState()
+	build.buildFlag = true
+	build.modFlag = true
 	refresh()
 	return M.get_build()
 end

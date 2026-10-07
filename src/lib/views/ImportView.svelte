@@ -23,6 +23,7 @@
     ninjaCharacters,
     ninjaCharacterCode,
     type GameCharacter,
+    type ReimportOptions,
     saveGameBuildFiles,
     listGameBuilds,
     setGameBuildMeta,
@@ -670,6 +671,34 @@
     }
   }
 
+  let updating = $state<string | null>(null);
+  let reimport = $state<ReimportOptions>({ tree: true, gear: true, deleteJewels: true, deleteEquipment: true, deleteSkills: true, ignoreWeaponSwap: false });
+
+  async function reimportCharacter(c: CharRow) {
+    const list = shownList;
+    if (!list || charBusy || !build.info) return;
+    charBusy = c.key;
+    try {
+      let r;
+      if (list.source === "ninja") {
+        const code = await ninjaCharacterCode(list.account, c.name, c.leagueUrl);
+        r = await build.run(() => engine.mergeBuild({ code, ...reimport }));
+      } else if (c.ggg) {
+        const ggg = c.ggg;
+        const d = await characterData(charRealm, list.account, c.name);
+        r = await build.run(() => engine.importCharacterInto({ character: ggg, passives: d.passives, items: d.items, ...reimport }));
+      }
+      if (r) {
+        updating = null;
+        build.say(m.import_reimported({ name: c.name }));
+      }
+    } catch (e) {
+      build.error = String(e);
+    } finally {
+      charBusy = null;
+    }
+  }
+
   // A Maxroll guide with more than one PoB link: the user picks which to load.
   let guide = $state<MaxrollGuide | null>(null);
   let guideBusy = $state(false);
@@ -1250,13 +1279,45 @@
               </span>
               <span class="dim small"><span style:color={classColour.get(c.className)}>{c.className}</span> <span class="num">{c.level}</span></span>
               {#if c.status === "listed"}
+                {#if build.info}
+                  <button
+                    class="act"
+                    class:on={updating === c.key}
+                    aria-expanded={updating === c.key}
+                    title={m.import_update_open_title()}
+                    onclick={() => (updating = updating === c.key ? null : c.key)}
+                    disabled={charBusy !== null || build.busy > 0}>{m.import_update_open()}</button
+                  >
+                {/if}
                 <button class="act" onclick={() => importCharacter(c)} disabled={charBusy !== null || build.busy > 0}>
-                  {charBusy === c.key ? m.import_importing() : m.import_import_short()}
+                  {charBusy === c.key && updating !== c.key ? m.import_importing() : m.import_import_short()}
                 </button>
               {:else}
                 <span class="dim small nobuild" title={m.import_no_ninja_build()}>{ninjaReason(c)}</span>
               {/if}
             </div>
+            {#if updating === c.key && build.info}
+              <div class="reimport">
+                <div class="rpart">
+                  <label class="chk small"><input type="checkbox" bind:checked={reimport.tree} /> {m.import_reimport_tree()}</label>
+                  <label class="chk small sub"><input type="checkbox" bind:checked={reimport.deleteJewels} disabled={!reimport.tree} /> {m.import_reimport_delete_jewels()}</label>
+                </div>
+                <div class="rpart">
+                  <label class="chk small"><input type="checkbox" bind:checked={reimport.gear} /> {m.import_reimport_gear()}</label>
+                  <label class="chk small sub"><input type="checkbox" bind:checked={reimport.deleteEquipment} disabled={!reimport.gear} /> {m.import_reimport_delete_equipment()}</label>
+                  <label class="chk small sub"><input type="checkbox" bind:checked={reimport.deleteSkills} disabled={!reimport.gear} /> {m.import_reimport_delete_skills()}</label>
+                  <label class="chk small sub"><input type="checkbox" bind:checked={reimport.ignoreWeaponSwap} disabled={!reimport.gear} /> {m.import_reimport_ignore_swap()}</label>
+                </div>
+                <div class="rgo">
+                  <span class="dim small">{m.import_reimport_into({ name: build.info.name })}</span>
+                  <button
+                    class="btn sm primary"
+                    onclick={() => reimportCharacter(c)}
+                    disabled={(!reimport.tree && !reimport.gear) || charBusy !== null || build.busy > 0}
+                  >{charBusy === c.key ? m.import_updating() : m.import_update()}</button>
+                </div>
+              </div>
+            {/if}
           {/each}
         </div>
       {:else if source === "ninja"}
@@ -1826,6 +1887,41 @@
   }
   .act.danger {
     color: var(--red, #e06c75);
+  }
+  .act.on {
+    background: var(--bg-active);
+    color: var(--fg-0);
+  }
+  .reimport {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0 8px 6px;
+    padding: 8px 10px;
+    border: 1px solid var(--line-1);
+    border-radius: var(--r-1);
+    background: var(--bg-1);
+  }
+  .rpart {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 14px;
+  }
+  .rpart .chk {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--fg-1);
+  }
+  .rpart .chk.sub {
+    color: var(--fg-2);
+  }
+  .rgo {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
   }
   .select.xs,
   .input.xs {

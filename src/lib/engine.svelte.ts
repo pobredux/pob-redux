@@ -236,6 +236,15 @@ export function revealLogs(): Promise<string> {
   return invoke<string>("reveal_logs");
 }
 
+export interface ReimportOptions {
+  tree: boolean;
+  gear: boolean;
+  deleteJewels: boolean;
+  deleteEquipment: boolean;
+  deleteSkills: boolean;
+  ignoreWeaponSwap: boolean;
+}
+
 export interface GameCharacter {
   name: string;
   realm: string;
@@ -1766,6 +1775,10 @@ export const engine = {
   /** PoE1 only. */
   importCharacter: (p: { character: GameCharacter; passives: string; items: string; name?: string }) =>
     call<BuildInfo>("import_character", p),
+  /** PoE1 only. */
+  importCharacterInto: (p: { character: GameCharacter; passives: string; items: string } & ReimportOptions) =>
+    call<BuildInfo>("import_character_into", p),
+  mergeBuild: (p: { code: string } & ReimportOptions) => call<BuildInfo>("merge_build", p),
   exportGameBuild: (p?: { mode?: PlannerMode; author?: string; link?: string; description?: string }) =>
     call<{ files: GameBuildExport[] }>("export_game_build", p ?? {}),
   getParty: () => call<PartyState>("get_party"),
