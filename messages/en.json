@@ -1080,6 +1080,8 @@
   "chat_scroll_end": "Scroll to end",
   "chat_tool_args": "Arguments",
   "chat_tool_result": "Result",
+  "chat_tool_error": "Error",
+  "chat_tool_recovered": "fixed on retry",
   "effort_none": "None",
   "effort_minimal": "Minimal",
   "effort_low": "Low",

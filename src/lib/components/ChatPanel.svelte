@@ -184,6 +184,20 @@
       .map(([k, v]) => `${k}=${typeof v === "object" ? JSON.stringify(v) : String(v)}`)
       .join(" ");
   };
+
+  const recovered = $derived.by(() => {
+    const ids = new Set<string>();
+    chat.turns.forEach((t, i) => {
+      if (t.kind !== "tool" || t.status !== "error") return;
+      if (chat.turns.slice(i + 1).some((u) => u.kind === "tool" && u.name === t.name && u.status === "done")) ids.add(t.id);
+    });
+    return ids;
+  });
+
+  const errorHead = (e: string) => {
+    const head = e.split(/;\s|\n/)[0];
+    return head.length > 160 ? `${head.slice(0, 159)}…` : head;
+  };
 </script>
 
 <svelte:window onkeydown={onWindowKey} />
@@ -292,12 +306,12 @@
             </button>
           </div>
         {:else}
-          <div class="tool" class:err={turn.status === "error"}>
+          <div class="tool" class:err={turn.status === "error"} class:recovered={recovered.has(turn.id)}>
             <button class="tline" aria-expanded={!!expanded[turn.id]} onclick={() => (expanded[turn.id] = !expanded[turn.id])}>
               <span class="ticon"><Icon name={turn.readOnly ? "eye" : "pencil"} size={11} /></span>
               <span class="tname">{turn.name}</span>
               <span class="targs">{summary(turn)}</span>
-              <span class="tstat {turn.status}">{turn.status}</span>
+              <span class="tstat {turn.status}">{recovered.has(turn.id) ? m.chat_tool_recovered() : turn.status}</span>
               <span class={["tcaret", { open: expanded[turn.id] }]}><Icon name="caret-right" size={9} /></span>
             </button>
             {#if expanded[turn.id]}
@@ -307,6 +321,10 @@
                 {#if turn.result !== undefined}
                   <div class="tlabel">{m.chat_tool_result()}</div>
                   <pre>{pretty(turn.result)}</pre>
+                {/if}
+                {#if turn.error}
+                  <div class="tlabel">{m.chat_tool_error()}</div>
+                  <pre>{turn.error}</pre>
                 {/if}
               </div>
             {/if}
@@ -319,7 +337,7 @@
                 <label class="always"><input type="checkbox" bind:checked={chat.allowWrites} /> {m.chat_allow_all()}</label>
               </div>
             {/if}
-            {#if turn.error}<div class="terr">{turn.error}</div>{/if}
+            {#if turn.error && !expanded[turn.id]}<div class="terr">{errorHead(turn.error)}</div>{/if}
           </div>
         {/if}
       {/each}
@@ -730,6 +748,15 @@
   }
   .tstat.error {
     color: var(--bad);
+  }
+  .tool.err.recovered {
+    border-left-color: var(--warn);
+  }
+  .tool.recovered .tstat.error {
+    color: var(--warn);
+  }
+  .tool.recovered .terr {
+    color: var(--fg-3);
   }
   .tstat.awaiting {
     color: var(--warn);
