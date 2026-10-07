@@ -11,6 +11,7 @@
   import { build } from "$lib/state/build.svelte";
   import { game } from "$lib/state/game.svelte";
   import { voice } from "$lib/state/voice.svelte";
+  import { tradeWindow } from "$lib/state/trade.svelte";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
   import { m } from "$lib/paraglide/messages";
 
@@ -194,6 +195,28 @@
     return ids;
   });
 
+  // The model mangles long trade addresses when it copies them, so the button takes the tool's own.
+  const tradeLinks = $derived.by(() => {
+    const out = new Map<number, string>();
+    let url: string | null = null;
+    let lastBot = -1;
+    const close = () => {
+      if (url && lastBot >= 0) out.set(lastBot, url);
+      url = null;
+      lastBot = -1;
+    };
+    chat.turns.forEach((t, i) => {
+      if (t.kind === "user") close();
+      else if (t.kind === "assistant") lastBot = i;
+      else if (t.kind === "tool") {
+        const u = (t.result as { tradeUrl?: unknown } | undefined)?.tradeUrl;
+        if (typeof u === "string" && u.startsWith("https://www.pathofexile.com/trade")) url = u;
+      }
+    });
+    if (!chat.busy) close();
+    return out;
+  });
+
   const errorHead = (e: string) => {
     const head = e.split(/;\s|\n/)[0];
     return head.length > 160 ? `${head.slice(0, 159)}…` : head;
@@ -295,6 +318,11 @@
         {:else if turn.kind === "assistant"}
           <div class="botwrap">
             <div class="turn bot"><Markdown text={turn.text} /></div>
+            {#if tradeLinks.has(i)}
+              <button class="btn sm trade" onclick={() => tradeWindow.open(tradeLinks.get(i)!)} title={tradeLinks.get(i)}>
+                <Icon name="magnifying-glass" size={12} />{m.chat_open_trade()}
+              </button>
+            {/if}
             <button
               class="copy"
               class:done={copied === i}
@@ -635,6 +663,10 @@
   /* The button overlaps the text, so it only appears on hover or focus. */
   .botwrap {
     position: relative;
+  }
+  .trade {
+    margin-top: 8px;
+    gap: 6px;
   }
   .bot {
     color: var(--fg-0);
