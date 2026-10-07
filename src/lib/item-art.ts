@@ -14,6 +14,7 @@ export interface ArtMap {
   buffs?: Record<string, string>;
   buffNames?: Record<string, string>;
   buffVisuals?: Record<string, string>;
+  classIcons?: Record<string, string>;
   files: Record<string, string>;
 }
 
@@ -130,6 +131,25 @@ export async function socketArtUrls(game: Game): Promise<Record<string, string>>
       return url ? [[key, url]] : [];
     }),
   );
+}
+
+// The game names these Icon<attributes>_<ascendancy id>, and a class's own icon is the part before the underscore.
+export async function classIconUrl(game: Game, ascendancyIds: string[], classAscendancyIds: string[]): Promise<string | null> {
+  const map = await artMap(game);
+  const icons = map?.classIcons;
+  if (!map || !icons) return null;
+  const keys = Object.keys(icons);
+  const keyFor = (id: string) => keys.find((k) => k.endsWith(`_${id}`));
+  for (const id of ascendancyIds) {
+    const key = keyFor(id);
+    if (key) return artUrl(map, icons[key]!);
+  }
+  for (const id of classAscendancyIds) {
+    const key = keyFor(id);
+    const prefix = key?.slice(0, key.lastIndexOf("_"));
+    if (prefix && icons[prefix]) return artUrl(map, icons[prefix]!);
+  }
+  return null;
 }
 
 const looseKey = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, "");

@@ -48,6 +48,7 @@
   import { planner, AUTHOR_KEY } from "$lib/state/planner.svelte";
   import { game } from "$lib/state/game.svelte";
   import Icon from "$lib/components/Icon.svelte";
+  import ClassIcon from "$lib/components/ClassIcon.svelte";
   import Kbd from "$lib/components/Kbd.svelte";
   import { modKey } from "$lib/keys";
   import { m } from "$lib/paraglide/messages";
@@ -171,6 +172,9 @@
     return map;
   });
 
+  // The open build's version keeps its tree in loadTree's one-entry cache.
+  const artVersion = $derived(build.tree?.treeVersion ?? build.meta?.latestTreeVersion ?? null);
+
   // As PoB colours classes: by their strongest base attributes.
   const ATTR_COLOUR: Record<string, string> = {
     "100": "var(--c-life)",
@@ -179,8 +183,11 @@
     "110": "var(--c-rare)",
     "101": "var(--c-chaos)",
     "011": "var(--c-es)",
-    "111": "var(--c-normal)",
+    "111": "color-mix(in oklab, var(--c-normal) 45%, var(--c-life))",
   };
+  // A wider hue step would cross into a neighbouring class's hue, so siblings also step in lightness.
+  const ASCENDANCY_HUE_STEP = 12;
+  const ASCENDANCY_LIGHTNESS_STEP = 0.07;
   const classColour = $derived.by(() => {
     const map = new Map<string, string>();
     for (const c of build.classes) {
@@ -189,13 +196,17 @@
       const colour = ATTR_COLOUR[attrs.map((v) => (v === top ? 1 : 0)).join("")];
       if (!top || !colour) continue;
       map.set(c.name, colour);
-      for (const a of c.ascendancies) {
-        map.set(a.name, colour);
-        if (a.internalId) map.set(a.internalId, colour);
-      }
+      c.ascendancies.forEach((a, i, all) => {
+        const t = all.length > 1 ? (2 * i) / (all.length - 1) - 1 : 0;
+        const shade = `oklch(from ${colour} calc(l - ${ASCENDANCY_LIGHTNESS_STEP * t}) c calc(h + ${ASCENDANCY_HUE_STEP * t}))`;
+        map.set(a.name, shade);
+        if (a.internalId) map.set(a.internalId, shade);
+      });
     }
     return map;
   });
+  const buildColour = (cls: string | null | undefined, asc: string | null | undefined) =>
+    classColour.get(asc ?? "") ?? classColour.get(cls ?? "");
 
   const recentEntries = $derived(recent.map((p) => builds.find((b) => b.path === p)).filter((b): b is BuildEntry => !!b));
 
@@ -920,10 +931,21 @@
       />
     {:else}
       <button class="name" onclick={() => openBuild(b)} disabled={build.busy > 0}>
-        {#if showFolder && b.folder}<span class="dim">{b.folder}/</span>{/if}{b.name}
+        {#if artVersion && b.class_name}
+          <ClassIcon
+            game={game.current}
+            version={artVersion}
+            className={ascendByKey.get(b.ascend_class_name ?? "")?.cls ?? b.class_name}
+            ascendancy={ascendByKey.get(b.ascend_class_name ?? "")?.asc ?? b.ascend_class_name}
+            size={20}
+          />
+        {:else}
+          <span class="noart"></span>
+        {/if}
+        <span class="ntext">{#if showFolder && b.folder}<span class="dim">{b.folder}/</span>{/if}{b.name}</span>
       </button>
       <span class="meta">
-        <span class="cls" style:color={classColour.get(b.class_name ?? "")}>{b.class_name ?? "?"}{#if b.ascend_class_name}<span class="sep">·</span>{b.ascend_class_name}{/if}</span>
+        <span class="cls" style:color={buildColour(b.class_name, b.ascend_class_name)} title={[b.class_name, b.ascend_class_name].filter(Boolean).join(" · ")}>{ascendByKey.get(b.ascend_class_name ?? "")?.asc ?? b.ascend_class_name ?? b.class_name ?? "?"}</span>
         <span class="lvl num dim">L{b.level ?? "?"}</span>
         <span class="date num dim">{fmtDate(b.modified)}</span>
       </span>
@@ -1199,9 +1221,16 @@
                   />
                 {:else}
                   {@const who = gb.ascendancy ? ascendByKey.get(gb.ascendancy) : undefined}
-                  <button class="name" onclick={() => importGameBuildFile(gb.path, gb.name)} disabled={build.busy > 0}>{gb.name}</button>
+                  <button class="name" onclick={() => importGameBuildFile(gb.path, gb.name)} disabled={build.busy > 0}>
+                    {#if artVersion && who}
+                      <ClassIcon game={game.current} version={artVersion} className={who.cls} ascendancy={who.asc} size={20} />
+                    {:else}
+                      <span class="noart"></span>
+                    {/if}
+                    <span class="ntext">{gb.name}</span>
+                  </button>
                   <span class="meta">
-                    <span class="cls" style:color={who ? classColour.get(who.cls) : undefined}>{#if who}{who.cls}<span class="sep">·</span>{who.asc}{/if}</span>
+                    <span class="cls" style:color={who ? buildColour(who.cls, who.asc) : undefined} title={who ? `${who.cls} · ${who.asc}` : undefined}>{who?.asc ?? ""}</span>
                     <span class="lvl"></span>
                     <span class="date num dim">{fmtDate(gb.modified)}</span>
                   </span>
@@ -1273,7 +1302,13 @@
         </div>
         <div class="charlist">
           {#each shownCharacters as c (c.key)}
+            {@const who = ascendByKey.get(c.className) ?? (build.classes.some((k) => k.name === c.className) ? { cls: c.className, asc: null } : undefined)}
             <div class="charrow">
+              {#if artVersion && who}
+                <ClassIcon game={game.current} version={artVersion} className={who.cls} ascendancy={who.asc} size={18} />
+              {:else}
+                <span class="noart small-art"></span>
+              {/if}
               <span class="cname" title={c.updated ? m.import_char_title_saved({ name: c.name, league: c.league, date: shortDate(c.updated) }) : m.import_char_title({ name: c.name, league: c.league })}>
                 {c.name}{#if !charLeague}<span class="dim small cleague">{c.league}</span>{/if}
               </span>
@@ -1812,14 +1847,25 @@
     background: none;
     flex: 1;
     min-width: 0;
-    padding: 7px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 12px;
     color: var(--fg-1);
     text-align: left;
     cursor: pointer;
     font-size: var(--fs-sm);
+  }
+  .ntext {
+    min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  .noart {
+    flex: none;
+    width: 20px;
+    height: 20px;
   }
   .row:hover .name {
     color: var(--fg-0);
@@ -1834,10 +1880,6 @@
   }
   .cls {
     color: var(--c-class);
-  }
-  .sep {
-    margin: 0 5px;
-    color: var(--fg-3);
   }
   .lvl {
     width: 38px;
@@ -1995,6 +2037,10 @@
   }
   .cleague {
     margin-left: 6px;
+  }
+  .noart.small-art {
+    width: 18px;
+    height: 18px;
   }
   .nobuild {
     flex: none;
