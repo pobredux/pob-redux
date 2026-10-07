@@ -40,6 +40,8 @@ export const ALLOWED = new Set([
   // "which jewel", where equipping them one by one would take a dozen.
   "suggest_unique_jewels",
   "suggest_cluster_jewels",
+  "list_timeless_options",
+  "search_timeless_seeds",
   "list_bases",
   "list_affixes",
   // write, approval-gated

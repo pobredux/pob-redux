@@ -49,8 +49,10 @@ const intents: [string, string][] = [
   ["add a gem to the group", "add_gem"],
   ["find an item in the database", "search_item_db"],
   ["undo the last tree change", "tree_undo"],
+  ["find a timeless jewel seed", "search_timeless_seeds"],
 ];
 for (const [query, want] of intents) {
+  if (!defs.some((d) => d.name === want) && !CORE.has(want)) continue;
   const got = findTools(defs, query);
   check(got.some((d) => d.name === want), `"${query}" finds ${want}`, `"${query}" missed ${want}, got: ${got.map((d) => d.name).join(", ") || "nothing"}`);
 }

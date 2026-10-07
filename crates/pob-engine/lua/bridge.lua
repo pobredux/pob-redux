@@ -7338,6 +7338,44 @@ function timelessUtil.timelessType(id)
 	error("jewel type " .. tostring(id) .. " cannot be searched by seed", 0)
 end
 
+function timelessUtil.jewelId(jewel)
+	if jewel == nil then return 1 end
+	if tonumber(jewel) then return tonumber(jewel) end
+	local labels = {}
+	for _, t in ipairs(timelessUtil.TIMELESS_TYPES) do
+		if t.label:lower() == tostring(jewel):lower() then return t.id end
+		labels[#labels + 1] = t.label
+	end
+	error("unknown timeless jewel '" .. tostring(jewel) .. "'; one of: " .. table.concat(labels, ", "), 0)
+end
+
+function timelessUtil.conquerorId(jewelType, conqueror)
+	if conqueror == nil then return 1 end
+	if tonumber(conqueror) then return tonumber(conqueror) end
+	local labels = timelessUtil.TIMELESS_CONQUERORS[jewelType]
+	local want = tostring(conqueror):lower()
+	for i, label in ipairs(labels) do
+		if label:lower() == want or label:lower():sub(1, #want + 1) == want .. " " then return i end
+	end
+	error("unknown conqueror '" .. tostring(conqueror) .. "'; one of: " .. table.concat(labels, ", "), 0)
+end
+
+function timelessUtil.wantedId(candidates, wanted, jewelType)
+	if wanted == nil then error("each wanted entry needs a node", 0) end
+	local want = tostring(wanted):lower()
+	for _, c in ipairs(candidates) do
+		if c.id:lower() == want or c.name:lower() == want then return c.id end
+	end
+	error("'" .. tostring(wanted) .. "' is not a node or stat " .. timelessUtil.timelessType(jewelType).label .. " can make", 0)
+end
+
+function timelessUtil.pathCost(nodeId)
+	local node = build.spec.nodes[nodeId]
+	if not node then return nil end
+	if node.alloc then return 0 end
+	return #(nodeUtil.mainPath(node))
+end
+
 --- The jewel sockets on the tree, labelled by their nearest keystone the way
 --- PoB labels them.
 function timelessUtil.timelessSockets(tree)
@@ -7440,6 +7478,7 @@ function timelessUtil.timelessRadius(tree, socketId)
 				notable = node.isNotable and true or false,
 				keystone = node.isKeystone and true or false,
 				allocated = build.spec.allocNodes[nodeId] ~= nil,
+				cost = timelessUtil.pathCost(nodeId),
 			}
 		end
 	end
@@ -7454,7 +7493,7 @@ end
 M.timeless_info = function(p)
 	ensureBuild()
 	local tree = timelessUtil.timelessTree()
-	local jewelType = tonumber(p and p.jewelType) or 1
+	local jewelType = timelessUtil.jewelId(p and (p.jewel or p.jewelType))
 	local jewels = array({})
 	for _, t in ipairs(timelessUtil.TIMELESS_TYPES) do
 		local conquerors = array({})
@@ -7492,9 +7531,7 @@ end
 
 timelessUtil.timeless = nil
 
-M.timeless_search_start = function(p)
-	ensureBuild()
-	p = p or {}
+function timelessUtil.newSearch(p)
 	local tree = timelessUtil.timelessTree()
 	local jewelType = tonumber(p.jewelType) or 1
 	local kind = timelessUtil.timelessType(jewelType)
@@ -7574,7 +7611,7 @@ M.timeless_search_start = function(p)
 	table.sort(targets)
 
 	local step = jewelType == 5 and 20 or 1
-	timelessUtil.timeless = {
+	return {
 		tree = tree,
 		jewelType = jewelType,
 		kind = kind,
@@ -7593,13 +7630,17 @@ M.timeless_search_start = function(p)
 		checked = 0,
 		results = {},
 	}
+end
+
+M.timeless_search_start = function(p)
+	ensureBuild()
+	timelessUtil.timeless = timelessUtil.newSearch(p or {})
 	return { done = false, progress = 0, checked = 0, found = 0, total = timelessUtil.timeless.total }
 end
 
 --- Score one seed. Returns the per-node weights and the seed total, or nil if
 --- the seed is invalid for this search.
-function timelessUtil.timelessScore(seed)
-	local t = timelessUtil.timeless
+function timelessUtil.timelessScore(t, seed)
 	local legionNodes, legionAdditions = t.tree.legion.nodes, t.tree.legion.additions
 	local desired, protect = t.desired, t.protect
 	local hits, weight = {}, 0
@@ -7690,18 +7731,21 @@ function timelessUtil.timelessScore(seed)
 	return hits, weight
 end
 
-M.timeless_search_step = function(p)
-	ensureBuild()
-	if not timelessUtil.timeless then error("no search is running; call timeless_search_start first", 0) end
-	local t = timelessUtil.timeless
-	local budget = tonumber(p and p.budgetMs) or 150
+function timelessUtil.scan(t, budget)
 	local t0 = GetTime()
-	while t.seed <= t.seedMax and GetTime() - t0 < budget do
-		local hits, weight = timelessUtil.timelessScore(t.seed)
+	while t.seed <= t.seedMax and (not budget or GetTime() - t0 < budget) do
+		local hits, weight = timelessUtil.timelessScore(t, t.seed)
 		if hits then t.results[#t.results + 1] = { seed = t.seed, weight = weight, hits = hits } end
 		t.seed = t.seed + t.step
 		t.checked = t.checked + 1
 	end
+end
+
+M.timeless_search_step = function(p)
+	ensureBuild()
+	if not timelessUtil.timeless then error("no search is running; call timeless_search_start first", 0) end
+	local t = timelessUtil.timeless
+	timelessUtil.scan(t, tonumber(p and p.budgetMs) or 150)
 	return {
 		done = t.seed > t.seedMax,
 		progress = math.min(t.checked / t.total, 1),
@@ -7711,11 +7755,7 @@ M.timeless_search_step = function(p)
 	}
 end
 
-M.timeless_search_result = function(p)
-	ensureBuild()
-	if not timelessUtil.timeless then error("no search has been run", 0) end
-	local t = timelessUtil.timeless
-	local limit = math.max(math.min(tonumber(p and p.limit) or 100, 500), 1)
+function timelessUtil.searchResult(t, limit)
 	table.sort(t.results, function(a, b)
 		if a.weight ~= b.weight then return a.weight > b.weight end
 		return a.seed < b.seed
@@ -7752,6 +7792,12 @@ M.timeless_search_result = function(p)
 		socket = t.socket,
 		desired = wanted,
 	}
+end
+
+M.timeless_search_result = function(p)
+	ensureBuild()
+	if not timelessUtil.timeless then error("no search has been run", 0) end
+	return timelessUtil.searchResult(timelessUtil.timeless, math.max(math.min(tonumber(p and p.limit) or 100, 500), 1))
 end
 
 --- The pathofexile.com trade search for a set of seeds, built the way
@@ -7810,6 +7856,128 @@ M.timeless_trade_url = function(p)
 		.. league:gsub("[^a-zA-Z0-9]", function(c) return string.format("%%%02X", c:byte()) end)
 		.. "/?q=" .. dkjson.encode(search):gsub("[^a-zA-Z0-9]", function(c) return string.format("%%%02X", c:byte()) end)
 	return { url = url, seeds = #(p.seeds or {}), jewelType = jewelType }
+end
+
+-- Mirrors replaceHelperFunc, which PassiveSpec keeps local to BuildAllDependsAndPaths.
+function timelessUtil.rolled(line, key, mod, value)
+	if not mod or not value then return line end
+	if mod.fmt == "g" then
+		if key:find("per_minute") then
+			value = round(value / 60, 1)
+		elseif key:find("permyriad") then
+			value = value / 100
+		elseif key:find("_ms") then
+			value = value / 1000
+		end
+	end
+	if mod.min ~= mod.max then
+		return (line:gsub("%(" .. mod.min .. "%-" .. mod.max .. "%)", value))
+	elseif mod.min ~= value then
+		return (line:gsub(mod.min, value))
+	end
+	return line
+end
+
+function timelessUtil.timelessChanges(t, seed)
+	local legionNodes, legionAdditions = t.tree.legion.nodes, t.tree.legion.additions
+	local out = array({})
+	for _, targetId in ipairs(t.targets) do
+		local target = t.tree.nodes[targetId]
+		local lut = target.isNotable and data.readLUT(seed, targetId, t.jewelType) or {}
+		if next(lut) then
+			local becomes, replaced, stats = target.dn, false, {}
+			if t.jewelType == 1 and (#lut == 2 or #lut == 3) then
+				local node = legionNodes[lut[1] + 1 - data.timelessJewelAdditions]
+				if node then
+					becomes, replaced = node.dn, true
+					for i, line in ipairs(node.sd) do
+						local key = node.sortedStats[i]
+						stats[#stats + 1] = timelessUtil.rolled(line, key, key and node.stats[key], key and node.stats[key] and lut[node.stats[key].index + 1])
+					end
+				end
+			elseif t.jewelType == 1 and (#lut == 6 or #lut == 8) then
+				local half, bias, sums, order = #lut / 2, 0, {}, {}
+				for i = 1, half do
+					local v = lut[i]
+					bias = bias + (v <= 21 and 1 or -1)
+					if not sums[v] then
+						sums[v] = 0
+						order[#order + 1] = v
+					end
+					sums[v] = sums[v] + lut[i + half]
+				end
+				becomes, replaced = legionNodes[bias >= 0 and 77 or 78].dn, true
+				for _, v in ipairs(order) do
+					local addition = legionAdditions[v + 1]
+					for _, line in ipairs(addition and addition.sd or {}) do
+						for key, mod in pairs(addition.stats) do line = timelessUtil.rolled(line, key, mod, sums[v]) end
+						stats[#stats + 1] = line
+					end
+				end
+			elseif t.jewelType ~= 1 then
+				for _, v in ipairs(lut) do
+					if v >= data.timelessJewelAdditions then
+						local node = legionNodes[v + 1 - data.timelessJewelAdditions]
+						if node then
+							becomes, replaced, stats = node.dn, true, {}
+							for _, line in ipairs(node.sd) do stats[#stats + 1] = line end
+						end
+					else
+						local addition = legionAdditions[v + 1]
+						for _, line in ipairs(addition and addition.sd or {}) do stats[#stats + 1] = line end
+					end
+				end
+			end
+			out[#out + 1] = { id = targetId, name = target.dn, becomes = becomes, replaced = replaced, stats = strArray(stats) }
+		end
+	end
+	return out
+end
+
+--- One whole search on its own state, so it cannot disturb a search the Tree view is stepping through.
+M.timeless_find = function(p)
+	ensureBuild()
+	p = p or {}
+	local tree = timelessUtil.timelessTree()
+	local jewelType = timelessUtil.jewelId(p.jewel)
+	timelessUtil.timelessType(jewelType)
+	local conqueror = timelessUtil.conquerorId(jewelType, p.conqueror)
+	local candidates = timelessUtil.timelessNodes(tree, jewelType)
+	local desired = {}
+	for _, want in ipairs(p.wanted or {}) do
+		desired[#desired + 1] = {
+			id = timelessUtil.wantedId(candidates, want.node, jewelType),
+			weight = want.weight,
+			weight2 = want.weight2,
+			minWeight = want.min,
+		}
+	end
+	local t = timelessUtil.newSearch({
+		jewelType = jewelType,
+		socket = p.socket,
+		desired = desired,
+		protect = p.keep,
+		socketFilter = p.takenOnly,
+		socketFilterDistance = p.reach,
+	})
+	timelessUtil.scan(t)
+	local out = timelessUtil.searchResult(t, math.max(math.min(tonumber(p.limit) or 10, 50), 1))
+	for _, r in ipairs(out.results) do
+		r.changes = timelessUtil.timelessChanges(t, r.seed)
+	end
+	local radius = array({})
+	for _, n in ipairs(timelessUtil.timelessRadius(tree, t.socket)) do
+		if n.notable or n.keystone then radius[#radius + 1] = n end
+	end
+	out.radius = radius
+	out.conqueror = timelessUtil.TIMELESS_CONQUERORS[jewelType][conqueror]
+	if p.league and #out.results > 0 then
+		local seeds = {}
+		for i = 1, math.min(#out.results, 10) do seeds[i] = out.results[i].seed end
+		local ok, trade = pcall(M.timeless_trade_url, { jewelType = jewelType, conqueror = conqueror, seeds = seeds, league = p.league })
+		if ok then out.tradeUrl = trade.url end
+	end
+	return out
 end
 
 -- ---------------------------------------------------------------------------
@@ -9820,7 +9988,9 @@ M.jewel_plan = function(p)
 			local kind = jewelUtil.jewelKind(item)
 			local mods = itemUtil.activeModLines(item)
 			if kind == "timeless" then
-				run.notScored[#run.notScored + 1] = { name = cand.name, reason = "a Timeless Jewel changes the passives in its radius by seed; PoB needs the exact seed and socket, and a seed search is not available here", mods = mods }
+				run.notScored[#run.notScored + 1] = { name = cand.name, reason = IS_POE2
+					and "a Timeless Jewel changes the passives in its radius by seed; PoB needs the exact seed and socket, and a seed search is not available here"
+					or "a Timeless Jewel changes the passives in its radius by seed; search_timeless_seeds finds seeds for one socket", mods = mods }
 				return
 			end
 			if kind == "tree" then

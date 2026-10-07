@@ -721,6 +721,55 @@ fn adapt_for_poe1(defs: &mut Vec<ToolDef>) {
         open_world: false,
         slow: false,
     });
+    let timeless_jewel = || json!({ "type": "string", "enum": ["Glorious Vanity", "Lethal Pride", "Brutal Restraint", "Militant Faith", "Elegant Hubris", "Heroic Tragedy"], "description": "Timeless jewel" });
+    defs.push(ToolDef {
+        name: "list_timeless_options",
+        description: "What the timeless jewel search can be asked for: each jewel with its seed range and conquerors, and every jewel socket on the tree (`label` names the nearest keystone, `allocated` marks taken ones). With `jewel`, `nodes` lists the nodes and stats that jewel can make, by the names search_timeless_seeds takes. With `socket`, `radius` lists the notables and keystones in its radius, each with `cost`, the points to allocate it from the current tree (0 when allocated). Changes nothing.".into(),
+        schema: obj(json!({ "jewel": timeless_jewel(), "socket": prop("integer", "Jewel socket node id") }), &[]),
+        output_schema: None,
+        read_only: true,
+        destructive: false,
+        idempotent: false,
+        open_world: false,
+        slow: false,
+    });
+    defs.push(ToolDef {
+        name: "search_timeless_seeds",
+        description: "Search every seed of a timeless jewel in one socket, as the Tree view's timeless jewel search does, and rank the seeds by the summed weight of what they make in the radius. Each `wanted` entry names a node or stat from list_timeless_options with a `weight` per hit (default 1), `weight2` for a Glorious Vanity node's second stat, and `min`, the least summed weight a seed must reach for that entry. Each result has `seed`, `weight`, `nodes` (which passives made each wanted entry) and `changes`, one line per notable in range: \"Notable -> New notable: stats\" when the seed replaces it, \"Notable gains: stats\" when it adds to it. `radius` lists the notables and keystones in range with `cost`, the points to allocate each now. With `league`, `tradeUrl` searches the trade site for the top 10 seeds. Equips nothing: to see the build's numbers with a seed, equip the jewel with equip_item_raw.".into(),
+        schema: obj(
+            json!({
+                "jewel": timeless_jewel(),
+                "socket": prop("integer", "Jewel socket node id from list_timeless_options"),
+                "wanted": {
+                    "type": "array",
+                    "description": "What the jewel should make",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "node": prop("string", "Node or stat name from list_timeless_options"),
+                            "weight": prop("number", "Weight per hit (default 1)"),
+                            "weight2": prop("number", "Glorious Vanity only: weight of the node's second stat"),
+                            "min": prop("number", "Least summed weight a seed must reach for this entry"),
+                        },
+                        "required": ["node"],
+                    },
+                },
+                "conqueror": prop("string", "Conqueror for the trade search, by name (default any)"),
+                "keep": { "type": "array", "items": { "type": "string" }, "description": "Militant Faith only: notables in range a seed must not replace" },
+                "taken_only": prop("boolean", "Count only allocated passives, plus those within `reach` points"),
+                "reach": prop("integer", "With taken_only: also count passives this many points away (default 0)"),
+                "limit": prop("integer", "How many seeds to return (default 10, at most 50)"),
+                "league": prop("string", "Trade league for `tradeUrl`, such as \"Standard\"; leave out for no trade link"),
+            }),
+            &["jewel", "socket", "wanted"],
+        ),
+        output_schema: None,
+        read_only: true,
+        destructive: false,
+        idempotent: false,
+        open_world: false,
+        slow: false,
+    });
     for d in defs.iter_mut() {
         if let Some((_, text)) = POE1_TEXT.iter().find(|(name, _)| *name == d.name) {
             d.description = (*text).to_string();
@@ -766,6 +815,16 @@ fn adapt_for_poe1(defs: &mut Vec<ToolDef>) {
 fn clean_error(e: &str) -> String {
     let first = e.split("\nstack traceback").next().unwrap_or(e).trim();
     first.trim_start_matches("lua: ").trim_start_matches("runtime error: ").to_string()
+}
+
+fn timeless_change_line(c: &Value) -> Value {
+    let text = |k: &str| c.get(k).and_then(Value::as_str).unwrap_or_default();
+    let stats: Vec<&str> = c.get("stats").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).collect();
+    Value::String(if c.get("replaced") == Some(&Value::Bool(true)) {
+        format!("{} -> {}: {}", text("name"), text("becomes"), stats.join("; "))
+    } else {
+        format!("{} gains: {}", text("name"), stats.join("; "))
+    })
 }
 
 fn arg_str(args: &JsonObject, key: &str) -> Option<String> {
@@ -1267,6 +1326,52 @@ pub(crate) fn run_tool(ctx: &ToolContext, name: &str, args: &JsonObject) -> Resu
             read(result)
         }
         "suggest_cluster_jewels" => read(ctx.call("suggest_cluster_jewels", json!({ "preset": arg_str(args, "aim"), "limit": arg_i64(args, "limit")? }))?),
+        "list_timeless_options" => {
+            let jewel = arg_str(args, "jewel");
+            let socket = arg_i64(args, "socket")?;
+            let mut v = ctx.call("timeless_info", json!({ "jewel": jewel, "socket": socket }))?;
+            if let Some(m) = v.as_object_mut() {
+                m.remove("devotion");
+                m.remove("available");
+                if jewel.is_none() {
+                    m.remove("nodes");
+                    m.remove("jewelType");
+                }
+                if socket.is_none() {
+                    m.remove("radius");
+                } else if let Some(Value::Array(radius)) = m.get_mut("radius") {
+                    radius.retain(|n| n.get("notable") == Some(&Value::Bool(true)) || n.get("keystone") == Some(&Value::Bool(true)));
+                }
+            }
+            read(v)
+        }
+        "search_timeless_seeds" => {
+            let wanted = arg_list(args, "wanted");
+            if wanted.is_empty() {
+                return Err(ToolError::Invalid("wanted needs at least one entry".into()));
+            }
+            let keep: Vec<Value> = arg_list(args, "keep").into_iter().filter(|v| v.as_str().is_some()).collect();
+            let mut v = ctx.call(
+                "timeless_find",
+                json!({
+                    "jewel": req_str(args, "jewel")?,
+                    "socket": req_i64(args, "socket")?,
+                    "wanted": wanted,
+                    "conqueror": arg_str(args, "conqueror"),
+                    "keep": keep,
+                    "takenOnly": arg_bool(args, "taken_only"),
+                    "reach": arg_i64(args, "reach")?,
+                    "limit": arg_i64(args, "limit")?,
+                    "league": arg_str(args, "league"),
+                }),
+            )?;
+            for r in v.get_mut("results").and_then(Value::as_array_mut).into_iter().flatten() {
+                if let Some(changes) = r.get_mut("changes") {
+                    *changes = Value::Array(changes.as_array().into_iter().flatten().map(timeless_change_line).collect());
+                }
+            }
+            read(v)
+        }
         "apply_cluster_jewel" => {
             let notables: Vec<Value> = arg_list(args, "notables").into_iter().filter(|v| v.as_str().is_some()).collect();
             stats(ctx.call("apply_cluster_jewel", json!({ "socket": req_i64(args, "socket")?, "raw": req_str(args, "item_text")?, "notables": notables }))?)
@@ -1477,7 +1582,7 @@ mod tests {
     #[test]
     fn poe1_registry_speaks_poe1() {
         let d = defs(Game::Poe1);
-        assert_eq!(d.len(), 78, "PoE1 tool count changed");
+        assert_eq!(d.len(), 80, "PoE1 tool count changed");
         for (name, _) in POE1_TEXT {
             assert!(d.iter().any(|t| t.name == *name), "POE1_TEXT names {name}, which is not a tool");
         }

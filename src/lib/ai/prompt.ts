@@ -449,6 +449,11 @@ memory: the variant names in the result are the ones to pass to
 equip_from_item_db as \`variants\`, one per pick. If no socket is allocated,
 the answer is that the tree has no jewel socket yet.
 
+For a Timeless Jewel seed, call list_timeless_options with the jewel and
+socket for the names it can make, then search_timeless_seeds once. Do not
+sweep seeds yourself. Before recommending a seed, equip the jewel with that
+seed through equip_item_raw and report what the build gains.
+
 A rare has 3 prefixes and 3 suffixes. Give every slot its job from the library
 before choosing: boots carry movement speed, the belt and rings carry the main
 pool and resistances, the weapon carries the damage base, and the body armour
