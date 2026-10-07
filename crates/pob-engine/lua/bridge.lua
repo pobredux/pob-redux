@@ -3124,7 +3124,7 @@ function itemUtil.resolveSlotName(name)
 	for slotName in pairs(build.itemsTab.slots) do
 		if slotName:lower():gsub("[%s_%-]", "") == norm then return slotName end
 	end
-	local nodeId = norm:match("^socket#?(%d+)$") or norm:match("^#?(%d+)$")
+	local nodeId = raw:match("(%d+)%s*$")
 	if nodeId and build.itemsTab.slots["Jewel " .. nodeId] then return "Jewel " .. nodeId end
 	local names = {}
 	for _, slot in ipairs(build.itemsTab.orderedSlots) do
