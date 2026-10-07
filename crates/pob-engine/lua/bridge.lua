@@ -7569,6 +7569,7 @@ M.timeless_info = function(p)
 		sockets = timelessUtil.timelessSockets(tree),
 		nodes = timelessUtil.timelessNodes(tree, jewelType),
 		radius = timelessUtil.timelessRadius(tree, tonumber(p and p.socket)),
+		radiusSize = data.jewelRadius[3] and data.jewelRadius[3].outer or 1800,
 		devotion = devotion,
 	}
 end

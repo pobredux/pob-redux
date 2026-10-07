@@ -1,14 +1,17 @@
 <script lang="ts">
-  import { tick } from "svelte";
+  import { tick, type Snippet } from "svelte";
   import { m } from "$lib/paraglide/messages";
 
-  let { value, options, label, disabled = false, onchange }: {
+  let { value, options, label, disabled = false, onchange, aside }: {
     value: string;
     options: { value: string; label: string }[];
     label: string;
     disabled?: boolean;
     onchange: (value: string) => void;
+    aside?: Snippet<[string]>;
   } = $props();
+
+  const ASIDE_WIDTH = 260;
 
   let open = $state(false);
   let query = $state("");
@@ -29,7 +32,8 @@
     if (disabled || !trigger) return;
     const r = trigger.getBoundingClientRect();
     const up = r.bottom + 320 > window.innerHeight && r.top > window.innerHeight - r.bottom;
-    place = { left: r.left, top: up ? r.top : r.bottom, width: Math.max(r.width, 320), up };
+    const width = Math.max(r.width, 320) + (aside ? ASIDE_WIDTH : 0);
+    place = { left: Math.max(8, Math.min(r.left, window.innerWidth - width - 8)), top: up ? r.top : r.bottom, width, up };
     query = initial;
     active = Math.max(0, options.findIndex((o) => o.value === value));
     open = true;
@@ -117,23 +121,28 @@
       onkeydown={onKey}
       oninput={() => (active = 0)}
     />
-    <div class="list" id={listId} role="listbox" aria-label={label}>
-      {#each shown as o, i (o.value)}
-        <button
-          type="button"
-          id={`${listId}-${i}`}
-          role="option"
-          aria-selected={o.value === value}
-          class="opt"
-          class:hot={i === active}
-          class:on={o.value === value}
-          tabindex="-1"
-          onpointermove={() => (active = i)}
-          onclick={() => pick(o)}>{o.label}</button
-        >
-      {:else}
-        <div class="none">{m.common_no_matches()}</div>
-      {/each}
+    <div class="body">
+      <div class="list" id={listId} role="listbox" aria-label={label}>
+        {#each shown as o, i (o.value)}
+          <button
+            type="button"
+            id={`${listId}-${i}`}
+            role="option"
+            aria-selected={o.value === value}
+            class="opt"
+            class:hot={i === active}
+            class:on={o.value === value}
+            tabindex="-1"
+            onpointermove={() => (active = i)}
+            onclick={() => pick(o)}>{o.label}</button
+          >
+        {:else}
+          <div class="none">{m.common_no_matches()}</div>
+        {/each}
+      </div>
+      {#if aside}
+        <div class="aside" style:width={`${ASIDE_WIDTH - 4}px`}>{@render aside(shown[active]?.value ?? value)}</div>
+      {/if}
     </div>
   </div>
 {/if}
@@ -163,9 +172,20 @@
     height: 24px;
     font-size: var(--fs-xs);
   }
+  .body {
+    display: flex;
+    gap: 4px;
+  }
   .list {
+    flex: 1;
+    min-width: 0;
     max-height: 280px;
     overflow-y: auto;
+  }
+  .aside {
+    flex: none;
+    border-left: 1px solid var(--line-1);
+    padding-left: 4px;
   }
   .opt {
     display: block;

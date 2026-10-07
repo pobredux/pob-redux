@@ -693,6 +693,7 @@
   "timeless_jewel_title": "Which legion jewel to search",
   "timeless_conqueror_title": "Conqueror, which decides the keystone the jewel grants",
   "timeless_socket_title": "Jewel socket to search around",
+  "timeless_preview_taken": "Allocated in range:",
   "timeless_taken_only": "Taken only",
   "timeless_taken_only_title": "Only score passives you have taken, or ones within a few points of your tree",
   "timeless_reach_title": "Also score unallocated passives this many points away",

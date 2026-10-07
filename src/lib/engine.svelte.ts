@@ -1357,6 +1357,7 @@ export interface TimelessInfo {
   sockets: TimelessSocket[];
   nodes: TimelessNode[];
   radius: TimelessRadiusNode[];
+  radiusSize: number;
   devotion: { id: number; label: string }[];
 }
 

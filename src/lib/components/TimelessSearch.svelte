@@ -10,6 +10,8 @@
   } from "$lib/engine.svelte";
   import { build } from "$lib/state/build.svelte";
   import { m } from "$lib/paraglide/messages";
+  import SearchSelect from "./SearchSelect.svelte";
+  import SocketPreview from "./SocketPreview.svelte";
 
   let { onclose }: { onclose: () => void } = $props();
 
@@ -46,6 +48,7 @@
 
   const jewel = $derived(info?.jewels.find((j) => j.id === jewelType) ?? null);
   const socketNode = $derived(info?.sockets.find((s) => s.id === socket) ?? null);
+  const socketOptions = $derived((info?.sockets ?? []).map((s) => ({ value: String(s.id), label: `${s.allocated ? "● " : ""}${s.label}` })));
 
   $effect(() => {
     const t = jewelType;
@@ -208,11 +211,13 @@
           <option value={c.id}>{c.label}</option>
         {/each}
       </select>
-      <select class="select sm grow" bind:value={socket} disabled={running} title={m.timeless_socket_title()}>
-        {#each info?.sockets ?? [] as s}
-          <option value={s.id}>{s.allocated ? "● " : ""}{s.label}</option>
-        {/each}
-      </select>
+      <div class="grow">
+        <SearchSelect value={String(socket)} options={socketOptions} label={m.timeless_socket_title()} disabled={running} onchange={(v) => (socket = Number(v))}>
+          {#snippet aside(v)}
+            <SocketPreview socket={Number(v)} radius={info?.radiusSize ?? 1800} label={info?.sockets.find((s) => String(s.id) === v)?.label ?? ""} />
+          {/snippet}
+        </SearchSelect>
+      </div>
       <label class="chk small" title={m.timeless_taken_only_title()}>
         <input type="checkbox" bind:checked={allocatedOnly} disabled={running} />
         {m.timeless_taken_only()}
