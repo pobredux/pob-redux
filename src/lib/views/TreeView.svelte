@@ -925,6 +925,8 @@
   const DOT_PX = 3;
   // Below this radius an icon is too small to make out.
   const ICON_PX = 2;
+  // PoE2 ships no greyed icons, so PoB halves an unallocated one's colour; PoE1's are already grey.
+  const OFF_SHADE = { poe1: "rgba(0, 0, 0, 0.3)", poe2: "rgba(0, 0, 0, 0.5)" };
   // The average colour of PoB's frame art at a couple of pixels across, by
   // state and by node size, so a dot reads the same as the art it replaces.
   const DOT_FILL = ["#caa371", "#806650", "#454139", "#bc9b64", "#a0754d", "#716248", "#af000f", "#28a335"];
@@ -1246,10 +1248,14 @@
         }
       } else {
         if (n.size.base * scale >= ICON_PX) {
-          const icon = iconFor(n, S, lit);
-          if (!lit && !heat) ctx.globalAlpha *= 0.7;
-          drawCircularAsset(ctx, A, icon, sx, sy, n.size.base * scale, !lit && !heat);
-          ctx.globalAlpha = baseAlpha;
+          const off = !lit && !heat;
+          drawCircularAsset(ctx, A, iconFor(n, S, lit), sx, sy, n.size.base * scale, off);
+          if (off) {
+            ctx.beginPath();
+            ctx.arc(sx, sy, n.size.base * scale, 0, Math.PI * 2);
+            ctx.fillStyle = M.poe1 ? OFF_SHADE.poe1 : OFF_SHADE.poe2;
+            ctx.fill();
+          }
         }
         const half = n.size.overlay * scale;
         const tint = tintFor(n, S);
