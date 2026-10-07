@@ -124,6 +124,7 @@ jobs:
           repository: pobredux/corpus
           ref: ${{ steps.corpus.outputs.commit }}
           ssh-key: ${{ secrets.CORPUS_DEPLOY_KEY }}
+          persist-credentials: false
           path: corpus
 
       - name: Compare calculated stats with golden/poe2.json
@@ -143,6 +144,7 @@ jobs:
           repository: pobredux/corpus
           ref: ${{ steps.corpus1.outputs.commit }}
           ssh-key: ${{ secrets.CORPUS_DEPLOY_KEY }}
+          persist-credentials: false
           path: corpus-poe1
 
       - name: Compare calculated stats with golden/poe1.json
