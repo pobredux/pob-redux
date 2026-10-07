@@ -329,7 +329,7 @@ struct AppPaths {
     /// Dev hook: open the assistant panel on boot (POB_REDUX_CHAT).
     /// Set it to "settings" to open the provider sheet too.
     chat_open: Option<String>,
-    /// Dev hook: send one message on boot (POB_REDUX_CHAT_ASK). Costs API credit.
+    /// Dev hook: send one message on boot (POB_REDUX_CHAT_ASK).
     chat_ask: Option<String>,
     /// Dev hook: skip the write-approval gate for that run (POB_REDUX_CHAT_ALLOW).
     chat_allow: Option<String>,
