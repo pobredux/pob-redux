@@ -1468,6 +1468,9 @@
 
   "import_folder_created": "Created folder {name}. Use the folder button on a build to put it there.",
   "import_folder_deleted": "Deleted folder {folder}",
+  "import_folder_renamed": "Renamed the folder to {name}",
+  "import_folder_rename_title": "Rename this folder",
+  "import_folder_new_build_title": "New build in this folder; its first save goes here",
   "import_failed": "Import failed: {error}",
   "import_author_set_on": "Author set to {name} on {count}",
   "import_author_cleared_on": "Author cleared on {count}",

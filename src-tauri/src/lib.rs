@@ -772,6 +772,29 @@ fn delete_build_folder(state: State<'_, AppState>, folder: String) -> Result<(),
     std::fs::remove_dir(&dir).map_err(|e| e.to_string())
 }
 
+fn rename_folder(root: &Path, folder: &str, new_name: &str) -> Result<String, String> {
+    let src = safe_folder(root, folder)?;
+    if src == root {
+        return Err("that is the builds folder itself".into());
+    }
+    if !src.is_dir() {
+        return Err(format!("{} is not a folder", src.display()));
+    }
+    let dst = src.with_file_name(safe_name(new_name)?);
+    // A case-only rename finds itself on a case-insensitive file system.
+    if dst.exists() && dst.canonicalize().ok() != src.canonicalize().ok() {
+        return Err(format!("{} already exists", dst.display()));
+    }
+    std::fs::rename(&src, &dst).map_err(|e| e.to_string())?;
+    let rel = dst.strip_prefix(root).map_err(|e| e.to_string())?;
+    Ok(rel.to_string_lossy().replace('\\', "/"))
+}
+
+#[tauri::command]
+fn rename_build_folder(state: State<'_, AppState>, folder: String, new_name: String) -> Result<String, String> {
+    rename_folder(&state.builds_dir(), &folder, &new_name)
+}
+
 #[tauri::command]
 fn list_build_folders(state: State<'_, AppState>) -> Result<Vec<String>, String> {
     let root = state.builds_dir();
@@ -1316,6 +1339,7 @@ pub fn run() {
             delete_build,
             create_build_folder,
             delete_build_folder,
+            rename_build_folder,
             list_build_folders,
             mcp::mcp_status,
             mcp::mcp_start,
@@ -1372,4 +1396,49 @@ pub fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rename_folder;
+    use std::path::PathBuf;
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("pob-redux-test-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn renames_a_nested_folder_with_its_builds() {
+        let root = scratch("rename");
+        std::fs::create_dir_all(root.join("leagues/old")).unwrap();
+        std::fs::write(root.join("leagues/old/a.xml"), "<PathOfBuilding/>").unwrap();
+        assert_eq!(rename_folder(&root, "leagues/old", "new").unwrap(), "leagues/new");
+        assert!(root.join("leagues/new/a.xml").is_file());
+        assert!(!root.join("leagues/old").exists());
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn allows_a_case_only_rename_but_not_onto_another_folder() {
+        let root = scratch("case");
+        std::fs::create_dir_all(root.join("starters")).unwrap();
+        std::fs::create_dir_all(root.join("endgame")).unwrap();
+        assert!(rename_folder(&root, "starters", "endgame").is_err());
+        assert_eq!(rename_folder(&root, "starters", "Starters").unwrap(), "Starters");
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn refuses_the_root_a_missing_folder_and_bad_names() {
+        let root = scratch("refuse");
+        std::fs::create_dir_all(root.join("a")).unwrap();
+        assert!(rename_folder(&root, "", "x").is_err());
+        assert!(rename_folder(&root, "missing", "x").is_err());
+        assert!(rename_folder(&root, "a", "../escape").is_err());
+        assert!(rename_folder(&root, "a", " ").is_err());
+        std::fs::remove_dir_all(&root).unwrap();
+    }
 }

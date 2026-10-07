@@ -329,6 +329,10 @@ export function deleteBuildFolder(folder: string): Promise<void> {
   return invoke<void>("delete_build_folder", { folder });
 }
 
+export function renameBuildFolder(folder: string, newName: string): Promise<string> {
+  return invoke<string>("rename_build_folder", { folder, newName });
+}
+
 export function listBuildFolders(): Promise<string[]> {
   return invoke<string[]>("list_build_folders");
 }

@@ -12,6 +12,7 @@
     deleteBuild,
     createBuildFolder,
     deleteBuildFolder,
+    renameBuildFolder,
     fetchBuildCode,
     isMobalyticsLink,
     resolveMobalytics,
@@ -259,6 +260,38 @@
       await createBuildFolder(name);
       say(m.import_folder_created({ name }));
       await refresh();
+    } catch (e) {
+      build.error = String(e);
+    }
+  }
+
+  let renamingFolder = $state<string | null>(null);
+  let folderRenameDraft = $state("");
+
+  const inFolder = (rel: string, folder: string) => rel === folder || rel.startsWith(`${folder}/`);
+
+  async function commitRenameFolder(folder: string) {
+    const name = folderRenameDraft.trim();
+    renamingFolder = null;
+    if (!name || name === folder.split("/").pop()) return;
+    const before = builds.filter((b) => inFolder(b.folder, folder));
+    try {
+      const next = await renameBuildFolder(folder, name);
+      await refresh();
+      const moved = new Map<string, string>();
+      for (const b of before) {
+        const now = builds.find((x) => x.folder === next + b.folder.slice(folder.length) && x.name === b.name);
+        if (now) moved.set(b.path, now.path);
+      }
+      recent = recent.map((p) => moved.get(p) ?? p);
+      folderCollapsed = new Set([...folderCollapsed].map((f) => (inFolder(f, folder) ? next + f.slice(folder.length) : f)));
+      try {
+        localStorage.setItem(RECENT_KEY, JSON.stringify(recent));
+        localStorage.setItem("pob-redux:folders-collapsed", JSON.stringify([...folderCollapsed]));
+      } catch {}
+      const open = build.info?.file;
+      if (open && moved.has(open)) await build.loadFile(moved.get(open)!);
+      say(m.import_folder_renamed({ name: next }));
     } catch (e) {
       build.error = String(e);
     }
@@ -993,17 +1026,48 @@
       {#each grouped as [folder, items] (folder)}
         {#if !rootOnly}
           <div class="ghead ghrow">
-            <button class="ghtoggle" aria-expanded={folderOpen(folder)} onclick={() => toggleFolder(folder)}>
-              <span class="caret" class:open={folderOpen(folder)}>▸</span>
-              {#if folder !== ""}<Icon name="folder" size={12} />{/if}
-              <span>{folder === "" ? m.import_top_level_group() : folder}</span>
-              <span class="dim num">{items.length}</span>
-            </button>
-            {#if folder !== ""}
+            {#if renamingFolder === folder}
+              <!-- svelte-ignore a11y_autofocus -->
+              <input
+                class="input xs fdraft"
+                aria-label={m.import_folder_rename_title()}
+                bind:value={folderRenameDraft}
+                autofocus
+                onblur={() => commitRenameFolder(folder)}
+                onkeydown={(e) => {
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  if (e.key === "Escape") (renamingFolder = null);
+                }}
+              />
+            {:else}
+              <button class="ghtoggle" aria-expanded={folderOpen(folder)} onclick={() => toggleFolder(folder)}>
+                <span class="caret" class:open={folderOpen(folder)}>▸</span>
+                {#if folder !== ""}<Icon name="folder" size={12} />{/if}
+                <span>{folder === "" ? m.import_top_level_group() : folder}</span>
+                <span class="dim num">{items.length}</span>
+              </button>
+            {/if}
+            {#if folder !== "" && renamingFolder !== folder}
               {#if confirmFolder === folder}
                 <button class="act danger" onclick={() => commitDeleteFolder(folder)}>{m.import_confirm()}</button>
                 <button class="act" onclick={() => (confirmFolder = null)}>{m.import_keep()}</button>
               {:else}
+                <button
+                  class="ibtn"
+                  title={m.import_folder_new_build_title()}
+                  aria-label={m.import_folder_new_build_title()}
+                  disabled={build.busy > 0}
+                  onclick={() => build.newBuild(undefined, folder).then((r) => r && (ui.newBuildOpen = true))}><Icon name="plus-square" size={13} /></button
+                >
+                <button
+                  class="ibtn"
+                  title={m.import_folder_rename_title()}
+                  aria-label={m.import_folder_rename_title()}
+                  onclick={() => {
+                    renamingFolder = folder;
+                    folderRenameDraft = folder.split("/").pop() ?? folder;
+                  }}><Icon name="pencil" size={13} /></button
+                >
                 <button
                   class="ibtn"
                   title={folderCount(folder) ? m.import_folder_not_empty() : m.import_folder_delete_title()}

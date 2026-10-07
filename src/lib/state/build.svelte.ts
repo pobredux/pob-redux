@@ -193,6 +193,8 @@ class BuildStore {
   }
 
   private savedHooks: ((path: string) => unknown)[] = [];
+  /** Where Save As opens for a build started from a folder in the Builds tab, until its first save. */
+  private newBuildFolder: string | null = null;
 
   /** Runs after every successful save of the build file. */
   onSaved(fn: (path: string) => unknown) {
@@ -200,6 +202,7 @@ class BuildStore {
   }
 
   private saved(path: string) {
+    this.newBuildFolder = null;
     this.say(m.build_saved({ path }));
     for (const fn of this.savedHooks) void fn(path);
   }
@@ -216,7 +219,8 @@ class BuildStore {
     if (!this.info) return undefined;
     let picked: string | null;
     try {
-      const dir = this.info.file ? "" : (await appPaths()).builds_dir;
+      const root = this.info.file ? "" : (await appPaths()).builds_dir;
+      const dir = root && this.newBuildFolder ? `${root}/${this.newBuildFolder}` : root;
       picked = await saveDialog({
         defaultPath: this.info.file ?? `${dir}/${this.info.name}.xml`,
         filters: [{ name: "Path of Building", extensions: ["xml"] }],
@@ -257,14 +261,18 @@ class BuildStore {
     return game.choose(g);
   }
 
-  newBuild(name?: string) {
+  newBuild(name?: string, folder?: string) {
     return this.run(() => engine.newBuild(name)).then((r) => {
-      if (r) this.view = "tree";
+      if (r) {
+        this.view = "tree";
+        this.newBuildFolder = folder ?? null;
+      }
       return r;
     });
   }
 
   async loadCode(code: string, name?: string) {
+    this.newBuildFolder = null;
     if (!(await this.ensureGameFor(() => engine.codeGame(code.trim()).then((r) => r.game)))) return undefined;
     return this.run(() => engine.loadBuildCode(code.trim(), name)).then((r) => {
       if (r) this.view = "tree";
@@ -273,6 +281,7 @@ class BuildStore {
   }
 
   async loadXml(xml: string, name?: string) {
+    this.newBuildFolder = null;
     if (!(await this.ensureGameFor(() => buildXmlGame(xml)))) return undefined;
     return this.run(() => engine.loadBuildXml(xml, name)).then((r) => {
       if (r) this.view = "tree";
@@ -281,6 +290,7 @@ class BuildStore {
   }
 
   async loadFile(path: string) {
+    this.newBuildFolder = null;
     if (!(await this.ensureGameFor(() => buildFileGame(path)))) return undefined;
     return this.run(() => engine.loadBuildFile(path)).then((r) => {
       if (r) this.view = "tree";
