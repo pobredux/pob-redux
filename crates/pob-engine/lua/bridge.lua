@@ -7873,7 +7873,7 @@ M.timeless_trade_url = function(p)
 	if #filters == 0 then error("params.seeds needs at least one seed", 0) end
 	local search = {
 		query = {
-			status = { option = tostring(p.status or "online") },
+			status = { option = tostring(p.status or "securable") },
 			stats = { { filters = filters, type = "count", value = { min = 1 } } },
 		},
 		sort = { price = "asc" },

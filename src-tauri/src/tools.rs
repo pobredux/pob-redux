@@ -754,7 +754,7 @@ fn adapt_for_poe1(defs: &mut Vec<ToolDef>) {
                         "required": ["node"],
                     },
                 },
-                "conqueror": prop("string", "Conqueror for the trade search, by name (default any)"),
+                "conqueror": prop("string", "Conqueror for the trade search, by name; leave out unless the user names one, since any conqueror finds three times the listings"),
                 "keep": { "type": "array", "items": { "type": "string" }, "description": "Militant Faith only: notables in range a seed must not replace" },
                 "taken_only": prop("boolean", "Count only allocated passives, plus those within `reach` points"),
                 "reach": prop("integer", "With taken_only: also count passives this many points away (default 0)"),
