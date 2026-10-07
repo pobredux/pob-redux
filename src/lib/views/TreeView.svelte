@@ -1739,6 +1739,7 @@
 
   // --- input ---
   let drag: { sx: number; sy: number; cx0: number; cy0: number; moved: boolean; button: number } | null = null;
+  let panning = $state(false);
   let hoverTimer = 0;
 
   function onWheel(e: WheelEvent) {
@@ -1840,6 +1841,7 @@
       const dy = e.clientY - drag.sy;
       if (!drag.moved && Math.abs(dx) + Math.abs(dy) > 4) {
         drag.moved = true;
+        panning = true;
         setHover(null);
       }
       if (drag.moved) {
@@ -1895,6 +1897,7 @@
     const wasClick = !drag.moved;
     const button = drag.button;
     drag = null;
+    panning = false;
     if (wasClick) clearFocus();
     else invalidate();
     if (!wasClick || !hover || build.busy > 0) return;
@@ -2304,6 +2307,7 @@
   <div class="tree scope-dark" bind:this={wrap}>
     <canvas
       bind:this={canvas}
+      class:panning
       onwheel={onWheel}
       onpointerdown={onPointerDown}
       onpointermove={onPointerMove}
@@ -2501,8 +2505,11 @@
   }
   canvas {
     display: block;
-    cursor: crosshair;
+    cursor: default;
     touch-action: none;
+  }
+  canvas.panning {
+    cursor: grabbing;
   }
   .bar {
     position: relative;
