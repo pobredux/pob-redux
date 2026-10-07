@@ -1,7 +1,10 @@
 <script lang="ts">
-  import { isNumeric, parse, type Span } from "$lib/ai/markdown";
+  import { openUrl } from "@tauri-apps/plugin-opener";
+  import { isNumeric, parse, shortUrl, tradeLeague, type Span } from "$lib/ai/markdown";
   import type { Tooltip } from "$lib/engine.svelte";
+  import { m } from "$lib/paraglide/messages";
   import { gems } from "$lib/state/gems.svelte";
+  import { tradeWindow } from "$lib/state/trade.svelte";
   import PobTooltip from "./PobTooltip.svelte";
 
   let { text }: { text: string } = $props();
@@ -28,6 +31,19 @@
     clearTimeout(tipTimer);
     tip = null;
   }
+
+  function linkText(text: string, href: string) {
+    if (text) return text;
+    const league = tradeLeague(href);
+    return league ? m.chat_trade_link({ league }) : shortUrl(href);
+  }
+
+  // The webview would navigate away from the app on a plain link click.
+  function follow(e: MouseEvent, href: string) {
+    e.preventDefault();
+    if (tradeLeague(href)) void tradeWindow.open(href);
+    else void openUrl(href);
+  }
 </script>
 
 {#snippet spans(list: Span[])}
@@ -38,6 +54,8 @@
         role="note"
         onmouseenter={(e) => showTip(e, s.gem.gemId)}
         onmouseleave={hideTip}>{s.text}</span>
+    {:else if s.kind === "link"}
+      <a href={s.href} title={s.href} onclick={(e) => follow(e, s.href)} onauxclick={(e) => e.preventDefault()}>{linkText(s.text, s.href)}</a>
     {:else if s.kind === "bold"}<b>{s.text}</b>{:else if s.kind === "code"}<code>{s.text}</code>{:else}{s.text}{/if}
   {/each}
 {/snippet}
@@ -135,6 +153,15 @@
   }
   .gem.support {
     color: var(--c-magic);
+  }
+  a {
+    color: var(--focus);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-color: color-mix(in oklab, currentColor 45%, transparent);
+  }
+  a:hover {
+    text-decoration-color: currentColor;
   }
   .twrap {
     overflow-x: auto;

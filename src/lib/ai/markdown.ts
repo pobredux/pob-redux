@@ -6,7 +6,10 @@
 
 import type { GemMatch } from "$lib/state/gems.svelte";
 
-export type Span = { kind: "text" | "bold" | "code"; text: string } | { kind: "gem"; text: string; gem: GemMatch };
+export type Span =
+  | { kind: "text" | "bold" | "code"; text: string }
+  | { kind: "gem"; text: string; gem: GemMatch }
+  | { kind: "link"; text: string; href: string };
 
 /** Splits plain text into runs, some of which name a gem. Set by the panel once the gem index has loaded. */
 export type GemScanner = (text: string) => Array<{ text: string; gem?: GemMatch }>;
@@ -38,22 +41,49 @@ export function inline(text: string, scan?: GemScanner): Span[] {
       else out.push({ kind: "text", text: run.text });
     }
   };
-  const re = /(\*\*(.+?)\*\*|`([^`]+)`)/g;
+  const re = /(\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|\*\*(.+?)\*\*|`([^`]+)`|(https?:\/\/[^\s<>"'`]+))/g;
   let last = 0;
   for (const m of text.matchAll(re)) {
     const at = m.index ?? 0;
     if (at > last) plain(text.slice(last, at));
-    if (m[2] !== undefined) {
+    if (m[3] !== undefined) out.push({ kind: "link", text: m[2], href: m[3] });
+    else if (m[4] !== undefined) {
       // A bold gem name is still a gem name.
-      const inner = scan ? scan(m[2]) : [{ text: m[2] }];
+      const inner = scan ? scan(m[4]) : [{ text: m[4] }];
       const gem = inner.length === 1 ? inner[0].gem : undefined;
-      if (gem) out.push({ kind: "gem", text: m[2], gem });
-      else out.push({ kind: "bold", text: m[2] });
-    } else if (m[3] !== undefined) out.push({ kind: "code", text: m[3] });
+      if (gem) out.push({ kind: "gem", text: m[4], gem });
+      else out.push({ kind: "bold", text: m[4] });
+    } else if (m[5] !== undefined) out.push({ kind: "code", text: m[5] });
+    else if (m[6] !== undefined) {
+      const href = m[6].replace(/[.,;:!?)\]]+$/, "");
+      out.push({ kind: "link", text: "", href });
+      if (href.length < m[6].length) plain(m[6].slice(href.length));
+    }
     last = at + m[0].length;
   }
   if (last < text.length) plain(text.slice(last));
   return out;
+}
+
+export function tradeLeague(href: string): string | null {
+  try {
+    const url = new URL(href);
+    if (!url.hostname.endsWith("pathofexile.com")) return null;
+    const hit = /^\/trade2?\/search\/(?:(?:poe2|xbox|sony)\/)?([^/?#]+)/.exec(url.pathname);
+    return hit ? decodeURIComponent(hit[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function shortUrl(href: string): string {
+  try {
+    const url = new URL(href);
+    const text = url.hostname.replace(/^www\./, "") + url.pathname.replace(/\/$/, "");
+    return text.length > 40 ? `${text.slice(0, 39)}…` : text;
+  } catch {
+    return href;
+  }
 }
 
 function cells(line: string, scan?: GemScanner): Span[][] {

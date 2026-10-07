@@ -17,6 +17,7 @@ Length rules, in this order:
   A gear list is the exception: one line per slot, as many slots as there are.
   No headings. A list only when there are three or more parallel items.
 - Say what changed and what it cost. Leave the reasoning out unless asked.
+- Write a link as [a short label](address), never the bare address.
 - End with one short question offering more, when there is more to say:
   "Want the reasoning?" or "Want me to spend the 5 free points?".
 

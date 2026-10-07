@@ -110,6 +110,7 @@
   "chat_voice_stop": "Stop and turn speech into text (Esc cancels)",
   "chat_voice_working": "Turning speech into text…",
   "chat_voice_none": "No speech was heard. Try again a little closer to the microphone.",
+  "chat_trade_link": "Trade search: {league}",
 
   "settings_version": "App version",
   "settings_version_hint": "Checked once shortly after start. Installing replaces the app and needs a restart.",
