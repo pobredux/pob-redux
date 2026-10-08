@@ -46,7 +46,7 @@
   import { ui } from "$lib/state/ui.svelte";
   import { app } from "$lib/state/app.svelte";
   import { planner, AUTHOR_KEY } from "$lib/state/planner.svelte";
-  import { game } from "$lib/state/game.svelte";
+  import { game, GAME_LABEL, type Game } from "$lib/state/game.svelte";
   import Icon from "$lib/components/Icon.svelte";
   import ClassIcon from "$lib/components/ClassIcon.svelte";
   import Kbd from "$lib/components/Kbd.svelte";
@@ -174,6 +174,9 @@
 
   // The open build's version keeps its tree in loadTree's one-entry cache.
   const artVersion = $derived(build.tree?.treeVersion ?? build.meta?.latestTreeVersion ?? null);
+
+  const welcome = $derived(app.welcome && build.info?.generation === app.welcome.generation ? app.welcome : null);
+  const otherGame = $derived<Game>(game.isPoe2 ? "poe1" : "poe2");
 
   // As PoB colours classes: by their strongest base attributes.
   const ATTR_COLOUR: Record<string, string> = {
@@ -381,7 +384,7 @@
         const hints = r.gearHints > 0 ? m.import_gb_hints({ count: r.gearHints }) : "";
         const passives = r.allocated < r.requested ? m.import_gb_passives_partial({ allocated: r.allocated, requested: r.requested }) : m.import_gb_passives({ count: r.allocated });
         build.say(m.import_gb_summary({ passives, groups: r.skillGroups, gear, hints, issues: issues.length ? m.import_gb_issues({ count: issues.length }) : "" }));
-        build.view = "tree";
+        build.view = "overview";
       } else if (build.error) {
         say(m.import_failed({ error: build.error }));
       }
@@ -501,7 +504,7 @@
       const ok = await loadCodeOrLink(moba.pobCode);
       if (ok) {
         moba = null;
-        build.view = "tree";
+        build.view = "overview";
       }
     } catch (e) {
       build.error = String(e);
@@ -672,7 +675,7 @@
         const r = await build.run(() => engine.importCharacter({ character: ggg, passives: d.passives, items: d.items, name }));
         if (r) {
           build.say(m.import_imported({ name: c.name }));
-          build.view = "tree";
+          build.view = "overview";
         }
       }
     } catch (e) {
@@ -1016,6 +1019,30 @@
       <button class="btn sm primary" onclick={() => build.newBuild().then((r) => r && (ui.newBuildOpen = true))} disabled={build.busy > 0}>{m.import_new_build()}</button>
     </div>
     <div class="list">
+      {#if welcome}
+        <div class="welcome">
+          <div class="whead">
+            <span class="wtitle">{welcome.firstRun ? m.welcome_card_first() : m.welcome_card_empty()}</span>
+            <button class="btn sm ghost" onclick={() => (app.welcome = null)}>{m.import_dismiss()}</button>
+          </div>
+          <ol class="wsteps">
+            <li>{m.welcome_step_code()}</li>
+            <li>{m.welcome_step_character()}</li>
+            <li>{m.welcome_step_saved()}</li>
+            {#if game.isPoe2}<li>{m.welcome_step_planner()}</li>{/if}
+          </ol>
+          <div class="wfoot">
+            <button class="btn sm" onclick={() => build.newBuild().then((r) => r && (ui.newBuildOpen = true))} disabled={build.busy > 0}>
+              {m.welcome_start_new()}
+            </button>
+            <span class="vr"></span>
+            <span>{m.welcome_building_for({ game: GAME_LABEL[game.current] })}</span>
+            <button class="btn sm ghost" onclick={() => game.choose(otherGame)} disabled={game.switching || build.busy > 0}>
+              {m.welcome_switch({ game: GAME_LABEL[otherGame] })}
+            </button>
+          </div>
+        </div>
+      {/if}
       {#if newFolder !== null}
         <div class="newdir">
           <span class="label">{m.import_new_folder()}</span>
@@ -1811,6 +1838,43 @@
   .bname:disabled {
     color: var(--fg-3);
     cursor: default;
+  }
+  .welcome {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 8px 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--line-1);
+    border-left: 2px solid var(--focus);
+    border-radius: var(--r-1);
+    font-size: var(--fs-sm);
+    color: var(--fg-1);
+  }
+  .whead {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+  .wtitle {
+    font-size: var(--fs-md);
+    color: var(--fg-0);
+  }
+  .wsteps {
+    margin: 0;
+    padding-left: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .wfoot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--fs-xs);
+    color: var(--fg-2);
   }
   .recover {
     display: flex;

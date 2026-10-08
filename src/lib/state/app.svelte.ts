@@ -17,6 +17,10 @@ import { m } from "$lib/paraglide/messages";
 class AppStore {
   status = $state<EngineStatus | null>(null);
   paths = $state<AppPaths | null>(null);
+  /** False until boot has opened a build and picked the view, so the window never shows a view it is about to leave. */
+  ready = $state(false);
+  /** Set when boot had no build to reopen; the Builds tab greets the user until another build loads. */
+  welcome = $state<{ firstRun: boolean; generation: number | undefined } | null>(null);
   private timer = 0;
   private booted = false;
   private bootedGame: Game | null = null;
@@ -28,6 +32,7 @@ class AppStore {
   async boot() {
     clearTimeout(this.timer);
     this.status = null;
+    this.ready = false;
     await game.init().catch(() => {});
     const st = await new Promise<EngineStatus>((resolve) => {
       const poll = async () => {
@@ -67,6 +72,8 @@ class AppStore {
     } catch {}
     const session = first ? await sessionInfo().catch(() => null) : null;
     const linked = first ? await links.init().catch(() => false) : false;
+    let opened = true;
+    let nothingSaved = false;
     if (linked) {
       // the build from the link the app was opened with is loaded
     } else if (first && this.paths?.open_on_start) {
@@ -74,12 +81,21 @@ class AppStore {
     } else if (session?.safeMode) {
       await build.run(async () => {}, { sync: true });
       build.say(m.app_safe_mode());
+      opened = false;
     } else if (session?.uncleanExit && (await this.declineRecovery())) {
       await build.run(async () => {}, { sync: true });
+      opened = false;
     } else if (!(await build.reopenLast())) {
       await build.run(async () => {}, { sync: true });
+      opened = false;
+      nothingSaved = true;
     }
-    build.view = ((first && this.paths?.initial_view) as typeof build.view) || "tree";
+    build.markBlank(nothingSaved);
+    this.welcome = opened
+      ? null
+      : { firstRun: game.firstRun || !!this.welcome?.firstRun, generation: build.info?.generation };
+    build.view = ((first && this.paths?.initial_view) as typeof build.view) || (opened ? "overview" : "import");
+    this.ready = true;
     if (first) {
       if (this.paths?.chat_allow) chat.allowWrites = true;
       if (this.paths?.chat_log) chat.logPath = this.paths.chat_log;

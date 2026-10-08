@@ -45,7 +45,7 @@ class BuildStore {
   secondaryAscendancies = $state<{ id: number; name: string }[]>([]);
   /** Engine metadata (PoB version, tree versions); fetched once. */
   meta = $state<{ pobVersion: string; treeVersions: string[]; latestTreeVersion: string } | null>(null);
-  view = $state<ViewId>("import");
+  view = $state<ViewId>("overview");
   busy = $state(0);
   error = $state<string | null>(null);
   /** Bumped when calc output changes; views use it to refetch their own data. */
@@ -111,11 +111,19 @@ class BuildStore {
     this.autosaveTimer = setTimeout(() => void this.autosave(), 3_000);
   }
 
+  private blankAt: { generation: number; rev: number } | null = null;
+
+  /** Boot's blank fallback is not autosaved until it changes, so an untouched start greets the user again. */
+  markBlank(blank: boolean) {
+    this.blankAt = blank && this.info ? { generation: this.info.generation, rev: this.info.rev } : null;
+  }
+
   private async autosave() {
     if (!this.info || this.busy > 0) {
       this.scheduleAutosave();
       return;
     }
+    if (this.blankAt && this.info.generation === this.blankAt.generation && this.info.rev === this.blankAt.rev) return;
     try {
       const { xml } = await engine.saveBuildXml();
       if (xml === this.lastAutosave) return;
@@ -251,7 +259,6 @@ class BuildStore {
     this.meta = null;
     this.error = null;
     this.lastAutosave = "";
-    this.view = "import";
   }
 
   /** A build from the other game switches to it first; false if the user declined. */
@@ -275,7 +282,7 @@ class BuildStore {
     this.newBuildFolder = null;
     if (!(await this.ensureGameFor(() => engine.codeGame(code.trim()).then((r) => r.game)))) return undefined;
     return this.run(() => engine.loadBuildCode(code.trim(), name)).then((r) => {
-      if (r) this.view = "tree";
+      if (r) this.view = "overview";
       return r;
     });
   }
@@ -284,7 +291,7 @@ class BuildStore {
     this.newBuildFolder = null;
     if (!(await this.ensureGameFor(() => buildXmlGame(xml)))) return undefined;
     return this.run(() => engine.loadBuildXml(xml, name)).then((r) => {
-      if (r) this.view = "tree";
+      if (r) this.view = "overview";
       return r;
     });
   }
@@ -293,7 +300,7 @@ class BuildStore {
     this.newBuildFolder = null;
     if (!(await this.ensureGameFor(() => buildFileGame(path)))) return undefined;
     return this.run(() => engine.loadBuildFile(path)).then((r) => {
-      if (r) this.view = "tree";
+      if (r) this.view = "overview";
       return r;
     });
   }

@@ -39,7 +39,7 @@
   const paths = $derived(app.paths);
 
   $effect(() => {
-    if (status && status.state !== "booting") return;
+    if (status && status.state !== "booting" && app.ready) return;
     const tick = window.setInterval(() => (bootDots = (bootDots + 1) % 4), 400);
     return () => clearInterval(tick);
   });
@@ -86,7 +86,7 @@
     <main class="view">
       {#if appOptions.open}
         <SettingsView />
-      {:else if !status || status.state === "booting"}
+      {:else if !status || status.state === "booting" || (status.state === "ready" && !app.ready)}
         <div class="center">
           <div class="boot">
             <LogoMark class="bootlogo" />
@@ -143,7 +143,8 @@
     <div class="pick-backdrop">
       <div class="pick">
         <div class="label">{m.welcome_title()}</div>
-        <div class="big">{m.welcome_question()}</div>
+        <div class="big">{m.welcome_first_time()}</div>
+        <div>{m.welcome_question()}</div>
         <div class="dim small">{m.welcome_hint()}</div>
         <div class="pick-row">
           {#each GAMES as g (g)}
@@ -153,6 +154,7 @@
             </button>
           {/each}
         </div>
+        <div class="dim small">{m.welcome_next()}</div>
         {#if game.error}<div class="small" style:color="var(--bad)">{game.error}</div>{/if}
       </div>
     </div>
