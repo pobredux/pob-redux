@@ -26,24 +26,24 @@
     "i18n": "paraglide-js compile --project ./project.inlang"
   },
   "dependencies": {
-    "@ai-sdk/openai-compatible": "^3.0.67",
+    "@ai-sdk/openai-compatible": "^3.0.71",
     "@fontsource-variable/geist": "^5.3.0",
     "@fontsource-variable/geist-mono": "^5.3.0",
-    "@tauri-apps/api": "^2.12.3",
-    "@tauri-apps/plugin-clipboard-manager": "^2.4.2",
-    "@tauri-apps/plugin-dialog": "^2.8.2",
-    "@tauri-apps/plugin-opener": "^2.7.1",
+    "@tauri-apps/api": "^2.12.4",
+    "@tauri-apps/plugin-clipboard-manager": "^2.5.0",
+    "@tauri-apps/plugin-dialog": "^2.8.3",
+    "@tauri-apps/plugin-opener": "^2.7.2",
     "@tauri-apps/plugin-process": "^2.4.0",
-    "@tauri-apps/plugin-updater": "^2.13.3",
-    "ai": "^7.0.137"
+    "@tauri-apps/plugin-updater": "^2.14.0",
+    "ai": "^7.0.143"
   },
   "devDependencies": {
-    "@inlang/paraglide-js": "^2.27.0",
+    "@inlang/paraglide-js": "^2.29.0",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
-    "@tauri-apps/cli": "^2.12.2",
+    "@tauri-apps/cli": "^2.12.3",
     "@types/node": "^26.6.5",
     "svelte": "^5.57.2",
-    "svelte-check": "^4.7.6",
+    "svelte-check": "^4.7.7",
     "typescript": "^6.0.3",
     "vite": "^8.3.4"
   },
