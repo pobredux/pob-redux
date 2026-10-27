@@ -3700,7 +3700,7 @@ dependencies = [
 
 [[package]]
 name = "pob-engine"
-version = "0.4.42"
+version = "0.4.43"
 dependencies = [
  "clap",
  "crc32fast",
@@ -3719,7 +3719,7 @@ dependencies = [
 
 [[package]]
 name = "pob-redux"
-version = "0.4.42"
+version = "0.4.43"
 dependencies = [
  "axum",
  "base64 0.23.1",
@@ -3755,7 +3755,7 @@ dependencies = [
 
 [[package]]
 name = "pob-sync"
-version = "0.4.42"
+version = "0.4.43"
 dependencies = [
  "anyhow",
  "clap",
