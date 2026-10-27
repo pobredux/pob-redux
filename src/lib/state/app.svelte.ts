@@ -58,11 +58,8 @@ class AppStore {
     if (this.bootedGame && this.bootedGame !== game.current) chat.reset();
     this.bootedGame = game.current;
     await mcp.init().catch(() => {});
-    await chat.init(this.paths?.chat_open).catch(() => {});
-    if (first) {
-      if (this.paths?.chat_provider) await chat.setProvider(this.paths.chat_provider).catch(() => {});
-      if (this.paths?.chat_model) chat.setModel(this.paths.chat_model);
-    }
+    // Checking the agent CLIs takes seconds; the build must not wait for it.
+    const chatReady = this.initChat(first);
     if (first) appUpdate.init();
     // shared items added in this app are ours to restore (PoB's own
     // settings file, which also holds shared items, is never written)
@@ -103,9 +100,16 @@ class AppStore {
         chat.input = this.paths.chat_ask;
         // A value starting with "/" only fills the box, so the tool menu can
         // be inspected without spending a request.
-        if (!this.paths.chat_ask.startsWith("/")) void chat.send();
+        if (!this.paths.chat_ask.startsWith("/")) void chatReady.then(() => chat.send());
       }
     }
+  }
+
+  private async initChat(first: boolean) {
+    await chat.init(this.paths?.chat_open).catch(() => {});
+    if (!first) return;
+    if (this.paths?.chat_provider) await chat.setProvider(this.paths.chat_provider).catch(() => {});
+    if (this.paths?.chat_model) chat.setModel(this.paths.chat_model);
   }
 
   /** True when the user chose Start empty, after a recovered copy is saved. */

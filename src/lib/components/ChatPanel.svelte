@@ -298,7 +298,11 @@
     </div>
   {/if}
 
-  {#if !chat.ready}
+  {#if chat.checkedAt === null}
+    <div class="setup">
+      <p class="dim">{m.assistant_checking()}</p>
+    </div>
+  {:else if !chat.ready}
     <div class="setup">
       <div class="label">{m.chat_no_provider()}</div>
       <p class="dim">{m.chat_no_provider_blurb()}</p>
