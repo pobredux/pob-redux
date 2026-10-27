@@ -206,7 +206,7 @@ fn extract(zip_path: &Path, dir: &Path, a: &Asset) -> Result<(), String> {
     let file = std::fs::File::open(zip_path).map_err(|e| e.to_string())?;
     let mut zip = zip::ZipArchive::new(file).map_err(|e| format!("the download is not a valid archive: {e}"))?;
     let expected = [a.exe, a.harness];
-    let names: Vec<String> = zip.file_names().map(str::to_string).collect();
+    let names: Vec<String> = zip.file_names().map(|n| n.map(|n| n.into_owned())).collect::<Result<_, _>>().map_err(|e| e.to_string())?;
     if names.len() != expected.len() || !expected.iter().all(|(n, _)| names.iter().any(|x| x == n)) {
         return Err(format!("the archive holds unexpected files: {}", names.join(", ")));
     }
