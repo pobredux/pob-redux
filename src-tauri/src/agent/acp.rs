@@ -13,7 +13,6 @@ use crate::ai::ModelInfo;
 
 const SERVER: &str = "pobredux";
 const OPENCODE_FREE: &str = "OpenCode's free models only work inside OpenCode itself. Pick a model from a provider you signed in to.";
-const GEMINI_PERSONAL: &str = "Google no longer lets personal Google accounts use Gemini CLI. Use Antigravity instead, or sign Gemini CLI in with a Gemini API key.";
 
 enum Check {
     CursorAbout,
@@ -95,18 +94,6 @@ pub(crate) static KIMI: Spec = Spec {
     list_models: None,
 };
 
-/// Its `authenticate` deletes saved credentials when the method differs from the user's, so it is never called.
-pub(crate) static GEMINI: Spec = Spec {
-    name: "Gemini",
-    args: &["--acp"],
-    auth: None,
-    key: None,
-    env: &[("NO_BROWSER", "true"), ("GEMINI_CLI_NO_RELAUNCH", "true")],
-    login: Some("gemini"),
-    check: Check::Session,
-    list_models: None,
-};
-
 /// Google's agent, downloaded and run with a private profile by `antigravity.rs`.
 pub(crate) static ANTIGRAVITY: Spec = Spec {
     name: "Antigravity",
@@ -171,34 +158,13 @@ pub(crate) async fn auth(spec: &Spec, launch: &Launch, status: &mut AgentStatus)
                         let _ = conn.rpc.request_for("session/close", json!({ "sessionId": id }), Some(Duration::from_secs(2))).await;
                     }
                     status.signed_in = Some(true);
-                    status.account = if spec.name == GEMINI.name { gemini_account() } else { None };
                 }
                 Err(e) if e == signed_out(spec) => status.signed_in = Some(false),
-                Err(e) if e == GEMINI_PERSONAL => {
-                    status.signed_in = Some(false);
-                    status.error = Some(e);
-                }
                 Err(_) => {}
             }
         }
         Check::Unknown => {}
     }
-}
-
-fn gemini_account() -> Option<String> {
-    let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })?;
-    let text = std::fs::read_to_string(std::path::Path::new(&home).join(".gemini").join("settings.json")).unwrap_or_default();
-    let settings: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
-    let method = settings["security"]["auth"]["selectedType"].as_str().or(settings["selectedAuthType"].as_str());
-    let label = match method {
-        Some("oauth-personal") => "Google account",
-        Some("gemini-api-key") => "Gemini API key",
-        Some("vertex-ai") => "Vertex AI",
-        Some("gateway") => "AI API gateway",
-        _ if std::env::var_os("GEMINI_API_KEY").is_some() => "Gemini API key",
-        _ => return None,
-    };
-    Some(label.into())
 }
 
 fn auth_error(e: &str) -> bool {
@@ -364,15 +330,7 @@ async fn open(spec: &Spec, launch: &Launch, cwd: &std::path::Path, mcp: Value, a
         .rpc
         .request_for("session/new", json!({ "cwd": cwd.to_string_lossy(), "mcpServers": mcp }), Some(Duration::from_secs(120)))
         .await
-        .map_err(|e| {
-            if e.contains("no longer supported for Gemini Code Assist for individuals") {
-                GEMINI_PERSONAL.into()
-            } else if auth_error(&e) {
-                signed_out(spec)
-            } else {
-                conn.explain(e)
-            }
-        })?;
+        .map_err(|e| if auth_error(&e) { signed_out(spec) } else { conn.explain(e) })?;
     Ok((conn, session))
 }
 

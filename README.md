@@ -88,11 +88,11 @@ skills and config.
 An optional chat panel that answers questions about the open build and can change it. It works in
 both games; Path of Exile 1 support is new and marked beta. Open it from the chat icon in the status bar or with Ctrl+L. It runs
 through a coding agent on your computer, signed in to your own plan: Claude Code, Codex, GitHub Copilot, Cursor,
-Grok, Kimi Code, OpenCode, Gemini CLI or Google Antigravity (which the app downloads for you). It can also use a model
+Grok, Kimi Code, OpenCode or Google Antigravity (which the app downloads for you). It can also use a model
 you run with Ollama.
 
-Sign in once with the agent's own command (for example `claude auth login` or `codex login`; for Gemini CLI, run
-`gemini` once and pick a sign-in); Antigravity signs in with Google from Settings > Assistant. The app never sees
+Sign in once with the agent's own command (for example `claude auth login` or `codex login`); Antigravity signs in
+with Google from Settings > Assistant. The app never sees
 your login: it starts the agent, which uses its own. Your plan's usage limits apply. The agent works in an empty folder, its shell and file-editing tools are turned off or
 refused, and it is told to use only the build's tools.
 

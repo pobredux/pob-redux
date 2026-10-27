@@ -1,5 +1,5 @@
 //! The assistant through the user's own coding agent (Claude Code, Codex,
-//! Copilot, Cursor, Grok, Kimi, OpenCode, Gemini CLI, Antigravity), so their subscription pays
+//! Copilot, Cursor, Grok, Kimi, OpenCode, Antigravity), so their subscription pays
 //! for it. The agent runs the conversation; the build's tools reach it over a
 //! private MCP server that only this session can call, and every call passes
 //! the gate below so the panel can show it and hold writes for approval.
@@ -40,11 +40,10 @@ pub enum Cli {
     Grok,
     Kimi,
     OpenCode,
-    Gemini,
     Antigravity,
 }
 
-pub const CLIS: [Cli; 9] = [Cli::Claude, Cli::Codex, Cli::Copilot, Cli::Cursor, Cli::Grok, Cli::Kimi, Cli::OpenCode, Cli::Gemini, Cli::Antigravity];
+pub const CLIS: [Cli; 8] = [Cli::Claude, Cli::Codex, Cli::Copilot, Cli::Cursor, Cli::Grok, Cli::Kimi, Cli::OpenCode, Cli::Antigravity];
 
 struct Info {
     id: &'static str,
@@ -64,7 +63,6 @@ impl Cli {
             Cli::Grok => ("grok", "Grok", "grok", Some("grok login"), "https://www.npmjs.com/package/@xai-official/grok"),
             Cli::Kimi => ("kimi", "Kimi", "kimi", Some("kimi login"), "https://github.com/MoonshotAI/kimi-code"),
             Cli::OpenCode => ("opencode", "OpenCode", "opencode", Some("opencode auth login"), "https://opencode.ai/docs/"),
-            Cli::Gemini => ("gemini", "Gemini", "gemini", Some("gemini"), "https://github.com/google-gemini/gemini-cli#-installation"),
             Cli::Antigravity => ("antigravity", "Antigravity", "agy_acp_server", None, "https://antigravity.google/docs/ide/extensions"),
         };
         Info { id, label, binary, login, install }
@@ -96,7 +94,6 @@ impl Cli {
             Cli::Grok => ("irm https://x.ai/cli/install.ps1 | iex", "curl -fsSL https://x.ai/cli/install.sh | bash"),
             Cli::Kimi => ("irm https://code.kimi.com/kimi-code/install.ps1 | iex", "curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash"),
             Cli::OpenCode => ("npm install -g opencode-ai", "curl -fsSL https://opencode.ai/install | bash"),
-            Cli::Gemini => ("npm install -g @google/gemini-cli", "npm install -g @google/gemini-cli"),
             Cli::Antigravity => return None,
         };
         Some(if cfg!(windows) { windows } else { unix })
@@ -106,7 +103,7 @@ impl Cli {
         match self {
             Cli::Claude | Cli::OpenCode => &["auth", "login"],
             Cli::Codex | Cli::Copilot | Cli::Cursor | Cli::Grok | Cli::Kimi => &["login"],
-            Cli::Gemini | Cli::Antigravity => &[],
+            Cli::Antigravity => &[],
         }
     }
 
@@ -126,7 +123,6 @@ impl Cli {
             Cli::Grok => Some(&acp::GROK),
             Cli::Kimi => Some(&acp::KIMI),
             Cli::OpenCode => Some(&acp::OPENCODE),
-            Cli::Gemini => Some(&acp::GEMINI),
             Cli::Antigravity => Some(&acp::ANTIGRAVITY),
             Cli::Claude | Cli::Codex => None,
         }
