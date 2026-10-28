@@ -301,7 +301,7 @@
       <section class="panel">
         <div class="ph"><span class="t">{m.ov_skills()}</span><span class="s">{m.ov_skills_sum({ count: skillRows.length })}</span></div>
         <div class="skills">
-          {#each skillRows.slice(0, SHOWN) as r, i (r.group + ":" + r.skill)}
+          {#each skillRows.slice(0, SHOWN) as r, i}
             {#if r.press === "persistent" && (i === 0 || skillRows[i - 1].press !== "persistent")}
               <div class="grp">
                 {m.ov_persistent()}{#if game.isPoe2 && summary}<span class:neg={summary.spiritUnreserved < 0}>{` · ${m.ov_spirit_used({ used: fmt(summary.spirit - summary.spiritUnreserved), total: fmt(summary.spirit) })}`}</span>{/if}
