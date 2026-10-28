@@ -26,7 +26,7 @@
     "i18n": "paraglide-js compile --project ./project.inlang --output-structure locale-modules"
   },
   "dependencies": {
-    "@ai-sdk/openai-compatible": "^3.0.71",
+    "@ai-sdk/openai-compatible": "^3.0.78",
     "@fontsource-variable/geist": "^5.3.0",
     "@fontsource-variable/geist-mono": "^5.3.0",
     "@tauri-apps/api": "^2.12.4",
@@ -35,17 +35,17 @@
     "@tauri-apps/plugin-opener": "^2.7.2",
     "@tauri-apps/plugin-process": "^2.4.0",
     "@tauri-apps/plugin-updater": "^2.14.0",
-    "ai": "^7.0.143"
+    "ai": "^7.0.153"
   },
   "devDependencies": {
-    "@inlang/paraglide-js": "^2.29.0",
+    "@inlang/paraglide-js": "^2.29.1",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
-    "@tauri-apps/cli": "^2.12.3",
+    "@tauri-apps/cli": "^2.12.4",
     "@types/node": "^26.6.5",
     "svelte": "^5.57.2",
     "svelte-check": "^4.7.7",
     "typescript": "^6.0.3",
-    "vite": "^8.3.4"
+    "vite": "^8.3.5"
   },
   "trustedDependencies": [
     "esbuild"
