@@ -4,7 +4,6 @@ use std::sync::Mutex;
 
 use tauri::webview::{NewWindowResponse, PageLoadEvent};
 use tauri::{AppHandle, Manager, Url, WebviewUrl, WebviewWindowBuilder};
-use tauri_plugin_opener::OpenerExt;
 
 const LABEL: &str = "trade";
 
@@ -57,7 +56,7 @@ pub async fn trade_window_open(app: AppHandle, url: String) -> Result<(), String
             }
         })
         .on_new_window(move |url, _| {
-            let _ = opener.opener().open_url(url.as_str(), None::<&str>);
+            let _ = crate::browser::open(&opener, url.as_str());
             NewWindowResponse::Deny
         })
         .build()

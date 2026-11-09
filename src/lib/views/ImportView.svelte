@@ -1303,6 +1303,9 @@
       {:else if ggg.signingIn}
         <div class="arow">
           <span class="dim small grow">{m.import_ggg_waiting()}</span>
+          {#if ggg.link}
+            <button class="btn sm ghost" title={m.ggg_copy_link_title()} onclick={() => ggg.copyLink().catch((e) => (build.error = String(e)))}>{ggg.linkCopied ? m.common_copied() : m.ggg_copy_link()}</button>
+          {/if}
           <button class="btn sm" onclick={() => ggg.cancel()}>{m.common_cancel()}</button>
         </div>
       {:else}

@@ -1,7 +1,6 @@
 <script lang="ts">
-  import { openUrl } from "@tauri-apps/plugin-opener";
   import { isNumeric, parse, shortUrl, tradeLeague, type Span } from "$lib/ai/markdown";
-  import type { Tooltip } from "$lib/engine.svelte";
+  import { openUrl, type Tooltip } from "$lib/engine.svelte";
   import { m } from "$lib/paraglide/messages";
   import { gems } from "$lib/state/gems.svelte";
   import { tradeWindow } from "$lib/state/trade.svelte";

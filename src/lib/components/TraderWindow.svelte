@@ -930,6 +930,9 @@
         {ggg.account ? m.trader_note_again() : m.trader_note_sign_in()}
         {#if ggg.signingIn}
           <span>{m.import_ggg_waiting()}</span>
+          {#if ggg.link}
+            <button class="btn sm ghost" title={m.ggg_copy_link_title()} onclick={() => ggg.copyLink().catch((e) => (build.error = String(e)))}>{ggg.linkCopied ? m.common_copied() : m.ggg_copy_link()}</button>
+          {/if}
           <button class="btn sm ghost" onclick={() => ggg.cancel()}>{m.common_cancel()}</button>
         {:else}
           <button class="btn sm" onclick={signIn}>{m.import_ggg_sign_in()}</button>

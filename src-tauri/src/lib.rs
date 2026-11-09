@@ -7,6 +7,7 @@ mod tools;
 mod library;
 mod ai;
 mod agent;
+mod browser;
 mod decide;
 mod sites;
 mod mobalytics;
@@ -1318,6 +1319,7 @@ pub fn run() {
             export_diagnostics,
             diagnostics::log_frontend,
             diagnostics::reveal_logs,
+            browser::open_link,
             game_status,
             set_game,
             build_file_game,

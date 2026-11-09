@@ -53,6 +53,9 @@ tauri-plugin-deep-link = "2"
 [target."cfg(unix)".dependencies]
 libc = "0.2"
 
+[target."cfg(target_os = \"linux\")".dependencies]
+open = "5"
+
 [target."cfg(windows)".dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Cryptography", "Win32_System_JobObjects", "Win32_System_Threading"] }
 

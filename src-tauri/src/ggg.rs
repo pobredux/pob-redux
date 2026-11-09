@@ -9,8 +9,7 @@ use reqwest::header::HeaderMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use tauri::{AppHandle, State, Url};
-use tauri_plugin_opener::OpenerExt;
+use tauri::{AppHandle, Emitter, State, Url};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, oneshot};
@@ -397,7 +396,10 @@ pub async fn ggg_sign_in(app: AppHandle, state: State<'_, GggState>) -> Result<O
         query_value(SCOPES),
         query_value(&redirect)
     );
-    app.opener().open_url(&url, None::<&str>).map_err(|e| format!("could not open the browser: {e}"))?;
+    let _ = app.emit_to("main", "ggg:sign-in", &url);
+    if let Err(e) = crate::browser::open(&app, &url) {
+        log::warn!("ggg: could not open the browser: {e}");
+    }
     let code = tokio::select! {
         code = tokio::time::timeout(SIGN_IN_WAIT, wait_for_code(listener, csrf)) => {
             code.map_err(|_| "The sign-in was not finished in time. Try again.".to_string())??

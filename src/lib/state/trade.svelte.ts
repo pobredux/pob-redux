@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { openUrl } from "$lib/engine.svelte";
 
 const KEY = "pob-redux:trade-window";
 

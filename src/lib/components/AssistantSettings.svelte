@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { openUrl } from "@tauri-apps/plugin-opener";
+  import { openUrl } from "$lib/engine.svelte";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
   import { listen } from "@tauri-apps/api/event";
   import {

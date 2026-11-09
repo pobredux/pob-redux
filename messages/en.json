@@ -1522,6 +1522,8 @@
   "import_ggg_find": "List my characters",
   "import_ggg_need_sign_in": "Sign in above to list your characters.",
   "ggg_account_title": "Path of Exile account",
+  "ggg_copy_link": "Copy link",
+  "ggg_copy_link_title": "No browser page opened? Paste this link into your browser.",
   "ggg_reauth_days": [
     {
       "declarations": [

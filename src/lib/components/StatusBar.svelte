@@ -1,11 +1,10 @@
 <script lang="ts">
-  import { poolStatus, telemetry, type EngineStatus, type AppPaths, type PoolStatus } from "$lib/engine.svelte";
+  import { openUrl, poolStatus, telemetry, type EngineStatus, type AppPaths, type PoolStatus } from "$lib/engine.svelte";
   import { build } from "$lib/state/build.svelte";
   import { mcp } from "$lib/state/mcp.svelte";
   import { chat } from "$lib/state/chat.svelte";
   import { appOptions } from "$lib/state/options.svelte";
   import Icon from "$lib/components/Icon.svelte";
-  import { openUrl } from "@tauri-apps/plugin-opener";
   import { m } from "$lib/paraglide/messages";
 
   let { status, paths }: { status: EngineStatus | null; paths: AppPaths | null } = $props();

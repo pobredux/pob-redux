@@ -26,6 +26,8 @@ use tokio::sync::{oneshot, watch};
 
 use crate::tools::{defs, dispatch, JsonObject, ToolContext, ToolError};
 use which::Launch;
+#[cfg(target_os = "linux")]
+pub(crate) use which::restore_host_env;
 
 /// Characters of one tool result the model sees; the panel still gets all of it.
 const MAX_RESULT_CHARS: usize = 6000;

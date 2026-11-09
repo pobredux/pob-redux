@@ -7,14 +7,13 @@
   import { appUpdate } from "$lib/state/update.svelte";
   import { ui, type Theme } from "$lib/state/ui.svelte";
   import { save } from "@tauri-apps/plugin-dialog";
-  import { exportDiagnostics, revealLogs } from "$lib/engine.svelte";
+  import { exportDiagnostics, openUrl, revealLogs } from "$lib/engine.svelte";
   import { locale, LOCALES, LOCALE_LABEL, type LocalePreference } from "$lib/state/locale.svelte";
   import { decider } from "$lib/state/decide.svelte";
   import { voice } from "$lib/state/voice.svelte";
   import { tradeWindow } from "$lib/state/trade.svelte";
   import { chat } from "$lib/state/chat.svelte";
   import AssistantSettings from "$lib/components/AssistantSettings.svelte";
-  import { openUrl } from "@tauri-apps/plugin-opener";
   import { m } from "$lib/paraglide/messages";
 
   type Tone = "ok" | "warn" | "off" | undefined;

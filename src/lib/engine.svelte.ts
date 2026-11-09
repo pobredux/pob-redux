@@ -238,6 +238,11 @@ export function revealLogs(): Promise<string> {
   return invoke<string>("reveal_logs");
 }
 
+/** Opens an http(s) link in the user's browser. */
+export function openUrl(url: string): Promise<void> {
+  return invoke<void>("open_link", { url });
+}
+
 export interface ReimportOptions {
   tree: boolean;
   gear: boolean;
