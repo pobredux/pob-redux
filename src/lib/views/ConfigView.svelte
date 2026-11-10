@@ -8,6 +8,7 @@
   import { modKey } from "$lib/keys";
   import Kbd from "$lib/components/Kbd.svelte";
   import { m } from "$lib/paraglide/messages";
+  import { configLabel } from "$lib/pob-labels";
 
   let options = $state<ConfigOption[]>([]);
   let config = $state<Record<string, unknown>>({});
@@ -52,7 +53,7 @@
     const q = filter.trim().toLowerCase();
     const out: { name: string; items: ConfigOption[] }[] = [];
     for (const o of options) {
-      if (q && !`${o.group ?? ""} ${o.label ?? ""} ${o.var}`.toLowerCase().includes(q)) continue;
+      if (q && !`${o.group ?? ""} ${o.label ?? ""} ${configLabel(o.label ?? "")} ${o.var}`.toLowerCase().includes(q)) continue;
       // Hide options PoB would hide for this build, but never hide one the user changed.
       if (relevantOnly && !q && visibility && !visibility[o.var] && !isChanged(o, config[o.var])) continue;
       const name = o.section ?? m.config_section_general();
@@ -133,7 +134,7 @@
 
   // PoB pads some list labels with spaces and then search keywords, which its narrow dropdown clips off.
   function listLabel(label: string | null | undefined): string {
-    return stripPobText(label).split(/ {8,}/)[0].trim();
+    return stripPobText(configLabel(stripPobText(label).split(/ {8,}/)[0].trim()));
   }
 
   function badLines(b: CustomModBlock) {
@@ -311,7 +312,7 @@
         <section class="card" bind:offsetHeight={heights[sec.name]} style:width={`${layout.width}px`} style:left={`${p.x}px`} style:top={`${p.y}px`}>
           <button class="chead" aria-expanded={!collapsed.has(sec.name)} onclick={() => toggle(sec.name)}>
             <span class="caret" class:open={!collapsed.has(sec.name)}>▸</span>
-            <span class="cname">{sec.name}</span>
+            <span class="cname">{configLabel(sec.name)}</span>
             {#if changed}<span class="cset num">{m.config_set_count({ count: changed })}</span>{/if}
             <span class="ccount num">{sec.items.length}</span>
           </button>
@@ -320,10 +321,10 @@
               {#each sec.items as o, i (o.var)}
                 {@const v = config[o.var]}
                 {#if o.group && o.group !== sec.items[i - 1]?.group}
-                  <div class="ogroup"><PobText text={o.group.replace(/:\s*$/, "")} /></div>
+                  <div class="ogroup"><PobText text={configLabel(o.group.replace(/:\s*$/, ""))} /></div>
                 {/if}
                 <label class="opt" class:set={isChanged(o, v)} title={o.tooltip ?? undefined}>
-                  <span class="olabel"><PobText text={o.label ?? o.var} /></span>
+                  <span class="olabel"><PobText text={configLabel(o.label ?? o.var)} /></span>
                   {#if o.type === "check"}
                     <input type="checkbox" checked={v === true} onchange={(e) => set(o, (e.target as HTMLInputElement).checked ? true : null)} />
                   {:else if o.type === "list" && o.list}

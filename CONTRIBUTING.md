@@ -81,11 +81,19 @@ To add a language, put its tag in `locales` in `project.inlang/settings.json`, a
 `messages/<tag>.json`, and add the language's own name to `LOCALE_LABEL` in
 `src/lib/state/locale.svelte.ts`.
 
-The stat labels in the sidebar and the Compare summary, and the item slot labels, come from Path of
-Building. Each has a `pob_stat_*` or `pob_slot_*` key in `messages/en.json`, named after its English
-text, and is translated like any other key. A numbered slot shares one key, such as
-`pob_slot_flask_n` for "Flask {n}". After a PoB update, `bun run i18n:labels` adds keys for new
-labels and `bun run check:labels` fails if one is missing.
+Some labels come from Path of Building: the stat labels in the sidebar and the Compare summary, the
+item slot labels, and the labels on the Config tab. Their English text is generated into
+`messages/pob/en.json`, so never edit that file by hand. To translate them, create
+`messages/pob/<tag>.json` and add keys the same way as above. Each key is named after its English
+text: `pob_stat_*`, `pob_slot_*` or `pob_config_*`.
+
+- A numbered slot shares one key, such as `pob_slot_flask_n` for "Flask {n}".
+- Some Config labels carry PoB colour codes, such as `^x7070FF` before a word and `^7` after it.
+  Keep each code and move it with the word it colours.
+- A label that ends with a colon has none in the file. The app adds it back.
+
+After a PoB update, `bun run i18n:labels` regenerates the English file and `bun run check:labels`
+fails if it is out of date.
 
 Other game data, such as passive names, item mods and gem names, comes from Path of Building and
 stays in English whatever the interface language is.
