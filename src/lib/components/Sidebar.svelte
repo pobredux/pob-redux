@@ -10,6 +10,8 @@
   import { groupSidebar, type SidebarSection } from "$lib/sidebar-groups";
   import { parsePobText, stripPobText } from "$lib/pobtext";
   import { m } from "$lib/paraglide/messages";
+  import { locale } from "$lib/state/locale.svelte";
+  import { statLabel } from "$lib/i18n/stat-labels";
 
   let libraryOpen = $state(false);
 
@@ -91,7 +93,7 @@
     }, pin ? 0 : 140);
   }
 
-  const rowTitle = (lhs: string | null) => lhs?.replace(/:\s*$/, "") || m.sidebar_breakdown();
+  const rowTitle = (lhs: string | null) => statLabel(lhs, locale.current) || m.sidebar_breakdown();
 
   function rowLeave() {
     clearTimeout(bdTimer);
@@ -370,7 +372,7 @@
                       onclick={(e) => r.hasBreakdown && rowBreakdown(e.clientY, rowIndex + 1, rowTitle(r.lhs), true)}
                       onkeydown={(e) => e.key === "Enter" && r.hasBreakdown && rowBreakdown(200, rowIndex + 1, rowTitle(r.lhs), true)}
                     >
-                      <span class="k"><PobText text={r.lhs?.replace(/:\s*$/, "")} defaultColor="var(--fg-1)" /></span>
+                      <span class="k"><PobText text={statLabel(r.lhs, locale.current)} defaultColor="var(--fg-1)" /></span>
                       <span class="svalue">
                         <span class="v num"><PobText text={r.rhs} /></span>
                         {#if pinned}<span class="pinmark" title={m.sidebar_breakdown_pinned()}><Icon name="push-pin" size={11} /></span>{/if}

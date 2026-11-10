@@ -33,7 +33,7 @@
   "settings_diagnostics_desc": "Logs and a report file for bug reports.",
 
   "settings_language": "Language",
-  "settings_language_hint": "System follows your operating system. Game data from Path of Building stays in English.",
+  "settings_language_hint": "System follows your operating system. Interface labels follow the selected language; Path of Building game data stays in its original language unless a dictionary for that language is installed.",
   "settings_language_system": "System ({language})",
 
   "settings_theme": "Theme",

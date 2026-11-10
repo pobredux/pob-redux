@@ -33,6 +33,7 @@
   import Icon from "$lib/components/Icon.svelte";
   import MoreMenu, { type MenuItem } from "$lib/components/MoreMenu.svelte";
   import { m } from "$lib/paraglide/messages";
+  import { gameText } from "$lib/i18n/game-text.svelte";
   import { confirm } from "$lib/state/confirm.svelte";
 
   let slotsResp = $state<SlotsResponse | null>(null);
@@ -1073,8 +1074,8 @@
             onmouseenter={(e) => showTip(e, `d${dbTab}:${row.name}:${build.rev}`, () => engine.itemTooltip({ db: dbTab, name: row.name }))}
             onmouseleave={hideTip}
           >
-            <span class="iname" style:color={rarityColor[row.rarity ?? ""] ?? "var(--fg-1)"}>{row.name}</span>
-            <span class="itag dim">{row.baseName ?? row.type}</span>
+            <span class="iname" style:color={rarityColor[row.rarity ?? ""] ?? "var(--fg-1)"}>{gameText(row.name)}</span>
+            <span class="itag dim">{gameText(row.baseName ?? row.type)}</span>
             <span class="iops">
               <button class="mini w" title={m.items_db_equip_title()} onclick={() => build.run(() => engine.itemDbEquip(dbTab, row.name))}>{m.items_equip()}</button>
             </span>

@@ -38,6 +38,48 @@ local function frame()
 	runCallback("OnFrame")
 end
 
+-- PoB indexes gems by display name (Data.lua's setupGem) and runs every name
+-- through sanitiseText, which turns non-ASCII bytes into "?". The shipped data
+-- may carry translated names, so restore them from `cnName` and rebuild the
+-- index from the English name in `englishName`: a build or a pasted gem item
+-- that names its gem in English still resolves to a gemId.
+do
+	local index = data.gemForBaseName
+	for gemId, gem in pairs(data.gems) do
+		if gem.cnName then
+			gem.name = gem.cnName
+		end
+		local en = gem.englishName
+		if en then
+			index[en:lower()] = gemId
+			if gem.grantedEffect and gem.grantedEffect.support and gem.grantedEffectId ~= "SupportBarrage" then
+				index[(en .. " Support"):lower()] = gemId
+			end
+		elseif gem.baseTypeName then
+			index[gem.baseTypeName:lower()] = gemId
+		end
+	end
+end
+
+-- A build file stores gem names in English (`nameSpec`), and PoB builds group
+-- labels from those names. Resolve them through the same English index so the
+-- UI shows the translated name the data carries.
+function cnGemName(name)
+	if type(name) ~= "string" or name == "" then return name end
+	local id = data.gemForBaseName[name:lower()]
+	local gem = id and data.gems[id]
+	return gem and gem.cnName or name
+end
+
+local function cnGemLabel(label)
+	if type(label) ~= "string" or label == "" then return label end
+	local parts = {}
+	for part in label:gmatch("[^,]+") do
+		parts[#parts + 1] = cnGemName((part:gsub("^%s*(.-)%s*$", "%1")))
+	end
+	return table.concat(parts, ", ")
+end
+
 -- Calcs owns socket and active selection; unsupported detail selectors follow the main skill.
 local calcsSelection = {
 	twins = {
@@ -3532,6 +3574,7 @@ local function groupSkills(group)
 				entry.minionSkill = src.skillMinionSkill or 1
 			end
 		end
+		entry.name = cnGemName(entry.name)
 		skills[#skills + 1] = entry
 	end
 	return skills
@@ -3572,7 +3615,7 @@ M.get_skills = function()
 			gems[#gems + 1] = {
 				index = gi,
 				nameSpec = opt(gem.nameSpec),
-				name = gd and gd.name or opt(gem.nameSpec),
+				name = gd and (gd.cnName or gd.name) or opt(cnGemName(gem.nameSpec)),
 				gemId = opt(gem.gemId),
 				skillId = opt(gem.skillId),
 				level = opt(gem.level),
@@ -3593,8 +3636,8 @@ M.get_skills = function()
 		end
 		groups[#groups + 1] = {
 			index = i,
-			label = opt(group.label),
-			displayLabel = opt(group.displayLabel),
+			label = opt(cnGemLabel(group.label)),
+			displayLabel = opt(cnGemLabel(group.displayLabel)),
 			enabled = group.enabled ~= false,
 			includeInFullDPS = group.includeInFullDPS == true,
 			slot = opt(group.slot),

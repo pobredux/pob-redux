@@ -23,7 +23,11 @@
     "mcp": "bun scripts/mcp-call.ts",
     "check:tools": "bun scripts/check-tools.ts",
     "release:tag": "bun scripts/release.mjs",
-    "i18n": "paraglide-js compile --project ./project.inlang --output-structure locale-modules"
+    "i18n": "paraglide-js compile --project ./project.inlang --output-structure locale-modules",
+    "i18n:dict": "node scripts/build-game-dictionary.mjs",
+    "i18n:zh": "node scripts/build-game-dictionary.mjs --locale zh-CN && node scripts/build-game-dictionary.mjs --locale zh-CN --game poe2",
+    "i18n:zh-TW": "node scripts/build-game-dictionary.mjs --locale zh-TW --translate-dir zh-rTW --no-overrides && node scripts/build-locale-variant.mjs --from zh-CN --to zh-TW --fill-gaps --extra src/lib/i18n/data/overrides/zh-TW.manual.json && node scripts/build-game-dictionary.mjs --locale zh-TW --translate-dir zh-rTW --bridge-from zh-CN && node scripts/build-game-dictionary.mjs --locale zh-CN --game poe2 && node scripts/build-game-dictionary.mjs --locale zh-TW --translate-dir zh-rTW --game poe2 --bridge-from zh-CN",
+    "cn:names": "node scripts/apply-poe1-cn-names.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.71",

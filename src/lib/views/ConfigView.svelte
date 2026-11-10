@@ -8,6 +8,7 @@
   import { modKey } from "$lib/keys";
   import Kbd from "$lib/components/Kbd.svelte";
   import { m } from "$lib/paraglide/messages";
+  import { gameText } from "$lib/i18n/game-text.svelte";
 
   let options = $state<ConfigOption[]>([]);
   let config = $state<Record<string, unknown>>({});
@@ -133,7 +134,7 @@
 
   // PoB pads some list labels with spaces and then search keywords, which its narrow dropdown clips off.
   function listLabel(label: string | null | undefined): string {
-    return stripPobText(label).split(/ {8,}/)[0].trim();
+    return gameText(stripPobText(label).split(/ {8,}/)[0].trim());
   }
 
   function badLines(b: CustomModBlock) {

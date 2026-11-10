@@ -14,13 +14,23 @@
   import { calcBreakdownKey, type CalcBreakdownRef } from "$lib/calc-breakdown";
   import { CHARGE_COLOURS, ROW_COLOURS } from "$lib/calc-colours";
   import { m } from "$lib/paraglide/messages";
+  import { formatNumber } from "$lib/i18n/format";
+  import { gameText } from "$lib/i18n/game-text.svelte";
 
   let actor = $state<"player" | "minion">("player");
 
   let query = $state("");
   let searchEl = $state<HTMLInputElement>();
   const needle = $derived(query.trim().toLowerCase());
-  const hit = (text: string | null | undefined) => needle !== "" && stripPobText(text ?? "").toLowerCase().includes(needle);
+  // Engine labels stay English (row.label is used for logic elsewhere), so a
+  // search has to look at the rendered translation too. This is language
+  // neutral: without a dictionary gameText() returns the original text.
+  const hit = (text: string | null | undefined) => {
+    if (needle === "") return false;
+    if (stripPobText(text ?? "").toLowerCase().includes(needle)) return true;
+    const translated = gameText(text);
+    return translated !== text && translated.toLowerCase().includes(needle);
+  };
   const sectionHit = (sec: CalcSection) => hit(sec.subSections[0]?.label);
   const subHit = (sec: CalcSection, sub: CalcSubSection) => sectionHit(sec) || hit(sub.label) || sub.rows.some((row) => hit(row.label));
   const rowShown = (sec: CalcSection, sub: CalcSubSection, row: CalcRow) => !needle || sectionHit(sec) || hit(sub.label) || hit(row.label);
@@ -137,6 +147,15 @@
     return name.split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase();
   }
 
+  /** A translated charge label already names the charge, so appending the
+   *  English "Charge(s)" noun would be redundant. Untranslated labels keep the
+   *  original phrasing; a count is shown with a neutral multiplication sign. */
+  function chargeText(label: string, count: number | null = null) {
+    const translated = gameText(label);
+    if (translated === label) return count == null ? `${label} Charge` : `${label} Charges (${count})`;
+    return count == null ? translated : `${translated} ×${count}`;
+  }
+
   function cellHasMeaningfulValue(text: string) {
     const plain = stripPobText(text).trim();
     if (!plain) return false;
@@ -235,7 +254,7 @@
     if (magnitude >= 1_000_000_000) return compact(1_000_000_000, "b");
     if (magnitude >= 1_000_000) return compact(1_000_000, "m");
     if (magnitude >= 1_000) return compact(1_000, "k");
-    return Math.round(value).toLocaleString("en-US");
+    return formatNumber(Math.round(value));
   }
 
   function compactHitDamage(text: string) {
@@ -323,9 +342,10 @@
     return `${label} Charge`;
   }
 
-  function currentChargeCount(subsection: CalcSubSection) {
+  function currentChargeCount(subsection: CalcSubSection): number {
     const text = subsection.rows.find((row) => row.label === "Current")?.cells[0]?.text;
-    const count = text && Number(stripPobText(text).replaceAll(",", ""));
+    if (!text) return 0;
+    const count = Number(stripPobText(text).replaceAll(",", ""));
     return Number.isFinite(count) ? count : 0;
   }
 
@@ -384,7 +404,7 @@
         onchange={(e) => setCalcSkill({ group: Number((e.target as HTMLSelectElement).value) })}
       >
         {#each calcSkill.groups as group}
-          <option value={group.index}>{stripPobText(group.label)}</option>
+          <option value={group.index}>{gameText(stripPobText(group.label))}</option>
         {/each}
       </select>
     </label>
@@ -398,7 +418,7 @@
           onchange={(e) => setCalcSkill({ activeSkill: Number((e.target as HTMLSelectElement).value) })}
         >
           {#each calcSkill.activeSkills as skill}
-            <option value={skill.index}>{stripPobText(skill.label)}</option>
+            <option value={skill.index}>{gameText(stripPobText(skill.label))}</option>
           {/each}
         </select>
       </label>
@@ -425,16 +445,17 @@
         {#if effects.length > 0}
           <div class="effectbar" role="list">
             {#each effects as effect (`${effect.kind}:${effect.name}`)}
+              {@const effectName = gameText(effect.name)}
               <div
                 class="effect"
                 class:debuff={effect.kind === "debuff"}
                 role="listitem"
-                title={effect.count != null ? `${effect.name} (${effect.count})` : effect.name}
+                title={effect.count != null ? `${effectName} (${effect.count})` : effectName}
               >
                 {#if effectArt[effect.artName]}
-                  <img src={effectArt[effect.artName]} alt={effect.name} />
+                  <img src={effectArt[effect.artName]} alt={effectName} />
                 {:else}
-                  <span class="sigil" aria-label={effect.name}>{effectInitials(effect.name)}</span>
+                  <span class="sigil" aria-label={effectName}>{effectInitials(effect.name)}</span>
                 {/if}
                 {#if effect.count != null}
                   <span class="effectcount">{effect.count}</span>
@@ -561,11 +582,11 @@
                         </div>
                         {#if chargeArt}
                           {@const chargeCount = currentChargeCount(sub)}
-                          <div class="effect charge-effect" title={`${sub.label} Charges (${chargeCount})`}>
+                          <div class="effect charge-effect" title={chargeText(sub.label, chargeCount)}>
                             {#if effectArt[chargeArt]}
-                              <img src={effectArt[chargeArt]} alt={`${sub.label} Charge`} />
+                              <img src={effectArt[chargeArt]} alt={chargeText(sub.label)} />
                             {:else}
-                              <span class="sigil" aria-label={`${sub.label} Charge`}>{effectInitials(sub.label)}</span>
+                              <span class="sigil" aria-label={chargeText(sub.label)}>{effectInitials(sub.label)}</span>
                             {/if}
                             <span class="effectcount">{chargeCount}</span>
                           </div>

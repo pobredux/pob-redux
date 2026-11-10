@@ -6,6 +6,7 @@
   import { keycaps } from "$lib/keys";
   import { wheelScroll } from "$lib/tooltip-scroll";
   import { m } from "$lib/paraglide/messages";
+  import { gameText } from "$lib/i18n/game-text.svelte";
 
   let {
     node,
@@ -44,32 +45,32 @@
 
 <div class="tip" class:fixed bind:this={el} use:wheelScroll={[node, diff]} data-scroll-hint={m.tooltip_scroll_hint({ key: keycaps("Mod")[0] })} style:left={`${left}px`} style:top={`${top}px`}>
   <div class="tip-head">
-    <span class="tip-name" class:key={node.kind === "keystone"} class:notable={node.kind === "notable"}>{override?.name ?? node.name}</span>
+    <span class="tip-name" class:key={node.kind === "keystone"} class:notable={node.kind === "notable"}>{gameText(override?.name ?? node.name)}</span>
     <span class="label">{node.asc ?? node.kind}</span>
   </div>
   {#if socketed}
     <div class="tip-stat">
       <span class="dim">{m.tree_socketed()}</span>
-      <span class="rarity" data-rarity={socketed.rarity ?? ""}>{socketed.title ?? socketed.name}</span>
+      <span class="rarity" data-rarity={socketed.rarity ?? ""}>{gameText(socketed.title ?? socketed.name)}</span>
     </div>
   {/if}
   {#if grant}
     <div class="tip-stat">
       <span class="dim">{m.tree_granted_by()}</span>
-      <span class="rarity" data-rarity={grant.rarity ?? ""}>{grant.source ?? m.tree_granted_unknown()}</span>{#if grant.slot}<span class="dim"> ({grant.slot})</span>{/if}
+      <span class="rarity" data-rarity={grant.rarity ?? ""}>{grant.source ? gameText(grant.source) : m.tree_granted_unknown()}</span>{#if grant.slot}<span class="dim"> ({grant.slot})</span>{/if}
     </div>
   {/if}
   {#each override?.stats?.length ? override.stats : node.stats as s}
     {@const nc = notCalc.size > 0 && s.split("\n").some((l) => notCalc.has(l))}
-    <div class="tip-stat" class:nc>{s}{#if nc}<span class="ncnote">{` ${m.not_calculated()}`}</span>{/if}</div>
+    <div class="tip-stat" class:nc>{gameText(s)}{#if nc}<span class="ncnote">{` ${m.not_calculated()}`}</span>{/if}</div>
   {/each}
   {#if node.masteryEffects && showMastery}
     {#each node.masteryEffects as e (e.effect)}
-      <div class="tip-stat dim">{e.stats.join(" / ")}</div>
+      <div class="tip-stat dim">{e.stats.map((s) => gameText(s)).join(" / ")}</div>
     {/each}
   {/if}
   {#if node.flavour}
-    <div class="tip-flav">{node.flavour}</div>
+    <div class="tip-flav">{gameText(node.flavour)}</div>
   {/if}
   {#if recipe}
     <div class="tip-recipe">

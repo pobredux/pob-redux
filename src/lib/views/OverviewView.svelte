@@ -15,6 +15,7 @@
   import Icon from "$lib/components/Icon.svelte";
   import { calcBreakdownKey, type StatBreakdownRef } from "$lib/calc-breakdown";
   import { m } from "$lib/paraglide/messages";
+  import { formatNumber } from "$lib/i18n/format";
 
   const FIELDS = [
     "FullDPS", "CombinedDPS", "TotalDPS", "TotalDotDPS", "AverageDamage", "AverageHit",
@@ -64,7 +65,7 @@
 
   const info = $derived(build.info);
   const n = (k: string) => stats[k] ?? 0;
-  const fmt = (v: number, digits = 0) => v.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: digits });
+  const fmt = (v: number, digits = 0) => formatNumber(v, { maximumFractionDigits: digits, minimumFractionDigits: digits });
 
   const headline = $derived.by(() => {
     for (const [k, label] of [["FullDPS", m.ov_dps()], ["CombinedDPS", m.ov_dps()], ["TotalDPS", m.ov_dps()], ["TotalDotDPS", m.ov_dot_dps()], ["AverageDamage", m.ov_average_damage()], ["AverageHit", m.ov_average_hit()]] as const) {

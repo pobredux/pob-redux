@@ -18,6 +18,7 @@
   import MoreMenu, { type MenuItem } from "$lib/components/MoreMenu.svelte";
   import { modKey } from "$lib/keys";
   import { m } from "$lib/paraglide/messages";
+  import { gameText } from "$lib/i18n/game-text.svelte";
   import { recipeArt } from "$lib/item-art";
 
   let timelessOpen = $state(false);
@@ -2091,9 +2092,20 @@
       return;
     }
     const s = new Set<number>();
+    // Node names come from the tree data, stat lines from the engine, and a
+    // query may be written in the UI language. Search both the raw strings and
+    // their rendered translations; gameText() returns the original when the
+    // active language ships no dictionary.
     for (const n of model.nodes.values()) {
       if (n.hidden || n.r <= 0) continue;
-      if (n.name.toLowerCase().includes(q) || n.stats.some((t) => t.toLowerCase().includes(q))) s.add(n.id);
+      if (n.name.toLowerCase().includes(q) || n.stats.some((t) => t.toLowerCase().includes(q))) {
+        s.add(n.id);
+      } else if (
+        gameText(n.name).toLowerCase().includes(q) ||
+        n.stats.some((t) => gameText(t).toLowerCase().includes(q))
+      ) {
+        s.add(n.id);
+      }
     }
     matches = s;
     invalidate();
@@ -2392,7 +2404,7 @@
         <div class="report-list" class:stale={powerBusy}>
           {#each reportRows as r (r.key)}
             <button class="report-row" class:sel={focusNode === r.id} onclick={() => jumpTo(r.id)} onmouseenter={() => { const n = model?.nodes.get(r.id); if (n) setHover(n); }}>
-              <span class="rn" class:notable={r.kind === "notable"} class:keystone={r.kind === "keystone"}>{r.name}</span>
+              <span class="rn" class:notable={r.kind === "notable"} class:keystone={r.kind === "keystone"}>{gameText(r.name)}</span>
               <span class="r num"><PobText text={r.a} /></span>
               <span class="r num"><PobText text={r.b} /></span>
               <span class="r num dim">{r.dist}</span>
@@ -2422,7 +2434,7 @@
   
     {#if masteryMenu}
       <div class="menu mastery" style:left={`${Math.min(masteryMenu.x, w - 360)}px`} style:top={`${Math.min(masteryMenu.y, h - 40 * (masteryMenu.effects.length + 2))}px`}>
-        <div class="label">{masteryMenu.name}</div>
+        <div class="label">{gameText(masteryMenu.name)}</div>
         {#each masteryMenu.effects as e (e.effect)}
           <button
             class="mi effect"
@@ -2431,7 +2443,7 @@
             title={e.takenBy != null && e.takenBy !== masteryMenu.id ? m.tree_mastery_taken() : ""}
             onclick={() => pickMastery(e.effect)}
           >
-            {#each e.stats as s}<span>{s}</span>{/each}
+            {#each e.stats as s}<span>{gameText(s)}</span>{/each}
           </button>
         {/each}
         <button class="mi dim" onclick={() => (masteryMenu = null)}>{m.common_cancel()}</button>
@@ -2460,8 +2472,8 @@
         <div class="tatlist">
           {#each tattooMenu.info.options as t (t.id)}
             <button class="mi effect" class:on={t.name === tattooMenu.info.applied?.name} onclick={() => pickTattoo(t.id)}>
-              <span class="tatname">{t.name}</span>
-              {#each t.stats as s}<span class="dim small">{s}</span>{/each}
+              <span class="tatname">{gameText(t.name)}</span>
+              {#each t.stats as s}<span class="dim small">{gameText(s)}</span>{/each}
             </button>
           {/each}
         </div>

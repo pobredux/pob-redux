@@ -10,6 +10,8 @@
   } from "$lib/engine.svelte";
   import { build } from "$lib/state/build.svelte";
   import { m } from "$lib/paraglide/messages";
+  import { formatNumber } from "$lib/i18n/format";
+  import { gameText } from "$lib/i18n/game-text.svelte";
   import SearchSelect from "./SearchSelect.svelte";
   import SocketPreview from "./SocketPreview.svelte";
 
@@ -92,10 +94,15 @@
   const wantedIds = $derived(new Set(wanted.map((w) => w.id)));
   const options = $derived.by(() => {
     const q = search.trim().toLowerCase();
+    const zhQuery = /[\u4e00-\u9fff]/.test(q);
     return (info?.nodes ?? []).filter(
       (n) =>
         !wantedIds.has(n.id) &&
-        (!q || n.name.toLowerCase().includes(q) || n.stats.some((s) => s.toLowerCase().includes(q))),
+        (!q ||
+          n.name.toLowerCase().includes(q) ||
+          n.stats.some((s) => s.toLowerCase().includes(q)) ||
+          (zhQuery &&
+            (gameText(n.name).toLowerCase().includes(q) || n.stats.some((s) => gameText(s).toLowerCase().includes(q))))),
     );
   });
   const radiusNotables = $derived((info?.radius ?? []).filter((n) => n.notable || n.keystone));
@@ -140,7 +147,7 @@
       result = await engine.timelessSearchResult(200);
       const ms = performance.now() - started;
       const took = ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
-      note = m.timeless_summary({ found: result.found.toLocaleString(), total: result.total.toLocaleString(), took });
+      note = m.timeless_summary({ found: formatNumber(result.found), total: formatNumber(result.total), took });
     } catch (e) {
       build.error = String(e);
     } finally {
@@ -236,8 +243,8 @@
         <input class="input sm srch" placeholder={m.timeless_search_placeholder()} bind:value={search} />
         <div class="scroll">
           {#each options as n (n.id)}
-            <button class="row" onclick={() => add(n)} title={n.stats.join("\n")}>
-              <span class="nm">{n.name}</span>
+            <button class="row" onclick={() => add(n)} title={n.stats.map((s) => gameText(s)).join("\n")}>
+              <span class="nm">{gameText(n.name)}</span>
               {#if n.total}<span class="tag">{m.timeless_pooled()}</span>{/if}
             </button>
           {:else}
@@ -259,7 +266,7 @@
         <div class="scroll">
           {#each wanted as w (w.id)}
             <div class="want">
-              <span class="nm" title={w.id}>{w.name}</span>
+              <span class="nm" title={w.id}>{gameText(w.name)}</span>
               <input
                 class="input num xs"
                 type="number"
@@ -307,7 +314,7 @@
                       ? [...keep, n.name]
                       : keep.filter((k) => k !== n.name))}
                 />
-                {n.name}
+                {gameText(n.name)}
                 {#if n.keystone}<span class="tag">{m.timeless_keystone()}</span>{/if}
               </label>
             {/each}
@@ -323,11 +330,11 @@
       {#if running}
         <button class="btn ghost sm" onclick={() => (cancel = true)}>{m.common_stop()}</button>
         <div class="prog"><span style:width={`${Math.round(progress * 100)}%`}></span></div>
-        <span class="dim num small">{checked.toLocaleString()} / {total.toLocaleString()}</span>
+        <span class="dim num small">{formatNumber(checked)} / {formatNumber(total)}</span>
       {:else if note}
         <span class="dim small">{note}</span>
       {:else if jewel}
-        <span class="dim num small">{m.timeless_seed_range({ min: jewel.seedMin.toLocaleString(), max: jewel.seedMax.toLocaleString() })}</span>
+        <span class="dim num small">{m.timeless_seed_range({ min: formatNumber(jewel.seedMin), max: formatNumber(jewel.seedMax) })}</span>
       {/if}
     </div>
 
@@ -341,11 +348,11 @@
         <div class="scroll">
           {#each result.results as r (r.seed)}
             <button class="res" class:on={selected.includes(r.seed)} onclick={(e) => toggle(r.seed, e)}>
-              <span class="seed num">{r.seed.toLocaleString()}</span>
+              <span class="seed num">{formatNumber(r.seed)}</span>
               <span class="score num">{r.weight.toFixed(1)}</span>
               <span class="hits">
                 {#each r.nodes as n}
-                  <span class="hit" title={n.targets.join(", ")}>{n.name} <span class="dim num">×{n.targets.length}</span></span>
+                  <span class="hit" title={n.targets.join(", ")}>{gameText(n.name)} <span class="dim num">×{n.targets.length}</span></span>
                 {/each}
               </span>
             </button>
