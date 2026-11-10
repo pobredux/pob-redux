@@ -11212,17 +11212,23 @@ M.jewel_finish = function(p)
 
 	-- k copies of a stackable jewel: real copies in the other sockets, the
 	-- last one through the override.
+	-- Unsocketing a cluster jewel drops the passives inside it for good.
+	local stackSockets = {}
+	for i, sk in ipairs(run.sockets) do
+		local current = sk.slot.selItemId and sk.slot.selItemId ~= 0 and build.itemsTab.items[sk.slot.selItemId] or nil
+		if i == 1 or not (current and current.clusterJewel) then stackSockets[#stackSockets + 1] = sk end
+	end
 	local function stacked(item, k, fn)
 		local added, saved = {}, {}
 		for i = 2, k do
 			local copy = new("Item"):Item(item.raw)
 			build.itemsTab:AddItem(copy, true)
-			saved[i] = run.sockets[i].slot.selItemId or 0
-			run.sockets[i].slot:SetSelItemId(copy.id)
+			saved[i] = stackSockets[i].slot.selItemId or 0
+			stackSockets[i].slot:SetSelItemId(copy.id)
 			added[#added + 1] = copy
 		end
 		local ok, a = pcall(fn)
-		for i = 2, k do run.sockets[i].slot:SetSelItemId(saved[i]) end
+		for i = 2, k do stackSockets[i].slot:SetSelItemId(saved[i]) end
 		for _, c in ipairs(added) do build.itemsTab:DeleteItem(c, true) end
 		if not ok then error(a, 0) end
 		return a
@@ -11258,10 +11264,10 @@ M.jewel_finish = function(p)
 			-- Copies of a stackable jewel, one per free socket.
 			local item = entry.item
 			local limitN = tonumber(item.limit) or 1
-			if best and not entry.radius and limitN > 1 and #run.sockets > 1 then
-				for k = 2, math.min(limitN, #run.sockets) do
+			if best and not entry.radius and limitN > 1 and #stackSockets > 1 then
+				for k = 2, math.min(limitN, #stackSockets) do
 					local r = stacked(item, k, function()
-						local sc, out = score(run.sockets[1].slot.slotName, item)
+						local sc, out = score(stackSockets[1].slot.slotName, item)
 						return row(item, nil, nil, sc, out, { copies = k, socket = k .. " sockets", note = k .. " copies, one per socket" })
 					end)
 					suggestions[#suggestions + 1] = r

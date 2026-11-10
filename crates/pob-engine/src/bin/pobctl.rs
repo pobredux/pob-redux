@@ -605,6 +605,8 @@ fn jewels_cmd(cfg: EngineConfig, file: PathBuf, aim: Option<String>, pool_size: 
         "workers": pool.status().ready,
         "evaluations": par.get("evaluations").cloned().unwrap_or(Value::Null),
         "mismatches": mismatches,
+        "mismatch_samples": if no_sequential { Vec::new() } else { seq_rows.iter().zip(par_rows.iter()).enumerate().filter(|(_, (a, b))| a != b).take(8).map(|(i, (a, b))| json!({ "row": i, "sequential": a, "pool": b })).collect::<Vec<_>>() },
+        "rows": json!([seq_rows.len(), par_rows.len()]),
         "summary": par.get("summary").cloned().unwrap_or(Value::Null),
         "top": par_rows.iter().take(8).collect::<Vec<_>>(),
         "notScored": par.get("notScored").and_then(Value::as_array).map(|a| a.iter().map(|r| r.get("name").cloned().unwrap_or(Value::Null)).collect::<Vec<_>>()).unwrap_or_default(),
