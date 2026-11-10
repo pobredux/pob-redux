@@ -47,7 +47,7 @@ whisper-rs = { version = "0.16", features = ["log_backend"] }
 
 # The updater has no mobile target, so it is scoped to desktop.
 [target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
-tauri-plugin-updater = "2"
+tauri-plugin-updater = { version = "2", default-features = false, features = ["rustls-tls", "system-proxy"] }
 tauri-plugin-deep-link = "2"
 
 [target."cfg(unix)".dependencies]
