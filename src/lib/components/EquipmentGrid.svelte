@@ -2,6 +2,7 @@
   import type { ItemInfo, SlotInfo, SocketGroup } from "$lib/engine.svelte";
   import { socketedGems, equipmentArea, socketPosition, visibleEquipment } from "$lib/equipment";
   import { m } from "$lib/paraglide/messages";
+  import { slotLabel } from "$lib/pob-labels";
   import { socketArtUrls } from "$lib/item-art";
   import ItemIcon from "./ItemIcon.svelte";
 
@@ -48,7 +49,7 @@
     onfocusin={(event) => { if ((event.target as HTMLElement).matches(":focus-visible")) keyboardSlot = slot.slot; }}
     onfocusout={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) keyboardSlot = null; }}
     style:grid-area={equipmentArea(slot.slot)} style:--rarity={rarity[item?.rarity ?? ""] ?? "var(--line-1)"}>
-    <button class="gear" disabled={!item} aria-label={`${slot.label ?? slot.slot}: ${item?.name ?? m.items_empty_slot()}`}
+    <button class="gear" disabled={!item} aria-label={`${slotLabel(slot.label ?? slot.slot)}: ${item?.name ?? m.items_empty_slot()}`}
       aria-pressed={!!item && selectedItem === item.id}
       onmouseenter={(event) => item && onitemhover(event, item.id)} onmouseleave={onleave}
       onfocus={(event) => item && onitemhover(event, item.id)} onblur={onleave}
@@ -56,11 +57,11 @@
       {#if item}
         <ItemIcon item={{ game, name: item.title ?? item.name, baseName: item.baseName, rarity: item.rarity }} fallback={item.name} />
       {:else}
-        <span class="empty">{slot.label ?? slot.slot}</span>
+        <span class="empty">{slotLabel(slot.label ?? slot.slot)}</span>
       {/if}
     </button>
     {#if item && slot.active != null && onactive}
-      {@const tip = (slot.active ? m.items_slot_on : m.items_slot_off)({ slot: slot.label ?? slot.slot })}
+      {@const tip = (slot.active ? m.items_slot_on : m.items_slot_off)({ slot: slotLabel(slot.label ?? slot.slot) })}
       <button class="act" class:on={slot.active} aria-pressed={slot.active} aria-label={tip} title={tip}
         onclick={() => onactive(slot.slot, !slot.active)}></button>
     {/if}

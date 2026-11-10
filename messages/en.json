@@ -1909,5 +1909,23 @@
   "pob_stat_unreserved_life": "Unreserved Life",
   "pob_stat_unreserved_mana": "Unreserved Mana",
   "pob_stat_unreserved_spirit": "Unreserved Spirit",
-  "pob_stat_ward": "Ward"
+  "pob_stat_ward": "Ward",
+
+  "pob_slot_abyssal_n": "Abyssal #{n}",
+  "pob_slot_amulet": "Amulet",
+  "pob_slot_arm_n": "Arm {n}",
+  "pob_slot_belt": "Belt",
+  "pob_slot_body_armour": "Body Armour",
+  "pob_slot_boots": "Boots",
+  "pob_slot_charm_n": "Charm {n}",
+  "pob_slot_flask_n": "Flask {n}",
+  "pob_slot_gloves": "Gloves",
+  "pob_slot_graft_n": "Graft {n}",
+  "pob_slot_helmet": "Helmet",
+  "pob_slot_jewel_n": "Jewel #{n}",
+  "pob_slot_leg_n": "Leg {n}",
+  "pob_slot_ring_n": "Ring {n}",
+  "pob_slot_socket": "Socket",
+  "pob_slot_socket_n": "Socket #{n}",
+  "pob_slot_weapon_n": "Weapon {n}"
 }

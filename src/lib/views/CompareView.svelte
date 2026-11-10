@@ -14,7 +14,7 @@
   } from "$lib/engine.svelte";
   import { build } from "$lib/state/build.svelte";
   import { stripPobText } from "$lib/pobtext";
-  import { statLabel } from "$lib/pob-labels";
+  import { slotLabel, statLabel } from "$lib/pob-labels";
   import PobText from "$lib/components/PobText.svelte";
   import BuySimilarDialog from "$lib/components/BuySimilarDialog.svelte";
   import { m } from "$lib/paraglide/messages";
@@ -361,7 +361,7 @@
         <div class="scroll">
           {#each items as r (r.slot)}
             <div class="srow">
-              <span class="tlabel">{r.label ?? r.slot}</span>
+              <span class="tlabel">{slotLabel(r.label ?? r.slot)}</span>
               <span class="tside" style:color={rarityColor[r.mine?.rarity ?? ""] ?? "var(--fg-2)"}>{r.mine?.name ?? "—"}</span>
               <span class="tside" style:color={rarityColor[r.theirs?.rarity ?? ""] ?? "var(--fg-2)"}>{r.theirs?.name ?? "—"}</span>
               <span class="tact">

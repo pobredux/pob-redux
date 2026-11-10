@@ -24,6 +24,7 @@
   import EquipmentGrid from "$lib/components/EquipmentGrid.svelte";
   import PobText from "$lib/components/PobText.svelte";
   import { stripPobText } from "$lib/pobtext";
+  import { slotLabel } from "$lib/pob-labels";
   import ItemCustomizationControls from "$lib/components/ItemCustomizationControls.svelte";
   import SearchSelect from "$lib/components/SearchSelect.svelte";
   import ItemFrame from "$lib/components/ItemFrame.svelte";
@@ -748,18 +749,18 @@
     onmouseleave={hideTip}
   >
     {#if s.active != null}
-      <label class="sname act" title={s.itemId === 0 ? undefined : (s.active ? m.items_slot_on : m.items_slot_off)({ slot: s.label ?? s.slot })}>
+      <label class="sname act" title={s.itemId === 0 ? undefined : (s.active ? m.items_slot_on : m.items_slot_off)({ slot: slotLabel(s.label ?? s.slot) })}>
         <input type="checkbox" checked={s.active} disabled={s.itemId === 0 || itemBusy} onchange={(e) => setSlotActive(s.slot, (e.target as HTMLInputElement).checked)} />
-        {s.label ?? s.slot}
+        {slotLabel(s.label ?? s.slot)}
       </label>
     {:else}
-      <span class="sname">{s.label ?? s.slot}</span>
+      <span class="sname">{slotLabel(s.label ?? s.slot)}</span>
     {/if}
     <span class="pick" class:off={s.active === false && s.itemId !== 0}>
       <SearchSelect
         value={String(s.itemId)}
         options={slotOptions(s.slot)}
-        label={s.label ?? s.slot}
+        label={slotLabel(s.label ?? s.slot)}
         disabled={itemBusy}
         onchange={(id) => equipSlot(s.slot, Number(id))}
         onhover={(id, anchor) => (anchor && Number(id) ? slotTip(anchor, s.slot, Number(id)) : hideTip())}
@@ -982,7 +983,7 @@
             {#if preview.slots.length}
               <div class="modrow">
                 <select class="select" bind:value={previewSlot} aria-label={m.items_preview_slot()} disabled={itemTransitionBusy}>
-                  {#each preview.slots as s}<option value={s.slot}>{s.label}</option>{/each}
+                  {#each preview.slots as s}<option value={s.slot}>{slotLabel(s.label)}</option>{/each}
                 </select>
                 <button class="btn sm" onclick={() => addPreview(true)} disabled={itemBusy || previewStale}>{m.items_preview_equip()}</button>
               </div>
