@@ -521,6 +521,16 @@
             <input class="switch" type="checkbox" role="switch" checked={tradeWindow.inApp} onchange={(e) => tradeWindow.setInApp((e.target as HTMLInputElement).checked)} />
           </label>
         </div>
+        <h2 class="label ghead">{m.squire_title()}</h2>
+        <div class="rows">
+          <label class="opt">
+            <span>
+              {m.squire_preview_enable()}
+              <span class="hint">{m.squire_preview_enable_hint()}</span>
+            </span>
+            <input class="switch" type="checkbox" role="switch" checked={ui.squirePreview} onchange={(e) => ui.setSquirePreview((e.target as HTMLInputElement).checked)} />
+          </label>
+        </div>
       {:else if active === "updates"}
         {@render head(m.settings_updates(), m.settings_updates_desc(), version)}
         <div class="rows">

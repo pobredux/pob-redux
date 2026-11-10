@@ -11,6 +11,8 @@
     type ItemSetInfo,
     type SharedItem,
     type SlotsResponse,
+    type SquireSlot,
+    type SquireState,
     type Tooltip,
     type TooltipLine,
   } from "$lib/engine.svelte";
@@ -37,6 +39,20 @@
   let items = $state<ItemInfo[]>([]);
   let itemSets = $state<ItemSetInfo[]>([]);
   let selectedItem = $state<number | null>(null);
+  let squire = $state<SquireState | null>(null);
+  let doll = $state<"character" | "squire">("character");
+  const squireOffered = $derived(game.current === "poe2" && (ui.squirePreview || !!squire?.present));
+  const squireOpen = $derived(squireOffered && doll === "squire");
+  const squireLabels = $derived<Record<string, string>>({
+    "Weapon 1": m.squire_slot_weapon(),
+    "Weapon 2": m.squire_slot_offhand(),
+    Helmet: m.squire_slot_helmet(),
+    "Body Armour": m.squire_slot_body(),
+    Gloves: m.squire_slot_gloves(),
+    Boots: m.squire_slot_boots(),
+  });
+  const squireSlots = $derived<SquireSlot[]>((squire?.slots ?? []).map((s) => ({ ...s, label: squireLabels[s.slot] ?? s.slot })));
+  const squireHeld = $derived(new Set(squireSlots.filter((s) => s.itemId !== 0).map((s) => s.itemId)));
   let buySimilarFor = $state<number | null>(null);
 
   let dbTab = $state<"unique" | "rare">("unique");
@@ -432,11 +448,12 @@
     tipCache.clear();
     hideTip();
     let live = true;
-    Promise.all([engine.listSlots(), engine.getItems(), engine.listItemSets()]).then(([s, i, sets]) => {
+    Promise.all([engine.listSlots(), engine.getItems(), engine.listItemSets(), engine.getSquire().catch(() => null)]).then(([s, i, sets, sq]) => {
       if (!live) return;
       slotsResp = s;
       items = i.items;
       itemSets = sets.itemSets;
+      squire = sq;
     });
     return () => { live = false; };
   });
@@ -484,6 +501,29 @@
         .filter((it) => it.compatibleSlots.includes(slot))
         .map((it) => ({ value: String(it.id), label: it.name, color: rarityColor[it.rarity ?? ""] })),
     ];
+  }
+
+  async function equipSquire(slot: string, id: number) {
+    if (itemBusy) return;
+    const next = await build.run(() => engine.setSquireItem(slot, id));
+    if (next) squire = next;
+  }
+
+  function squireOptions(s: SquireSlot) {
+    return [
+      { value: "0", label: "—" },
+      ...items.filter((it) => s.options.includes(it.id)).map((it) => ({ value: String(it.id), label: it.name, color: rarityColor[it.rarity ?? ""] })),
+    ];
+  }
+
+  function itemTip(e: MouseEvent | FocusEvent | HTMLElement, id: number) {
+    showTip(e, `i${id}`, () => engine.itemTooltip({ itemId: id }));
+  }
+
+  function openSquireSkill() {
+    if (squire?.group == null) return;
+    ui.jump = { view: "skills", group: squire.group };
+    build.view = "skills";
   }
 
   function setSlotActive(slot: string, active: boolean) {
@@ -737,6 +777,22 @@
   </div>
 {/snippet}
 
+{#snippet squireRow(s: SquireSlot)}
+  <div class="slot" role="note" onmouseenter={(e) => s.itemId !== 0 && itemTip(e, s.itemId)} onmouseleave={hideTip}>
+    <span class="sname">{s.label}</span>
+    <span class="pick">
+      <SearchSelect
+        value={String(s.itemId)}
+        options={squireOptions(s)}
+        label={s.label ?? s.slot}
+        disabled={itemBusy}
+        onchange={(id) => equipSquire(s.slot, Number(id))}
+        onhover={(id, anchor) => (anchor && Number(id) ? itemTip(anchor, Number(id)) : hideTip())}
+      />
+    </span>
+  </div>
+{/snippet}
+
 {#snippet grip(column: Column)}
   <div
     class="grip"
@@ -791,7 +847,42 @@
   >
     <section class="col slots" bind:this={slotsCol}>
       {@render grip("slots")}
-      <div class="panel-head"><span class="label">{m.items_equipment()}</span></div>
+      <div class="panel-head">
+        {#if squireOffered}
+          <span class="tabs2" role="tablist" aria-label={m.items_equipment()}>
+            <button class="t2" role="tab" aria-selected={!squireOpen} class:on={!squireOpen} onclick={() => (doll = "character")}>{m.squire_character()}</button>
+            <button class="t2" role="tab" aria-selected={squireOpen} class:on={squireOpen} onclick={() => (doll = "squire")}>{m.squire_title()}</button>
+          </span>
+        {:else}
+          <span class="label">{m.items_equipment()}</span>
+        {/if}
+      </div>
+      {#if squireOpen}
+      <div class="scroll">
+        <div class="squirehead">
+          <span class="sqname">{m.squire_title()}</span>
+          {#if squire?.level != null}<span class="dim num small">{m.squire_level({ level: squire.level })}</span>{/if}
+          {#if squire?.grantedBy?.node}<span class="dim small">{m.squire_granted_by({ node: squire.grantedBy.node })}</span>{/if}
+          <span class="grow"></span>
+          {#if squire?.group != null}
+            <button class="btn sm ghost" title={m.squire_open_skill_title()} onclick={openSquireSkill}>{m.squire_open_skill()}</button>
+          {/if}
+        </div>
+        {#if !squire?.present}<p class="sqnote warn">{m.squire_no_skill()}</p>{/if}
+        <EquipmentGrid slots={squireSlots} {items} game={game.current} {selectedItem} legend={false}
+          onselect={selectItem}
+          onitemhover={(event, id) => itemTip(event, id)}
+          ongemhover={() => {}}
+          onleave={hideTip} />
+        {#each squireSlots as s (s.slot)}
+          {@render squireRow(s)}
+        {/each}
+        <p class="sqnote">{m.squire_equipment_hint()}</p>
+        <div class="subhead"><span>{m.squire_stats()}</span></div>
+        <p class="sqnote">{m.squire_stats_pending()}</p>
+        <p class="sqnote">{m.squire_note()}</p>
+      </div>
+      {:else}
       <div class="scroll">
         <EquipmentGrid slots={slotsResp?.slots ?? []} {items} game={game.current} groups={build.skills?.socketGroups ?? []} {selectedItem}
           onselect={selectItem}
@@ -812,6 +903,7 @@
           {/each}
         {/if}
       </div>
+      {/if}
     </section>
 
     <section class="col" bind:this={listCol}>
@@ -829,7 +921,7 @@
             <button class="iname" style:color={rarityColor[it.rarity ?? ""] ?? "var(--fg-1)"} onclick={() => selectItem(it.id)}>
               {it.name}
             </button>
-            <span class="itag dim">{it.equippedSlot ?? ""}</span>
+            <span class="itag dim">{it.equippedSlot ?? (squireHeld.has(it.id) ? m.squire_tag() : "")}</span>
             <span class="iops">
               {#if !it.equippedSlot && it.primarySlot}
                 <button class="mini w" title={m.items_equip_in({ slot: it.primarySlot })} onclick={() => it.primarySlot && build.run(() => engine.equipItem(it.primarySlot!, it.id))}>{m.items_equip()}</button>
@@ -1303,6 +1395,30 @@
   }
   .mini.x:hover {
     color: var(--bad);
+  }
+  .squirehead {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line-0);
+  }
+  .sqname {
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--fg-0);
+  }
+  .grow {
+    flex: 1;
+  }
+  .sqnote {
+    margin: 0;
+    padding: 6px 12px;
+    font-size: var(--fs-xs);
+    color: var(--fg-3);
+  }
+  .sqnote.warn {
+    color: var(--warn);
   }
   .tabs2 {
     display: inline-flex;

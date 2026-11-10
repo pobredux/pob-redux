@@ -38,6 +38,7 @@ class UiStore {
   treeStatDiff = $state(true);
   treeAscCentre = $state(true);
   tabIcons = $state(false);
+  squirePreview = $state(false);
   paletteOpen = $state(false);
   newBuildOpen = $state(false);
   jump = $state<Jump | null>(null);
@@ -61,6 +62,7 @@ class UiStore {
       if (typeof saved.treeStatDiff === "boolean") this.treeStatDiff = saved.treeStatDiff;
       if (typeof saved.treeAscCentre === "boolean") this.treeAscCentre = saved.treeAscCentre;
       if (typeof saved.tabIcons === "boolean") this.tabIcons = saved.tabIcons;
+      if (typeof saved.squirePreview === "boolean") this.squirePreview = saved.squirePreview;
     } catch {}
     this.applyTheme();
     this.systemLight.addEventListener("change", () => this.applyTheme());
@@ -97,6 +99,11 @@ class UiStore {
 
   setTabIcons(always: boolean) {
     this.tabIcons = always;
+    this.save();
+  }
+
+  setSquirePreview(show: boolean) {
+    this.squirePreview = show;
     this.save();
   }
 
@@ -191,6 +198,7 @@ class UiStore {
           treeStatDiff: this.treeStatDiff,
           treeAscCentre: this.treeAscCentre,
           tabIcons: this.tabIcons,
+          squirePreview: this.squirePreview,
         }),
       );
     } catch {}

@@ -1124,6 +1124,19 @@ export interface SlotInfo {
   active: boolean | null;
 }
 
+export interface SquireSlot extends SlotInfo {
+  /** Items in the build that fit this slot and that the character does not wear. */
+  options: number[];
+}
+
+export interface SquireState {
+  present: boolean;
+  group: number | null;
+  level: number | null;
+  grantedBy: GrantedBy | null;
+  slots: SquireSlot[];
+}
+
 export interface SlotsResponse {
   slots: SlotInfo[];
   activeItemSet: number;
@@ -1843,6 +1856,8 @@ export const engine = {
     call<Skills>("set_gem", { groupIndex, gemIndex, ...patch }),
   listSlots: () => call<SlotsResponse>("list_slots"),
   getItems: () => call<{ items: ItemInfo[] }>("get_items"),
+  getSquire: () => call<SquireState>("get_squire"),
+  setSquireItem: (slot: string, itemId: number) => call<SquireState>("set_squire_item", { slot, itemId }),
   equipItemRaw: (text: string, slot?: string, generation?: number) => call<{ ok: boolean; itemId: number; slot: string; itemName: string }>("equip_item_raw", { text, slot, generation }),
   equipItem: (slot: string, itemId: number) => call<SlotsResponse>("equip_item", { slot, itemId }),
   setSlotActive: (slot: string, active: boolean) => call<SlotsResponse>("set_slot_active", { slot, active }),

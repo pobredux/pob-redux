@@ -717,6 +717,7 @@ local function loaded()
 	main.__reduxBuildGeneration = main.__reduxBuildGeneration + 1
 	build = main.modes["BUILD"]
 	ensureBuild()
+	itemUtil.squireState()
 	local changed = calcsSelection.startOnMainSkill()
 	if calcsSelection.sync() then changed = true end
 	if changed then refresh() end
@@ -3213,6 +3214,138 @@ M.delete_item = function(p)
 	build.itemsTab:AddUndoState()
 	refresh()
 	return M.get_items()
+end
+
+-- PoB does not model the Squire: its kit lives in a <Squire> section PoB ignores and drops on save.
+itemUtil.SQUIRE_SKILL = "Summon Squire"
+itemUtil.SQUIRE_SLOTS = { "Weapon 1", "Weapon 2", "Helmet", "Body Armour", "Gloves", "Boots" }
+itemUtil.SQUIRE_OFFHAND = { Shield = true, Buckler = true, Focus = true, Quiver = true }
+
+function itemUtil.squireFits(item, slotName)
+	if not item or not item.base then return false end
+	if slotName == "Weapon 1" then return item.base.weapon ~= nil end
+	if slotName == "Weapon 2" then return itemUtil.SQUIRE_OFFHAND[item.type] == true or item.base.weapon ~= nil end
+	return item.type == slotName
+end
+
+function itemUtil.squireFree(item)
+	local ok, equipped = pcall(build.itemsTab.GetEquippedSlotForItem, build.itemsTab, item)
+	return not (ok and type(equipped) == "table")
+end
+
+-- The character wins an item both could hold, and a deleted item leaves its slot.
+function itemUtil.squirePrune(state)
+	local held = {}
+	for slotName, id in pairs(state.slots) do
+		local item = build.itemsTab.items[id]
+		if item and itemUtil.squireFree(item) and itemUtil.squireFits(item, slotName) then held[id] = slotName else state.slots[slotName] = nil end
+	end
+	return held
+end
+
+function itemUtil.squireSaver(state)
+	return {
+		Save = function(_, xml)
+			itemUtil.squirePrune(state)
+			for _, slotName in ipairs(itemUtil.SQUIRE_SLOTS) do
+				local id = state.slots[slotName]
+				if id then xml[#xml + 1] = { elem = "Slot", attrib = { name = slotName, itemId = tostring(id) } } end
+			end
+		end,
+	}
+end
+
+function itemUtil.squireState()
+	local state = build.__reduxSquire
+	if not state then
+		state = { slots = {} }
+		for _, node in ipairs(build.xmlSectionList or {}) do
+			if type(node) == "table" and node.elem == "Squire" then
+				for _, child in ipairs(node) do
+					if type(child) == "table" and child.elem == "Slot" and child.attrib then
+						state.slots[child.attrib.name] = tonumber(child.attrib.itemId)
+					end
+				end
+			end
+		end
+		build.__reduxSquire = state
+	end
+	-- An empty kit writes no section, so builds without a Squire save unchanged.
+	if build.savers then build.savers.Squire = next(state.slots) and itemUtil.squireSaver(state) or nil end
+	return state
+end
+
+function itemUtil.squireGroup()
+	for index, group in ipairs(build.skillsTab.socketGroupList) do
+		for _, gem in ipairs(group.gemList or {}) do
+			local name = gem.grantedEffect and gem.grantedEffect.name or gem.nameSpec
+			if name == itemUtil.SQUIRE_SKILL then return index, group, gem end
+		end
+	end
+end
+
+M.get_squire = function()
+	ensureBuild()
+	local state = itemUtil.squireState()
+	local itemsTab = build.itemsTab
+	local held = itemUtil.squirePrune(state)
+	itemUtil.squireState()
+	local slots = array({})
+	for _, slotName in ipairs(itemUtil.SQUIRE_SLOTS) do
+		local item = itemsTab.items[state.slots[slotName] or 0]
+		local options = array({})
+		for _, id in ipairs(itemsTab.itemOrderList) do
+			local candidate = itemsTab.items[id]
+			local elsewhere = held[id] and held[id] ~= slotName
+			if candidate and not elsewhere and itemUtil.squireFree(candidate) and itemUtil.squireFits(candidate, slotName) then options[#options + 1] = id end
+		end
+		slots[#slots + 1] = {
+			slot = slotName,
+			label = null,
+			itemId = item and item.id or 0,
+			itemName = item and item.name or null,
+			itemRarity = item and opt(item.rarity) or null,
+			nodeId = null,
+			weaponSet = null,
+			shown = true,
+			inactive = false,
+			active = null,
+			options = options,
+		}
+	end
+	local index, group, gem = itemUtil.squireGroup()
+	return {
+		present = index ~= nil,
+		group = opt(index),
+		level = gem and opt(gem.level) or null,
+		grantedBy = group and gemUtil.grantedBy(group) or null,
+		slots = slots,
+	}
+end
+
+M.set_squire_item = function(p)
+	ensureBuild()
+	local slotName = p and p.slot
+	local known = false
+	for _, name in ipairs(itemUtil.SQUIRE_SLOTS) do known = known or name == slotName end
+	if not known then error("unknown Squire slot; slots: " .. table.concat(itemUtil.SQUIRE_SLOTS, ", "), 0) end
+	local state = itemUtil.squireState()
+	local id = tonumber(p.itemId) or 0
+	if id == 0 then
+		state.slots[slotName] = nil
+	else
+		local item = build.itemsTab.items[id]
+		if not item then error("unknown item id", 0) end
+		if not itemUtil.squireFits(item, slotName) then error(item.name .. " does not fit the Squire's " .. slotName, 0) end
+		if not itemUtil.squireFree(item) then error(item.name .. " is equipped on the character; unequip it first", 0) end
+		for other, held in pairs(state.slots) do
+			if held == id then state.slots[other] = nil end
+		end
+		state.slots[slotName] = id
+	end
+	build.modFlag = true
+	itemUtil.squireState()
+	return M.get_squire()
 end
 
 M.list_item_sets = function()
