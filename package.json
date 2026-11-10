@@ -23,6 +23,8 @@
     "mcp": "bun scripts/mcp-call.ts",
     "check:tools": "bun scripts/check-tools.ts",
     "release:tag": "bun scripts/release.mjs",
+    "i18n:labels": "bun scripts/pob-labels.ts",
+    "check:labels": "bun scripts/pob-labels.ts --check",
     "i18n": "paraglide-js compile --project ./project.inlang --output-structure locale-modules"
   },
   "dependencies": {

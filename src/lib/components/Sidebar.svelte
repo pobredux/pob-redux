@@ -8,6 +8,7 @@
   import { engine, type BreakdownSection } from "$lib/engine.svelte";
   import { build } from "$lib/state/build.svelte";
   import { groupSidebar, type SidebarSection } from "$lib/sidebar-groups";
+  import { statLabelText } from "$lib/pob-labels";
   import { parsePobText, stripPobText } from "$lib/pobtext";
   import { m } from "$lib/paraglide/messages";
 
@@ -91,7 +92,7 @@
     }, pin ? 0 : 140);
   }
 
-  const rowTitle = (lhs: string | null) => lhs?.replace(/:\s*$/, "") || m.sidebar_breakdown();
+  const rowTitle = (lhs: string | null) => statLabelText(lhs).replace(/:\s*$/, "") || m.sidebar_breakdown();
 
   function rowLeave() {
     clearTimeout(bdTimer);
@@ -370,7 +371,7 @@
                       onclick={(e) => r.hasBreakdown && rowBreakdown(e.clientY, rowIndex + 1, rowTitle(r.lhs), true)}
                       onkeydown={(e) => e.key === "Enter" && r.hasBreakdown && rowBreakdown(200, rowIndex + 1, rowTitle(r.lhs), true)}
                     >
-                      <span class="k"><PobText text={r.lhs?.replace(/:\s*$/, "")} defaultColor="var(--fg-1)" /></span>
+                      <span class="k"><PobText text={statLabelText(r.lhs).replace(/:\s*$/, "")} defaultColor="var(--fg-1)" /></span>
                       <span class="svalue">
                         <span class="v num"><PobText text={r.rhs} /></span>
                         {#if pinned}<span class="pinmark" title={m.sidebar_breakdown_pinned()}><Icon name="push-pin" size={11} /></span>{/if}

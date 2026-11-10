@@ -14,6 +14,7 @@
   } from "$lib/engine.svelte";
   import { build } from "$lib/state/build.svelte";
   import { stripPobText } from "$lib/pobtext";
+  import { statLabel } from "$lib/pob-labels";
   import PobText from "$lib/components/PobText.svelte";
   import BuySimilarDialog from "$lib/components/BuySimilarDialog.svelte";
   import { m } from "$lib/paraglide/messages";
@@ -306,7 +307,7 @@
             <!-- PoB's stat list repeats a stat under different skill flags, so position is part of the key. -->
             {#each summary.rows as r, i (r.stat + "#" + i)}
               <div class="srow">
-                <span class="tlabel">{r.label}</span>
+                <span class="tlabel">{statLabel(r.label)}</span>
                 <span class="tnum num">{r.mineText ?? "—"}</span>
                 <span class="tnum num">{r.theirsText ?? "—"}</span>
                 <span class="tnum num" class:up={r.better === true} class:down={r.better === false}>{r.deltaText ?? ""}</span>

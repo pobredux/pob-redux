@@ -81,8 +81,13 @@ To add a language, put its tag in `locales` in `project.inlang/settings.json`, a
 `messages/<tag>.json`, and add the language's own name to `LOCALE_LABEL` in
 `src/lib/state/locale.svelte.ts`.
 
-Game data — passive names, item mods, gem names, the stats in the sidebar — comes from Path of
-Building and stays in English whatever the interface language is.
+The stat labels in the sidebar and the Compare summary come from Path of Building. Each has a
+`pob_stat_*` key in `messages/en.json`, named after its English text, and is translated like any
+other key. After a PoB update, `bun run i18n:labels` adds keys for new labels and
+`bun run check:labels` fails if one is missing.
+
+Other game data, such as passive names, item mods and gem names, comes from Path of Building and
+stays in English whatever the interface language is.
 
 ## Update the bundled PoB data
 

@@ -6,6 +6,7 @@
   import { loadTree } from "$lib/tree/load";
   import { ascendancyPlate, portraitPins, type TNode, type TreeModel } from "$lib/tree/model";
   import { stripPobText } from "$lib/pobtext";
+  import { statLabel } from "$lib/pob-labels";
   import ClassArt from "$lib/components/ClassArt.svelte";
   import CharacterDialog from "$lib/components/CharacterDialog.svelte";
   import EquipmentGrid from "$lib/components/EquipmentGrid.svelte";
@@ -155,7 +156,7 @@
   const bdLabels = $derived.by(() => {
     const out = new Map<string, string>();
     for (const r of build.sidebar?.rows ?? []) {
-      if (r.stat && r.hasBreakdown && r.actor !== "minion" && !out.has(r.stat)) out.set(r.stat, stripPobText(r.lhs ?? "").replace(/:\s*$/, ""));
+      if (r.stat && r.hasBreakdown && r.actor !== "minion" && !out.has(r.stat)) out.set(r.stat, statLabel(stripPobText(r.lhs ?? "").replace(/:\s*$/, "")));
     }
     return out;
   });

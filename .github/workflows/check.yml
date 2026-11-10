@@ -102,6 +102,9 @@ jobs:
           cargo run -p pob-sync -- --source upstream/PathOfBuilding-PoE2 --tree-assets
           cargo run -p pob-sync -- --game poe1 --source upstream/PathOfBuilding --tree-assets
 
+      - name: Check every PoB stat label has a message key
+        run: bun run check:labels
+
       # Warnings are denied via [workspace.lints.rust], so this fails on them.
       - name: Compile the workspace
         run: cargo check --workspace --all-targets
