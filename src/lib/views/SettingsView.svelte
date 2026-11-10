@@ -74,6 +74,8 @@
   let keyDraft = $state("");
   let baseDraft = $derived(dm && dm.base_url !== dm.default_base ? dm.base_url : "");
   let modelDraft = $derived(dm && dm.model !== dm.default_model ? dm.model : "");
+  let accountDraft = $derived(dm?.account ?? "");
+  const modelInfo = $derived(dm?.models.find((info) => info.id === dm.model));
   async function saveDecideKey() {
     if (!dm || !keyDraft.trim()) return;
     await decider.saveKey(dm.key_id, keyDraft.trim());
@@ -442,15 +444,44 @@
                 {/if}
               </div>
             </div>
+            {#if dm.needs_account}
+              <div class="opt">
+                <span>
+                  {m.experimental_account()}
+                  <span class="hint">{m.experimental_account_hint()}</span>
+                </span>
+                <div class="row">
+                  <input
+                    class="input mono addr"
+                    bind:value={accountDraft}
+                    aria-label={m.experimental_account()}
+                    onkeydown={(e) => e.key === "Enter" && decider.configure(dm.id, baseDraft, modelDraft, accountDraft)}
+                  />
+                  <button class="btn sm" disabled={decider.busy || accountDraft.trim() === (dm.account ?? "")} onclick={() => decider.configure(dm.id, baseDraft, modelDraft, accountDraft)}>{m.common_save()}</button>
+                </div>
+              </div>
+            {/if}
             <div class="opt">
               <span>
                 {m.experimental_address()}
-                <span class="hint">{dm.id === "openrouter" ? m.experimental_openrouter_models() : m.experimental_address_hint()}</span>
+                {#if modelInfo}
+                  <span class="hint">{m.experimental_model_info({ context: modelInfo.context_tokens.toLocaleString("en-US"), price: String(modelInfo.input_usd_per_million) })}</span>
+                {:else}
+                  <span class="hint">{dm.id === "openrouter" ? m.experimental_openrouter_models() : m.experimental_address_hint()}</span>
+                {/if}
               </span>
               <div class="row">
                 <input class="input mono addr" bind:value={baseDraft} placeholder={dm.default_base} aria-label={m.experimental_address()} />
-                <input class="input mono model" bind:value={modelDraft} placeholder={dm.default_model} aria-label={m.experimental_model()} />
-                <button class="btn sm ghost" disabled={decider.busy} onclick={() => decider.configure(dm.id, baseDraft, modelDraft)}>{m.common_save()}</button>
+                {#if dm.models.length}
+                  <select class="select" value={dm.model} disabled={decider.busy} aria-label={m.experimental_model()} onchange={(e) => decider.configure(dm.id, baseDraft, (e.target as HTMLSelectElement).value, accountDraft)}>
+                    {#each dm.models as info (info.id)}
+                      <option value={info.id}>{info.label}</option>
+                    {/each}
+                  </select>
+                {:else}
+                  <input class="input mono model" bind:value={modelDraft} placeholder={dm.default_model} aria-label={m.experimental_model()} />
+                {/if}
+                <button class="btn sm ghost" disabled={decider.busy} onclick={() => decider.configure(dm.id, baseDraft, modelDraft, accountDraft)}>{m.common_save()}</button>
               </div>
             </div>
             <div class="opt">
@@ -459,7 +490,7 @@
                 {#if decider.test}
                   <span class="hint mono" style:color={decider.test.ok ? "var(--ok)" : "var(--bad)"}>{decider.test.text}</span>
                 {:else if !decider.ready}
-                  <span class="hint warn">{m.experimental_not_ready()}</span>
+                  <span class="hint warn">{dm.needs_account ? m.experimental_not_ready_account() : m.experimental_not_ready()}</span>
                 {/if}
               </span>
               <button class="btn sm ghost" disabled={decider.testing || decider.busy || !decider.ready} onclick={() => decider.runTest()}>

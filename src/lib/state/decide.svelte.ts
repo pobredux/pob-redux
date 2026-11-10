@@ -74,7 +74,7 @@ class DecideStore {
   select = (id: string) => this.act(() => decideSelect(id));
   saveKey = (id: string, key: string) => this.act(() => setKey(id, key));
   removeKey = (id: string) => this.act(() => clearKey(id));
-  configure = (id: string, base: string, model: string) => this.act(() => decideConfigure(id, base, model));
+  configure = (id: string, base: string, model: string, account?: string) => this.act(() => decideConfigure(id, base, model, account));
 
   async runTest() {
     this.testing = true;

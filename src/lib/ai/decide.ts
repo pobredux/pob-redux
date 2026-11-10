@@ -3,16 +3,26 @@ import { invoke } from "@tauri-apps/api/core";
 import type { ToolDef } from "$lib/ai/tools";
 import type { Game } from "$lib/state/game.svelte";
 
+export interface ModelInfo {
+  id: string;
+  label: string;
+  context_tokens: number;
+  input_usd_per_million: number;
+}
+
 export interface BackendStatus {
   id: string;
   key_id: string;
   label: string;
   needs_key: boolean;
   keys_url: string | null;
+  needs_account: boolean;
+  account: string | null;
   base_url: string;
   default_base: string;
   model: string;
   default_model: string;
+  models: ModelInfo[];
   has_key: boolean;
   hint: string | null;
   ready: boolean;
@@ -44,8 +54,8 @@ export interface Decision {
 
 export const decideStatus = () => invoke<DecideStatus>("decide_status");
 export const decideSelect = (backend: string) => invoke<void>("decide_select", { backend });
-export const decideConfigure = (backend: string, baseUrl: string, model: string) =>
-  invoke<void>("decide_configure", { backend, baseUrl, model });
+export const decideConfigure = (backend: string, baseUrl: string, model: string, account?: string) =>
+  invoke<void>("decide_configure", { backend, baseUrl, model, account });
 export const decide = (state: unknown, questions: Record<string, Question>, timeoutMs?: number) =>
   invoke<Decision>("decide_ask", { state, questions, timeoutMs });
 
