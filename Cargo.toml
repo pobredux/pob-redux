@@ -7,7 +7,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.4.47"
+version = "0.4.48"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/pobredux/pob-redux"
