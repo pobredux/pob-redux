@@ -318,7 +318,8 @@
           </button>
           {#if !collapsed.has(sec.name)}
             <div class="items">
-              {#each sec.items as o, i (o.var)}
+              <!-- PoB's PoE2 options repeat a var, so the var cannot be the key. -->
+              {#each sec.items as o, i (o)}
                 {@const v = config[o.var]}
                 {#if o.group && o.group !== sec.items[i - 1]?.group}
                   <div class="ogroup"><PobText text={configLabel(o.group.replace(/:\s*$/, ""))} /></div>
