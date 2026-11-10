@@ -1,7 +1,10 @@
 {
   "_comment": "Hand-written zh-TW corrections consumed by scripts/build-locale-variant.mjs --extra. Values are already in the target language and are never machine-converted. 'messages' overrides individual Paraglide message keys; 'overrides' merges into data/overrides/zh-TW.json.",
   "messages": {
-    "settings_language_hint": "跟隨系統即使用作業系統的語言。介面標籤與計算項目依所選語言顯示；Path of Building 的遊戲資料僅在提供該語言詞典時翻譯。流放之路 1 與流放之路 2 均已內建繁體中文詞典。"
+    "settings_language_hint": "跟隨系統即使用作業系統的語言。介面標籤與計算項目依所選語言顯示；Path of Building 的遊戲資料僅在提供該語言詞典時翻譯。流放之路 1 與流放之路 2 均已內建繁體中文詞典。",
+    "experimental_account": "帳戶 ID",
+    "experimental_account_hint": "來自 Cloudflare 主控台的 32 位帳戶 ID。API 權杖需要 Workers AI 讀取權限。",
+    "experimental_not_ready_account": "請先填寫 API 權杖與帳戶 ID。"
   },
   "overrides": {
     "_ui": {
