@@ -82,10 +82,10 @@ To add a language, put its tag in `locales` in `project.inlang/settings.json`, a
 `src/lib/state/locale.svelte.ts`.
 
 Some labels come from Path of Building: the stat labels in the sidebar and the Compare summary, the
-item slot labels, and the labels on the Config tab. Their English text is generated into
+item slot labels, and the labels on the Config and Calcs tabs. Their English text is generated into
 `messages/pob/en.json`, so never edit that file by hand. To translate them, create
 `messages/pob/<tag>.json` and add keys the same way as above. Each key is named after its English
-text: `pob_stat_*`, `pob_slot_*` or `pob_config_*`.
+text: `pob_stat_*`, `pob_slot_*`, `pob_config_*` or `pob_calc_*`.
 
 - A numbered slot shares one key, such as `pob_slot_flask_n` for "Flask {n}".
 - Some Config labels carry PoB colour codes, such as `^x7070FF` before a word and `^7` after it.

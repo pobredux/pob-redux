@@ -26,6 +26,8 @@ for (const root of ROOTS) {
   }
 
   for (const [, text] of read("Modules/ConfigOptions.lua").matchAll(/\b(?:label|section) = "([^"]+)"/g)) add("pob_config_", withoutColon(text.split(/ {8,}/)[0].trim()));
+
+  for (const [, label] of read("Modules/CalcSections.lua").matchAll(/\blabel = "([^"]+)"/g)) add("pob_calc_", withoutColon(label));
 }
 
 const sorted = [...labels].sort(([a], [b]) => (a < b ? -1 : 1));

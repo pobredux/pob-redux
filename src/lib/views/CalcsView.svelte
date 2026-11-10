@@ -11,6 +11,7 @@
   import PobText from "$lib/components/PobText.svelte";
   import CalcBreakdownWindows from "$lib/components/CalcBreakdownWindows.svelte";
   import { stripPobText } from "$lib/pobtext";
+  import { calcLabel } from "$lib/pob-labels";
   import { calcBreakdownKey, type CalcBreakdownRef } from "$lib/calc-breakdown";
   import { CHARGE_COLOURS, ROW_COLOURS } from "$lib/calc-colours";
   import { m } from "$lib/paraglide/messages";
@@ -20,7 +21,7 @@
   let query = $state("");
   let searchEl = $state<HTMLInputElement>();
   const needle = $derived(query.trim().toLowerCase());
-  const hit = (text: string | null | undefined) => needle !== "" && stripPobText(text ?? "").toLowerCase().includes(needle);
+  const hit = (text: string | null | undefined) => needle !== "" && stripPobText(`${text ?? ""} ${calcLabel(text ?? "")}`).toLowerCase().includes(needle);
   const sectionHit = (sec: CalcSection) => hit(sec.subSections[0]?.label);
   const subHit = (sec: CalcSection, sub: CalcSubSection) => sectionHit(sec) || hit(sub.label) || sub.rows.some((row) => hit(row.label));
   const rowShown = (sec: CalcSection, sub: CalcSubSection, row: CalcRow) => !needle || sectionHit(sec) || hit(sub.label) || hit(row.label);
@@ -298,7 +299,7 @@
   function calcRowLabel(section: CalcSection, label: string | null) {
     if (!label) return label;
     const colour = ROW_COLOURS[section.id]?.[label];
-    return colour ? `${colour}${label}` : label;
+    return colour ? `${colour}${calcLabel(label)}` : calcLabel(label);
   }
 
   function isAttributeRequirementRow(section: CalcSection, row: CalcRow) {
@@ -314,8 +315,8 @@
   }
 
   function calcSubsectionLabel(section: CalcSection, label: string) {
-    if (section.id !== "Charges") return label;
-    return CHARGE_COLOURS[label] ? `${CHARGE_COLOURS[label]}${label}` : label;
+    if (section.id !== "Charges") return calcLabel(label);
+    return CHARGE_COLOURS[label] ? `${CHARGE_COLOURS[label]}${calcLabel(label)}` : calcLabel(label);
   }
 
   function chargeArtName(section: CalcSection, label: string) {
@@ -460,7 +461,7 @@
                 <section class="section" class:table use:masonryCard>
                 <button class="cardhead" aria-expanded={open} onclick={() => toggleSection(sec)}>
                   <span class="caret" class:open>▸</span>
-                  <span class="cardname"><PobText text={head.label} /></span>
+                  <span class="cardname"><PobText text={calcLabel(head.label)} /></span>
                   {#if headerExtra && (!open || sec.id !== "HitDamage")}<span class="extra num"><PobText text={headerExtra} /></span>{/if}
                 </button>
                 {#if open}
@@ -478,12 +479,12 @@
                                 class:pinned
                                 aria-pressed={pinned}
                                 disabled={!cell.hasBreakdown}
-                                onmouseenter={(e) => cell.hasBreakdown && showBreakdown(e.currentTarget, sec, sub.index, row.index, cell.index, stripPobText(row.label ?? ""), false)}
+                                onmouseenter={(e) => cell.hasBreakdown && showBreakdown(e.currentTarget, sec, sub.index, row.index, cell.index, stripPobText(calcLabel(row.label ?? "")), false)}
                                 onmouseleave={leaveBreakdown}
-                                onclick={(e) => showBreakdown(e.currentTarget, sec, sub.index, row.index, cell.index, stripPobText(row.label ?? ""), true)}
+                                onclick={(e) => showBreakdown(e.currentTarget, sec, sub.index, row.index, cell.index, stripPobText(calcLabel(row.label ?? "")), true)}
                               >
                                 {#if pinned}<span class="pinmark hero-pin" title={m.sidebar_breakdown_pinned()}><Icon name="push-pin" size={12} /></span>{/if}
-                                <span class="stat-hero-label"><PobText text={row.label ?? ""} /></span>
+                                <span class="stat-hero-label"><PobText text={calcLabel(row.label ?? "")} /></span>
                                 <span class="stat-hero-value num"><PobText text={cell.text} /></span>
                               </button>
                             {/if}
@@ -540,9 +541,9 @@
                                   disabled={!cell.hasBreakdown}
                                   title={isSkillHitDamageRow(sec, row) && !cell.hasBreakdown ? stripPobText(cell.text) : undefined}
                                   style:grid-column={span ? `${i + 2} / -1` : null}
-                                  onmouseenter={(e) => cell.hasBreakdown && showBreakdown(e.currentTarget, sec, sub.index, row.index, cell.index, stripPobText(`${sub.label} · ${row.label ?? ""}`), false)}
+                                  onmouseenter={(e) => cell.hasBreakdown && showBreakdown(e.currentTarget, sec, sub.index, row.index, cell.index, stripPobText(`${calcLabel(sub.label)} · ${calcLabel(row.label ?? "")}`), false)}
                                   onmouseleave={leaveBreakdown}
-                                  onclick={(e) => showBreakdown(e.currentTarget, sec, sub.index, row.index, cell.index, stripPobText(`${sub.label} · ${row.label ?? ""}`), true)}
+                                  onclick={(e) => showBreakdown(e.currentTarget, sec, sub.index, row.index, cell.index, stripPobText(`${calcLabel(sub.label)} · ${calcLabel(row.label ?? "")}`), true)}
                                 >
                                   <span class="ct">
                                     {#if cell.text}

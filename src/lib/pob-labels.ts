@@ -20,6 +20,7 @@ function lookup(prefix: string, pobText: string): string {
 
 export const statLabel = (english: string) => lookup("pob_stat_", english);
 export const configLabel = (pobText: string) => lookup("pob_config_", pobText);
+export const calcLabel = (pobText: string) => lookup("pob_calc_", pobText);
 
 export function slotLabel(english: string): string {
   const { key, n } = slotLabelKey(english);
