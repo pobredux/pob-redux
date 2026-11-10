@@ -230,6 +230,13 @@
           </label>
           <label class="opt">
             <span>
+              {m.settings_tab_icons()}
+              <span class="hint">{m.settings_tab_icons_hint()}</span>
+            </span>
+            <input class="switch" type="checkbox" role="switch" checked={ui.tabIcons} onchange={(e) => ui.setTabIcons((e.target as HTMLInputElement).checked)} />
+          </label>
+          <label class="opt">
+            <span>
               {m.settings_tree_asc_centre()}
               <span class="hint">{m.settings_tree_asc_centre_hint()}</span>
             </span>

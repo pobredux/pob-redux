@@ -5,7 +5,7 @@
   import { ui } from "$lib/state/ui.svelte";
   import { appOptions } from "$lib/state/options.svelte";
   import { game, GAMES, GAME_SHORT, GAME_LABEL, type Game } from "$lib/state/game.svelte";
-  import Icon from "$lib/components/Icon.svelte";
+  import Icon, { type IconName } from "$lib/components/Icon.svelte";
   import Kbd from "$lib/components/Kbd.svelte";
   import { m } from "$lib/paraglide/messages";
 
@@ -14,6 +14,11 @@
   const win = getCurrentWindow();
   let maximized = $state(false);
   let tabsEl = $state<HTMLDivElement | null>(null);
+  let spacerEl = $state<HTMLDivElement | null>(null);
+  let measureEl = $state<HTMLDivElement | null>(null);
+  let labelsWidth = $state(0);
+  let room = $state(0);
+  const compact = $derived(ui.tabIcons || labelsWidth > room);
 
   function openView(id: ViewId) {
     appOptions.open = false;
@@ -33,19 +38,25 @@
     tabsEl?.querySelector(".tab.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
   });
 
-  const tabs = $derived<{ id: ViewId; label: string; key: string }[]>([
-    { id: "import", label: m.view_builds(), key: "1" },
-    { id: "overview", label: m.view_overview(), key: "" },
-    { id: "tree", label: m.view_tree(), key: "2" },
-    { id: "skills", label: m.view_skills(), key: "3" },
-    { id: "items", label: m.view_items(), key: "4" },
-    { id: "calcs", label: m.view_calcs(), key: "5" },
-    { id: "config", label: m.view_config(), key: "6" },
-    { id: "notes", label: m.view_notes(), key: "7" },
-    { id: "party", label: m.view_party(), key: "8" },
-    { id: "optimise", label: m.view_optimise(), key: "9" },
-    { id: "compare", label: m.view_compare(), key: "0" },
+  const tabs = $derived<{ id: ViewId; label: string; key: string; icon: IconName }[]>([
+    { id: "import", label: m.view_builds(), key: "1", icon: "folder" },
+    { id: "overview", label: m.view_overview(), key: "", icon: "squares-four" },
+    { id: "tree", label: m.view_tree(), key: "2", icon: "graph" },
+    { id: "skills", label: m.view_skills(), key: "3", icon: "diamonds-four" },
+    { id: "items", label: m.view_items(), key: "4", icon: "sword" },
+    { id: "calcs", label: m.view_calcs(), key: "5", icon: "calculator" },
+    { id: "config", label: m.view_config(), key: "6", icon: "sliders-horizontal" },
+    { id: "notes", label: m.view_notes(), key: "7", icon: "note-pencil" },
+    { id: "party", label: m.view_party(), key: "8", icon: "users-three" },
+    { id: "optimise", label: m.view_optimise(), key: "9", icon: "chart-line-up" },
+    { id: "compare", label: m.view_compare(), key: "0", icon: "scales" },
   ]);
+
+  function tabTitle(t: { label: string; key: string }) {
+    const shortcut = t.key ? `Ctrl+${t.key}` : "";
+    if (!compact) return shortcut || undefined;
+    return shortcut ? `${t.label} (${shortcut})` : t.label;
+  }
 
   // the build name lives in the sidebar; the OS title carries it for the taskbar
   $effect(() => {
@@ -109,7 +120,13 @@
       e.preventDefault();
     };
     tabsEl?.addEventListener("wheel", onWheel, { passive: false });
+    const fit = new ResizeObserver(() => {
+      labelsWidth = measureEl?.offsetWidth ?? 0;
+      room = (tabsEl?.clientWidth ?? 0) + (spacerEl?.clientWidth ?? 0);
+    });
+    for (const el of [measureEl, tabsEl, spacerEl]) if (el) fit.observe(el);
     return () => {
+      fit.disconnect();
       tabsEl?.removeEventListener("wheel", onWheel);
       un.then((f) => f());
       window.removeEventListener("keydown", onKey);
@@ -150,7 +167,7 @@
   </div>
 
 
-  <div class="tabs" role="tablist" bind:this={tabsEl}>
+  <div class="tabs" class:compact role="tablist" bind:this={tabsEl}>
     {#each tabs as t (t.id)}
       <button
         role="tab"
@@ -159,14 +176,20 @@
         aria-selected={build.view === t.id && !appOptions.open}
         disabled={!build.loaded && t.id !== "import"}
         onclick={() => openView(t.id)}
-        title={t.key ? `Ctrl+${t.key}` : undefined}
+        title={tabTitle(t)}
+        aria-label={t.label}
       >
-        {t.label}
+        {#if compact}<Icon name={t.icon} size={16} />{:else}{t.label}{/if}
       </button>
     {/each}
   </div>
 
-  <div class="spacer" data-tauri-drag-region></div>
+  <div class="spacer" data-tauri-drag-region bind:this={spacerEl}></div>
+  <div class="measure" aria-hidden="true">
+    <div class="tabs" bind:this={measureEl}>
+      {#each tabs as t (t.id)}<span class="tab">{t.label}</span>{/each}
+    </div>
+  </div>
 
   <div class="findcell">
     {#if build.loaded}
@@ -320,6 +343,22 @@
     cursor: pointer;
     position: relative;
     letter-spacing: 0.01em;
+  }
+  .tabs.compact .tab {
+    display: grid;
+    place-items: center;
+    padding: 0 12px;
+  }
+  .measure {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+    visibility: hidden;
+  }
+  .measure .tabs {
+    width: max-content;
+    overflow: visible;
   }
   .tab:hover:not(:disabled) {
     color: var(--fg-0);

@@ -37,6 +37,7 @@ class UiStore {
   treeWeaponSet = $state<WeaponSetMode>(0);
   treeStatDiff = $state(true);
   treeAscCentre = $state(true);
+  tabIcons = $state(false);
   paletteOpen = $state(false);
   newBuildOpen = $state(false);
   jump = $state<Jump | null>(null);
@@ -59,6 +60,7 @@ class UiStore {
       if (typeof saved.scale === "number") this.scale = clampScale(saved.scale);
       if (typeof saved.treeStatDiff === "boolean") this.treeStatDiff = saved.treeStatDiff;
       if (typeof saved.treeAscCentre === "boolean") this.treeAscCentre = saved.treeAscCentre;
+      if (typeof saved.tabIcons === "boolean") this.tabIcons = saved.tabIcons;
     } catch {}
     this.applyTheme();
     this.systemLight.addEventListener("change", () => this.applyTheme());
@@ -90,6 +92,11 @@ class UiStore {
 
   setTreeAscCentre(centre: boolean) {
     this.treeAscCentre = centre;
+    this.save();
+  }
+
+  setTabIcons(always: boolean) {
+    this.tabIcons = always;
     this.save();
   }
 
@@ -183,6 +190,7 @@ class UiStore {
           scale: this.scale,
           treeStatDiff: this.treeStatDiff,
           treeAscCentre: this.treeAscCentre,
+          tabIcons: this.tabIcons,
         }),
       );
     } catch {}

@@ -53,6 +53,8 @@
   "settings_scale": "Interface scale",
   "settings_scale_hint": "Ctrl+= and Ctrl+- step it, Ctrl+0 resets.",
   "settings_scale_limited": "The window fits {applied} at most. Make it larger to use {wanted}.",
+  "settings_tab_icons": "Always show tabs as icons",
+  "settings_tab_icons_hint": "The tabs switch to icons on their own when the window is too narrow for their names. Turn this on to keep the icons at any width.",
   "settings_tree_asc_centre": "Ascendancy in the tree center",
   "settings_tree_asc_centre_hint": "Path of Exile 2: draws the chosen ascendancy over the class art in the middle of the tree and hides the others, as the game does.",
 
