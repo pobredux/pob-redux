@@ -241,7 +241,7 @@ fn prop(ty: &str, desc: &str) -> Value {
 }
 
 fn none() -> Value {
-    json!({ "type": "object", "additionalProperties": false })
+    json!({ "type": "object", "properties": {}, "additionalProperties": false })
 }
 
 /// What `ToolContext::with_stats` adds to every write.
@@ -1623,5 +1623,14 @@ mod tests {
         let bytes = serde_json::to_string(&d).unwrap().len();
         println!("tool registry: {} tools, {} bytes serialized (~{} tokens)", d.len(), bytes, bytes / 4);
         assert!(bytes < 60_000, "registry grew to {bytes} bytes; check what was added");
+    }
+
+    #[test]
+    fn every_schema_has_object_properties() {
+        for game in [Game::Poe2, Game::Poe1] {
+            for t in defs(game) {
+                assert!(t.schema["properties"].is_object(), "{game:?} {}: properties is {}", t.name, t.schema["properties"]);
+            }
+        }
     }
 }
