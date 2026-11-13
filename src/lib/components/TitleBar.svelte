@@ -7,6 +7,7 @@
   import { game, GAMES, GAME_SHORT, GAME_LABEL, type Game } from "$lib/state/game.svelte";
   import Icon, { type IconName } from "$lib/components/Icon.svelte";
   import Kbd from "$lib/components/Kbd.svelte";
+  import { isTextField } from "$lib/keys";
   import { m } from "$lib/paraglide/messages";
 
   import LogoMark from "$lib/components/LogoMark.svelte";
@@ -49,7 +50,7 @@
     { id: "notes", label: m.view_notes(), key: "7", icon: "note-pencil" },
     { id: "party", label: m.view_party(), key: "8", icon: "users-three" },
     { id: "optimise", label: m.view_optimise(), key: "9", icon: "chart-line-up" },
-    { id: "compare", label: m.view_compare(), key: "0", icon: "scales" },
+    { id: "compare", label: m.view_compare(), key: "", icon: "scales" },
   ]);
 
   function tabTitle(t: { label: string; key: string }) {
@@ -83,11 +84,12 @@
           openView(t.id);
           e.preventDefault();
         }
-        if (e.key === "z") {
+        const treeUndo = build.view === "tree" && !appOptions.open && !isTextField(e.target);
+        if (e.key === "z" && treeUndo) {
           build.undo();
           e.preventDefault();
         }
-        if (e.key === "y") {
+        if (e.key === "y" && treeUndo) {
           build.redo();
           e.preventDefault();
         }
