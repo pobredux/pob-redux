@@ -68,23 +68,22 @@
     {#if item}
       {#if game === "poe1" && sockets.length}
         {@const height = Math.ceil(sockets.length / 2) * 24}
-        <div class="sockets socket-overlay" style:aspect-ratio={`48 / ${height}`} aria-label={m.items_assigned_gems()}>
-          <svg viewBox={`0 0 48 ${height}`} aria-hidden="true">
-            {#each sockets as socket, index}
-              {@const point = socketPosition(index, sockets.length)}
-              {#if index && socket.group === sockets[index - 1].group}
-                {@const previous = socketPosition(index - 1, sockets.length)}
-                {@const cx = (previous.x + point.x) / 2}
-                {@const cy = (previous.y + point.y) / 2}
-                <image href={socketLink} x={cx - 4} y={cy - 2} width="8" height="4"
-                  transform={previous.x === point.x ? `rotate(90 ${cx} ${cy})` : undefined} />
-              {/if}
-            {/each}
-            {#each sockets as socket, index}
-              {@const point = socketPosition(index, sockets.length)}
-              <image href={socketArt[socket.colour] ?? socketWhite} x={point.x - 9} y={point.y - 9} width="18" height="18" />
-            {/each}
-          </svg>
+        <div class="sockets socket-overlay" style:--h={height} aria-label={m.items_assigned_gems()}>
+          {#each sockets as socket, index}
+            {@const point = socketPosition(index, sockets.length)}
+            {#if index && socket.group === sockets[index - 1].group}
+              {@const previous = socketPosition(index - 1, sockets.length)}
+              <span class="link" class:vertical={previous.x === point.x} aria-hidden="true"
+                style:left={`${(previous.x + point.x) / 2 / 48 * 100}%`} style:top={`${(previous.y + point.y) / 2 / height * 100}%`}
+                style:background-image={socketLink ? `url("${socketLink}")` : undefined}></span>
+            {/if}
+          {/each}
+          {#each sockets as socket, index}
+            {@const point = socketPosition(index, sockets.length)}
+            {@const art = socketArt[socket.colour] ?? socketWhite}
+            <span class="socket" aria-hidden="true" style:left={`${point.x / 48 * 100}%`} style:top={`${point.y / height * 100}%`}
+              style:background-image={art ? `url("${art}")` : undefined}></span>
+          {/each}
           {#each gems as entry, index}
             {#if entry}
               {@const point = socketPosition(index, sockets.length)}
@@ -135,7 +134,7 @@
 <style>
   .equipment { padding: 16px 12px 10px; border-bottom: 1px solid var(--line-0); background: radial-gradient(ellipse at 50% 35%, var(--bg-2), transparent 75%); }
   .paperdoll { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); grid-template-rows: repeat(6, minmax(0, 1fr)); gap: 5px; aspect-ratio: 8 / 6; max-width: 400px; margin: 0 auto; }
-  .cell { position: relative; min-width: 0; min-height: 0; border: 1px solid var(--line-1); border-radius: 3px; background: var(--bg-0); }
+  .cell { position: relative; container-type: size; min-width: 0; min-height: 0; border: 1px solid var(--line-1); border-radius: 3px; background: var(--bg-0); }
   .cell.occupied { border-color: color-mix(in srgb, var(--rarity) 40%, var(--line-0)); background: color-mix(in srgb, var(--rarity) 7%, var(--bg-0)); }
   .cell.occupied:hover, .cell:focus-within, .cell.selected { border-color: var(--rarity); box-shadow: 0 0 0 1px var(--rarity); }
   .gear { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; padding: 3px; background: none; border: 0; color: var(--fg-2); cursor: pointer; }
@@ -150,8 +149,11 @@
   .act:focus-visible { outline: 2px solid var(--fg-0); outline-offset: 2px; }
   .socket-overlay { opacity: 0; visibility: hidden; pointer-events: none; }
   .cell:hover .socket-overlay, .cell.keyboard .socket-overlay { opacity: 1; visibility: visible; }
-  .sockets { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(64px, calc(100% - 6px)); filter: drop-shadow(0 1px 2px #000); }
-  .sockets svg { display: block; width: 100%; height: 100%; }
+  .sockets { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(64px, calc(100% - 6px)); width: min(calc(100cqw - 6px), calc((100cqh - 6px) * 48 / var(--h))); aspect-ratio: 48 / var(--h); filter: drop-shadow(0 1px 2px #000); }
+  .socket, .link { position: absolute; transform: translate(-50%, -50%); background-size: contain; background-position: center; background-repeat: no-repeat; }
+  .socket { width: 37.5%; aspect-ratio: 1; }
+  .link { width: 16.6667%; aspect-ratio: 2; }
+  .link.vertical { transform: translate(-50%, -50%) rotate(90deg); }
   .runes { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); place-items: center; width: min(64px, calc(100% - 6px)); }
   .rune { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; max-width: 32px; max-height: 32px; min-width: 0; min-height: 0; background-size: contain; background-position: center; background-repeat: no-repeat; }
   .inset-art { display: flex; align-items: center; justify-content: center; width: 60%; height: 60%; }
