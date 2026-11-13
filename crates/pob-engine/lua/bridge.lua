@@ -9602,6 +9602,125 @@ M.get_party = function()
 		}
 	end
 	out.enableExportBuffs = pt.enableExportBuffs and true or false
+
+	local function flagNames(bits, names)
+		local list = array({})
+		for name, v in pairs(names) do
+			if type(v) == "number" and v > 0 and bit.band(v, v - 1) == 0 and bit.band(bits or 0, v) ~= 0 then list[#list + 1] = name end
+		end
+		table.sort(list)
+		return list
+	end
+	local function sourceName(src)
+		src = tostring(src or "")
+		local item = src:match("^Item:%d+:(.+)$") or src:match("^Party %- (.+)$")
+		if item then return item end
+		local nodeId = tonumber(src:match("^Tree:(%d+)$"))
+		if nodeId then
+			local node = build.spec and build.spec.tree.nodes[nodeId]
+			return node and node.dn or (nodeId >= 65536 and "Cluster jewel passive" or "Passive skill")
+		end
+		local skillId = src:match("^Skill:(.+)$")
+		if skillId then return data.skills[skillId] and data.skills[skillId].name or skillId end
+		return src ~= "" and src or null
+	end
+	local function modInfo(mod)
+		local tags = array({})
+		for _, tag in ipairs(mod) do
+			if tag.type ~= "GlobalEffect" then
+				local t = {}
+				for k, v in pairs(tag) do
+					local kind = type(v)
+					if kind == "string" or kind == "number" or kind == "boolean" then t[k] = v end
+				end
+				tags[#tags + 1] = t
+			end
+		end
+		local kind = type(mod.value)
+		return {
+			name = mod.name,
+			type = mod.type,
+			value = (kind == "number" or kind == "boolean" or kind == "string") and mod.value or null,
+			flags = flagNames(mod.flags, ModFlag),
+			keywordFlags = flagNames(mod.keywordFlags, KeywordFlag),
+			tags = tags,
+			source = sourceName(mod.source),
+		}
+	end
+	local function buffList(kind, groups)
+		local list = array({})
+		local function add(group, name, buff)
+			local bySource, order = {}, {}
+			for _, mod in ipairs(buff.modList) do
+				local info = modInfo(mod)
+				-- Extra aura effects arrive as one block; their item or passive names them better.
+				local key = group == "extraAura" and (info.source ~= null and info.source or name) or name
+				if not bySource[key] then
+					bySource[key] = array({})
+					order[#order + 1] = key
+				end
+				table.insert(bySource[key], info)
+			end
+			for _, key in ipairs(order) do
+				list[#list + 1] = { kind = kind, group = group, name = key, effect = tonumber(buff.effectMult) or null, isMark = buff.isMark == true, mods = bySource[key] }
+			end
+		end
+		for group, entries in pairs(groups or {}) do
+			if type(entries) == "table" then
+				for name, buff in pairs(entries) do
+					if name == "Vaal" then
+						for vaalName, vaalBuff in pairs(buff) do add(group, vaalName, vaalBuff) end
+					elseif type(buff) == "table" and buff.modList then
+						add(group, name, buff)
+					end
+				end
+			end
+		end
+		table.sort(list, function(a, b) return a.name < b.name end)
+		return list
+	end
+
+	local enemyMods = array({})
+	for line in (pt.controls.enemyMods.buf or ""):gmatch("[^\n]+") do
+		local mod = line:find("|") and modLib.parseFormattedSourceMod(line)
+		if mod then enemyMods[#enemyMods + 1] = modInfo(mod) end
+	end
+	local conditions, seen = array({}), {}
+	for line in (pt.controls.enemyCond.buf or ""):gmatch("[^\n]+") do
+		local name = line:gsub("^Condition:", "")
+		if not seen[name] then
+			seen[name] = true
+			conditions[#conditions + 1] = name
+		end
+	end
+	local stats = array({})
+	for key, value in pairs(pt.actor.output or {}) do
+		if type(value) == "number" then
+			stats[#stats + 1] = { name = key, value = value }
+		elseif type(value) == "table" then
+			for sub, v in pairs(value) do
+				if type(v) == "number" then stats[#stats + 1] = { name = key .. "." .. sub, value = v } end
+			end
+		end
+	end
+	table.sort(stats, function(a, b) return a.name < b.name end)
+	local flags = array({})
+	for line in (pt.controls.editPartyMemberStats.buf or ""):gmatch("[^\n]+") do
+		if not line:find("=") then flags[#flags + 1] = line end
+	end
+
+	local actor = pt.actor
+	out.details = {
+		auras = buffList("aura", actor.Aura),
+		curses = buffList("curse", actor.Curse),
+		curseLimit = actor.Curse and tonumber(actor.Curse.limit) or null,
+		warcries = buffList("warcry", actor.Warcry),
+		links = buffList("link", actor.Link),
+		memberStats = stats,
+		memberFlags = flags,
+		enemyConditions = conditions,
+		enemyMods = enemyMods,
+	}
 	return out
 end
 

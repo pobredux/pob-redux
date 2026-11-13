@@ -1730,6 +1730,40 @@ export interface PartyState {
   enemyMods: PartyBox;
   curses: PartyBox;
   enableExportBuffs: boolean;
+  details: PartyDetails;
+}
+
+export interface PartyMod {
+  name: string;
+  type: string;
+  value: number | boolean | string | null;
+  flags: string[];
+  keywordFlags: string[];
+  tags: Record<string, string | number | boolean>[];
+  /** The item, passive or skill the mod comes from, when PoB recorded one. */
+  source: string | null;
+}
+
+export interface PartyBuff {
+  kind: "aura" | "curse" | "warcry" | "link";
+  /** PoB's effect type: Aura, AuraDebuff, Curse, Warcry, Link, extraAura or otherEffects. */
+  group: string;
+  name: string;
+  effect: number | null;
+  isMark: boolean;
+  mods: PartyMod[];
+}
+
+export interface PartyDetails {
+  auras: PartyBuff[];
+  curses: PartyBuff[];
+  curseLimit: number | null;
+  warcries: PartyBuff[];
+  links: PartyBuff[];
+  memberStats: { name: string; value: number }[];
+  memberFlags: string[];
+  enemyConditions: string[];
+  enemyMods: PartyMod[];
 }
 
 export type PartyKind = "partyMemberStats" | "auras" | "warcries" | "links" | "enemyConditions" | "enemyMods" | "curses";
