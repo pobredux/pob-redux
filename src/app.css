@@ -379,8 +379,12 @@
 }
 
 :root {
-  /* Geist carries Latin and Cyrillic only; the rest cover Japanese, Korean and Thai. */
-  --font-cjk: "Yu Gothic UI", "Meiryo", "Malgun Gothic", "Leelawadee UI", "Noto Sans CJK JP", "Noto Sans Thai", "Hiragino Sans", "Apple SD Gothic Neo", "Thonburi";
+  /* Geist carries Latin and Cyrillic only, so CJK falls to --font-cjk. That chain
+     cannot be shared: a font picker takes the first face with *any* CJK coverage,
+     and on Windows that is Yu Gothic UI, which renders some shared glyphs with
+     the wrong regional forms (直, 骨, 次). The base chain leads with the SC faces;
+     the :lang() rules below re-point it per language. */
+  --font-cjk: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Source Han Sans SC", "Noto Sans CJK SC", "Leelawadee UI", "Noto Sans Thai", "Thonburi", sans-serif;
   --font-ui: "Geist Variable", ui-sans-serif, system-ui, "Segoe UI", var(--font-cjk), sans-serif;
   --font-mono: "Geist Mono Variable", ui-monospace, "Cascadia Mono", Consolas, var(--font-cjk), monospace;
 
@@ -423,6 +427,50 @@ body {
 
 #app {
   height: 100%;
+}
+
+/* Script-specific overrides. `html[lang]` is kept current by the locale store, so
+   these follow the picker without a reload. Shared CJK glyphs have regional
+   forms, so each language gets its own font chain. */
+html:lang(ja) {
+  --font-cjk: "Yu Gothic UI", "Meiryo", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Noto Sans CJK JP", "Malgun Gothic", sans-serif;
+}
+
+html:lang(ko) {
+  --font-cjk: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", "Noto Sans CJK KR", "Yu Gothic UI", sans-serif;
+}
+
+/* Traditional Chinese has its own regional glyph forms; the base chain starts
+   with Simplified faces, so Traditional locales re-point it here. */
+html:lang(zh-TW),
+html:lang(zh-HK),
+html:lang(zh-MO) {
+  --font-cjk: "Microsoft JhengHei UI", "Microsoft JhengHei", "PingFang TC", "Hiragino Sans TC", "Noto Sans TC", "Source Han Sans TC", "Noto Sans CJK TC", sans-serif;
+}
+
+/* CJK glyphs fill the em box, so they need more leading than Latin at the same
+   size, and the tracking that opens up small caps closes them up. */
+html:lang(zh) body,
+html:lang(ja) body,
+html:lang(ko) body {
+  line-height: 1.5;
+}
+
+html:lang(zh) .label,
+html:lang(ja) .label,
+html:lang(ko) .label {
+  letter-spacing: 0.02em;
+}
+
+/* CJK scripts have no spaces to break on, so a long label has to be told that
+   it may wrap instead of pushing a fixed-width column wider. */
+html:lang(zh) .label,
+html:lang(zh) .dim,
+html:lang(ja) .label,
+html:lang(ja) .dim,
+html:lang(ko) .label,
+html:lang(ko) .dim {
+  overflow-wrap: break-word;
 }
 
 ::selection {

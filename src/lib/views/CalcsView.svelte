@@ -15,6 +15,7 @@
   import { calcBreakdownKey, type CalcBreakdownRef } from "$lib/calc-breakdown";
   import { CHARGE_COLOURS, ROW_COLOURS } from "$lib/calc-colours";
   import { m } from "$lib/paraglide/messages";
+  import { formatNumber } from "$lib/i18n/format";
 
   let actor = $state<"player" | "minion">("player");
 
@@ -236,7 +237,7 @@
     if (magnitude >= 1_000_000_000) return compact(1_000_000_000, "b");
     if (magnitude >= 1_000_000) return compact(1_000_000, "m");
     if (magnitude >= 1_000) return compact(1_000, "k");
-    return Math.round(value).toLocaleString("en-US");
+    return formatNumber(Math.round(value));
   }
 
   function compactHitDamage(text: string) {

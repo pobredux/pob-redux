@@ -23,17 +23,28 @@ export const LOCALE_LABEL: Record<Locale, string> = {
   "pt-BR": "Português (Brasil)",
   ru: "Русский",
   th: "ไทย",
+  "zh-CN": "简体中文",
+  "zh-TW": "繁體中文",
 };
 
-/** Tags the OS may report that no shipped locale matches exactly. */
-const ALIASES: Record<string, Locale> = { pt: "pt-BR", "pt-pt": "pt-BR" };
+/** Tags the OS may report that no shipped locale matches exactly. Variant
+ *  subtags (e.g. zh-Hant-TW) are matched per segment below. */
+const ALIASES: Record<string, Locale> = {
+  pt: "pt-BR", "pt-pt": "pt-BR",
+  "zh-hant": "zh-TW", "zh-hk": "zh-TW", "zh-mo": "zh-TW",
+  hant: "zh-TW",
+};
 
 function match(tag: string): Locale | undefined {
   const lower = tag.toLowerCase();
   const exact = LOCALES.find((l) => l.toLowerCase() === lower);
   if (exact) return exact;
   if (ALIASES[lower]) return ALIASES[lower];
-  const base = lower.split("-")[0];
+  const parts = lower.split("-");
+  // Browsers and Windows may report a script subtag; resolve it before the
+  // bare-language fallback, which would otherwise pick the first zh locale.
+  for (const part of parts) if (ALIASES[part]) return ALIASES[part];
+  const base = parts[0];
   return LOCALES.find((l) => l.toLowerCase().split("-")[0] === base) ?? ALIASES[base];
 }
 

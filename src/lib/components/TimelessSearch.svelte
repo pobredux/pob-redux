@@ -10,6 +10,7 @@
   } from "$lib/engine.svelte";
   import { build } from "$lib/state/build.svelte";
   import { m } from "$lib/paraglide/messages";
+  import { formatNumber } from "$lib/i18n/format";
   import SearchSelect from "./SearchSelect.svelte";
   import SocketPreview from "./SocketPreview.svelte";
 
@@ -140,7 +141,7 @@
       result = await engine.timelessSearchResult(200);
       const ms = performance.now() - started;
       const took = ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
-      note = m.timeless_summary({ found: result.found.toLocaleString(), total: result.total.toLocaleString(), took });
+      note = m.timeless_summary({ found: formatNumber(result.found), total: formatNumber(result.total), took });
     } catch (e) {
       build.error = String(e);
     } finally {
@@ -323,11 +324,11 @@
       {#if running}
         <button class="btn ghost sm" onclick={() => (cancel = true)}>{m.common_stop()}</button>
         <div class="prog"><span style:width={`${Math.round(progress * 100)}%`}></span></div>
-        <span class="dim num small">{checked.toLocaleString()} / {total.toLocaleString()}</span>
+        <span class="dim num small">{formatNumber(checked)} / {formatNumber(total)}</span>
       {:else if note}
         <span class="dim small">{note}</span>
       {:else if jewel}
-        <span class="dim num small">{m.timeless_seed_range({ min: jewel.seedMin.toLocaleString(), max: jewel.seedMax.toLocaleString() })}</span>
+        <span class="dim num small">{m.timeless_seed_range({ min: formatNumber(jewel.seedMin), max: formatNumber(jewel.seedMax) })}</span>
       {/if}
     </div>
 
@@ -341,7 +342,7 @@
         <div class="scroll">
           {#each result.results as r (r.seed)}
             <button class="res" class:on={selected.includes(r.seed)} onclick={(e) => toggle(r.seed, e)}>
-              <span class="seed num">{r.seed.toLocaleString()}</span>
+              <span class="seed num">{formatNumber(r.seed)}</span>
               <span class="score num">{r.weight.toFixed(1)}</span>
               <span class="hits">
                 {#each r.nodes as n}
