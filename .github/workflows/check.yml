@@ -41,7 +41,7 @@ jobs:
           path: |
             src-tauri/resources/pob
             src-tauri/resources/pob1
-          key: pob-${{ runner.os }}-${{ steps.pin.outputs.commit }}-${{ steps.pin.outputs.commit1 }}-${{ hashFiles('crates/pob-sync/**/*.rs', 'crates/pob-sync/Cargo.toml', 'pob-sync.toml', 'patches/**') }}
+          key: pob-${{ runner.os }}-${{ steps.pin.outputs.commit }}-${{ steps.pin.outputs.commit1 }}-${{ hashFiles('crates/pob-sync/**/*.rs', 'crates/pob-sync/Cargo.toml', 'pob-sync.toml', 'patches/**', 'trees/**') }}
 
       - name: Checkout PathOfBuilding-PoE2
         if: steps.pob.outputs.cache-hit != 'true'

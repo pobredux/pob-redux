@@ -178,6 +178,23 @@ fn is_icon_sheet(base: &str) -> bool {
     base.starts_with("skills") || (base.starts_with("mastery") && !base.starts_with("mastery-active-effect"))
 }
 
+/// Sheet file names differ between GGG's export and ours, so PoE1 finds its node icons by `sprites.lua` section.
+fn is_icon_section(section: &str) -> bool {
+    matches!(
+        section,
+        "normalActive"
+            | "notableActive"
+            | "keystoneActive"
+            | "normalInactive"
+            | "notableInactive"
+            | "keystoneInactive"
+            | "mastery"
+            | "masteryConnected"
+            | "masteryActiveSelected"
+            | "masteryInactive"
+    )
+}
+
 /// 1/`f` size by block average, alpha-weighted so masked-out pixels do not darken edges.
 fn shrink(img: &RgbaImage, f: u32) -> RgbaImage {
     let (w, h) = (img.width().div_ceil(f), img.height().div_ceil(f));
@@ -356,7 +373,7 @@ fn decode_sheet(
 /// `sprites.lua`, so the manifest is a transcription: copy each sheet as it is
 /// and key every rect by the icon path or asset name PoB uses. The `*Inactive`
 /// sections are the greyscale icon variants.
-pub fn build_sprites(src_tree: &Path, dest_tree: &Path, version: &str) -> Result<AssetStats> {
+pub fn build_sprites(src_tree: &Path, src_root: &Path, dest_tree: &Path, version: &str) -> Result<AssetStats> {
     let sprites = crate::lua_json::eval_file(&src_tree.join("sprites.lua"))?;
     let web = dest_tree.join("web");
     if web.exists() {
@@ -374,7 +391,7 @@ pub fn build_sprites(src_tree: &Path, dest_tree: &Path, version: &str) -> Result
     // An icon sheet is masked before it is written, so all of its rects are needed first.
     let mut icon_rects: BTreeMap<&str, BTreeSet<Rect>> = BTreeMap::new();
     let mut largest: BTreeMap<&str, u32> = BTreeMap::new();
-    for sheet in sections.values() {
+    for (section, sheet) in sections {
         let Some(basename) = sheet.get("filename").and_then(|v| v.as_str()).map(sheet_basename) else { continue };
         let rects: Vec<Rect> = sheet
             .get("coords")
@@ -385,7 +402,7 @@ pub fn build_sprites(src_tree: &Path, dest_tree: &Path, version: &str) -> Result
             .collect();
         let most = largest.entry(basename).or_default();
         *most = rects.iter().map(|r| r.2.max(r.3)).fold(*most, u32::max);
-        if is_icon_sheet(basename) {
+        if is_icon_section(section) {
             icon_rects.entry(basename).or_default().extend(rects);
         }
     }
@@ -504,7 +521,6 @@ pub fn build_sprites(src_tree: &Path, dest_tree: &Path, version: &str) -> Result
     // Standalone images PoB loads outside the sheets: the class illustrations
     // beside the version folders (LoadImage checks TreeData/ first) and the
     // jewel radius rings PassiveTreeView.lua opens by path.
-    let src_root = src_tree.parent().and_then(Path::parent).unwrap_or(src_tree);
     let mut standalone: Vec<(String, String)> = Vec::new();
     for name in ["BackgroundStr", "BackgroundDex", "BackgroundInt", "BackgroundStrDex", "BackgroundStrInt", "BackgroundDexInt"] {
         standalone.push((name.to_string(), format!("TreeData/{name}.png")));

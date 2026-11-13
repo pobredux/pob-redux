@@ -408,6 +408,52 @@ local function saveBootMods()
 	cache.write("mods.lua", table.concat(out))
 end
 
+local function replacePlain(s, from, to)
+	local i, j = s:find(from, 1, true)
+	return i and (s:sub(1, i - 1) .. to .. s:sub(j + 1)) or s
+end
+
+-- pob-sync can add trees (trees/<game>/) that GameVersions.lua does not list yet. Each copies the newest listed entry with the same suffix.
+local function registerAddedTrees()
+	local added = { }
+	local search = NewFileSearch("TreeData/*", true)
+	while search do
+		local name = search:GetFileName()
+		local major, minor, variant = name:match("^(%d+)_(%d+)(.*)$")
+		local file = major and not treeVersions[name] and io.open("TreeData/" .. name .. "/tree.lua", "r")
+		if file then
+			file:close()
+			table.insert(added, { name = name, major = tonumber(major), minor = tonumber(minor), variant = variant })
+		end
+		if not search:NextFile() then break end
+	end
+	table.sort(added, function(a, b)
+		if a.major ~= b.major then return a.major < b.major end
+		if a.minor ~= b.minor then return a.minor < b.minor end
+		if (a.variant == "") ~= (b.variant == "") then return b.variant == "" end
+		return a.variant < b.variant
+	end)
+	for _, tree in ipairs(added) do
+		local entry = { display = tree.name, num = tree.major + tree.minor / 100 }
+		for i = #treeVersionList, 1, -1 do
+			local prevName = treeVersionList[i]
+			local pMajor, pMinor, pVariant = prevName:match("^(%d+)_(%d+)(.*)$")
+			local prev = treeVersions[prevName]
+			if pVariant == tree.variant and prev and tonumber(pMinor) > 0 then
+				local step = (prev.num - tonumber(pMajor)) / tonumber(pMinor)
+				entry.num = math.floor((tree.major + tree.minor * step) * 1e6 + 0.5) / 1e6
+				local oldDot, newDot = pMajor .. "." .. pMinor, tree.major .. "." .. tree.minor
+				entry.display = replacePlain(replacePlain(prev.display, pMajor .. "_" .. pMinor, tree.major .. "_" .. tree.minor), oldDot, newDot)
+				entry.url = prev.url and replacePlain(prev.url, oldDot, newDot)
+				break
+			end
+		end
+		treeVersions[tree.name] = entry
+		table.insert(treeVersionList, tree.name)
+	end
+	latestTreeVersion = treeVersionList[#treeVersionList]
+end
+
 function LoadModule(name, ...)
 	if not name:match("%.lua$") then
 		name = name .. ".lua"
@@ -418,6 +464,10 @@ function LoadModule(name, ...)
 	end
 	if cache and name == "Data/ModCache.lua" then
 		return withBootMods(func(...))
+	end
+	if name == "GameVersions.lua" then
+		func(...)
+		return registerAddedTrees()
 	end
 	return func(...)
 end
