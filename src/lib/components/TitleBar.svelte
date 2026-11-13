@@ -69,6 +69,13 @@
     win.isMaximized().then((v) => (maximized = v));
     const un = win.onResized(async () => (maximized = await win.isMaximized()));
     const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey && !e.altKey && e.key === "Tab") {
+        const open = tabs.filter((t) => build.loaded || t.id === "import");
+        const at = Math.max(0, open.findIndex((t) => t.id === build.view));
+        openView(open[(at + (e.shiftKey ? -1 : 1) + open.length) % open.length].id);
+        e.preventDefault();
+        return;
+      }
       if (e.ctrlKey && e.shiftKey && !e.altKey && e.key.toLowerCase() === "s") {
         void build.saveAs();
         e.preventDefault();

@@ -870,6 +870,7 @@
 
   "skills_set_title": "Skill set",
   "skills_new_group": "New socket group",
+  "skills_new_group_title": "Add a socket group (Ctrl+N)",
   "skills_copy_group": "Copy group",
   "skills_copy_group_title": "Copy the selected group as text (PoB-compatible)",
   "skills_paste_group": "Paste group",
@@ -914,7 +915,7 @@
   "skills_count": "Count",
   "skills_count_title": "How many copies of this item-granted skill apply",
   "skills_delete_group": "Delete group",
-  "skills_delete_group_title": "Delete this socket group",
+  "skills_delete_group_title": "Delete this socket group. Shortcut: select it in the list and press Delete.",
   "skills_delete_group_blocked": "This group comes with an item or a mechanic and cannot be deleted; change the item instead",
   "skills_skill": "Skill",
   "skills_stat_set": "Stat set",

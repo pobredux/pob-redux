@@ -9,6 +9,7 @@
   import PobTooltip from "$lib/components/PobTooltip.svelte";
   import MoreMenu, { type MenuItem } from "$lib/components/MoreMenu.svelte";
   import { stripPobText } from "$lib/pobtext";
+  import { isTextField } from "$lib/keys";
   import { m } from "$lib/paraglide/messages";
 
   const groups = $derived(build.skills?.socketGroups ?? []);
@@ -168,6 +169,18 @@
     await build.run(() => engine.removeSocketGroup(sel.index));
     selectedIdx = 1;
   }
+
+  let listEl = $state<HTMLElement | null>(null);
+  function onKey(e: KeyboardEvent) {
+    if (e.defaultPrevented || ui.paletteOpen || e.altKey || e.shiftKey) return;
+    if (e.key === "Delete" && !e.ctrlKey && sel && !sel.source && listEl?.contains(document.activeElement)) {
+      e.preventDefault();
+      void removeGroup();
+    } else if (e.ctrlKey && e.key.toLowerCase() === "n" && !isTextField(e.target)) {
+      e.preventDefault();
+      void addGroup();
+    }
+  }
   function moveGroup(from: number, dir: number) {
     const to = from + dir;
     if (to < 1 || to > groups.length) return;
@@ -236,6 +249,8 @@
   }
 </script>
 
+<svelte:window onkeydown={onKey} />
+
 <div class="page">
   <div class="toolbar">
     {#if renamingSet}
@@ -266,7 +281,7 @@
     {/if}
     <MoreMenu label={m.set_menu()} items={setMenu} />
     <span class="vr"></span>
-    <button class="btn sm" onclick={addGroup}>{m.skills_new_group()}</button>
+    <button class="btn sm" onclick={addGroup} title={m.skills_new_group_title()}>{m.skills_new_group()}</button>
     <button class="btn sm ghost" disabled={!sel} onclick={copyGroup} title={m.skills_copy_group_title()}>{m.skills_copy_group()}</button>
     <button class="btn sm ghost" onclick={pasteGroup} title={m.skills_paste_group_title()}>{m.skills_paste_group()}</button>
     <span class="vr"></span>
@@ -313,7 +328,7 @@
   </div>
 
   <div class="cols">
-    <section class="col list">
+    <section class="col list" bind:this={listEl}>
       {#each groups as g (g.index)}
         {@const gmark = markOf(g)}
         <div class="grow-row" class:sel={sel?.index === g.index} class:off={!g.enabled} class:dup={!!g.duplicateOf}>
