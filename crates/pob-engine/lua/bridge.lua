@@ -4986,6 +4986,81 @@ function itemUtil.makeCraftedItem(base, rarity, title, range)
 	return item
 end
 
+itemUtil.UNCRAFTABLE_CLUSTER_SKILLS = { affliction_strength = true, affliction_dexterity = true, affliction_intelligence = true }
+
+-- ItemsTab:CraftClusterJewel. The tree reads the skill and node count from these enchants.
+function itemUtil.craftClusterJewel(item)
+	local cluster = item.clusterJewel
+	if not (item.clusterJewelSkill and cluster.skills[item.clusterJewelSkill]) then
+		local best
+		for id, skill in pairs(cluster.skills) do
+			if not itemUtil.UNCRAFTABLE_CLUSTER_SKILLS[id] and (not best or skill.name < cluster.skills[best].name) then best = id end
+		end
+		item.clusterJewelSkill = best
+	end
+	item.clusterJewelNodeCount = math.min(math.max(item.clusterJewelNodeCount or cluster.minNodes, cluster.minNodes), cluster.maxNodes)
+	wipeTable(item.enchantModLines)
+	table.insert(item.enchantModLines, { line = "Adds " .. item.clusterJewelNodeCount .. " Passive Skills", crafted = true })
+	if cluster.size == "Large" then
+		table.insert(item.enchantModLines, { line = "2 Added Passive Skills are Jewel Sockets", crafted = true })
+	elseif cluster.size == "Medium" then
+		table.insert(item.enchantModLines, { line = "1 Added Passive Skill is a Jewel Socket", crafted = true })
+	end
+	table.insert(item.enchantModLines, { line = table.concat(cluster.skills[item.clusterJewelSkill].enchant, "\n"), crafted = true })
+	item:BuildAndParseRaw()
+end
+
+function itemUtil.clusterTags(item)
+	local skill = item.clusterJewel and item.clusterJewelSkill and item.clusterJewel.skills[item.clusterJewelSkill]
+	return skill and { [skill.tag] = true } or nil
+end
+
+function itemUtil.clusterSkills(item)
+	local out = array({})
+	for id, skill in pairs(item.clusterJewel.skills) do
+		if not itemUtil.UNCRAFTABLE_CLUSTER_SKILLS[id] then out[#out + 1] = { id = id, name = skill.name } end
+	end
+	table.sort(out, function(a, b) return a.name < b.name end)
+	return out
+end
+
+function itemUtil.applyClusterChoice(item, skill, passives)
+	if not item.clusterJewel then
+		if skill ~= nil or passives ~= nil then error(item.baseName .. " is not a cluster jewel", 0) end
+		return
+	end
+	if skill ~= nil then
+		local want = tostring(skill):lower()
+		local found
+		for _, s in ipairs(itemUtil.clusterSkills(item)) do
+			if s.id:lower() == want or s.name:lower() == want then found = s.id end
+		end
+		if not found then
+			local names = {}
+			for _, s in ipairs(itemUtil.clusterSkills(item)) do names[#names + 1] = s.name end
+			error(string.format("no cluster skill %q on %s. Skills: %s", tostring(skill), item.baseName, table.concat(names, ", ")), 0)
+		end
+		item.clusterJewelSkill = found
+	end
+	if passives ~= nil then item.clusterJewelNodeCount = tonumber(passives) end
+	itemUtil.craftClusterJewel(item)
+end
+
+function itemUtil.clusterSummary(item)
+	if not item.clusterJewel then return null end
+	local ench = array({})
+	for _, m in ipairs(item.enchantModLines) do ench[#ench + 1] = m.line end
+	return {
+		skill = item.clusterJewelSkill,
+		skillName = item.clusterJewel.skills[item.clusterJewelSkill].name,
+		passives = item.clusterJewelNodeCount,
+		minPassives = item.clusterJewel.minNodes,
+		maxPassives = item.clusterJewel.maxNodes,
+		enchants = ench,
+		skills = itemUtil.clusterSkills(item),
+	}
+end
+
 function itemUtil.equipFirstValid(item, slotName)
 	slotName = itemUtil.resolveSlotName(slotName)
 	if slotName then
@@ -5011,6 +5086,7 @@ M.craft_item = function(p)
 	if not p or not p.type or not p.baseName then error("params.type and params.baseName are required", 0) end
 	local entry = itemUtil.findBase(p.type, p.baseName)
 	local item = itemUtil.makeCraftedItem(entry, p.rarity, p.title)
+	if item.clusterJewel then itemUtil.craftClusterJewel(item) end
 	build.itemsTab:AddItem(item, true)
 	if p.equip then itemUtil.equipFirstValid(item) end
 	build.itemsTab:PopulateSlots()
@@ -5096,8 +5172,9 @@ end
 -- mods that normal crafting cannot roll; only its Explicit table can.
 function itemUtil.affixPool(item, itemLevel, affixType, query)
 	local best = {}
+	local clusterTags = itemUtil.clusterTags(item)
 	for modId, mod in pairs(item.affixes) do
-		if mod.type == affixType and (IS_POE2 or item.affixes ~= data.itemMods.Item or data.itemMods.Explicit[modId]) and item:GetModSpawnWeight(mod) > 0 and (mod.level or 1) <= itemLevel then
+		if mod.type == affixType and (IS_POE2 or item.affixes ~= data.itemMods.Item or data.itemMods.Explicit[modId]) and item:GetModSpawnWeight(mod, clusterTags) > 0 and (mod.level or 1) <= itemLevel then
 			local label = table.concat(mod, "/")
 			if not query or label:lower():find(query, 1, true) or (mod.group or ""):lower():find(query, 1, true) then
 				local g = mod.group or modId
@@ -5120,6 +5197,7 @@ M.list_affixes = function(p)
 	p = p or {}
 	local entry = itemUtil.findBase(p.type, p.baseName)
 	local item = itemUtil.makeCraftedItem(entry, "RARE", "Pool")
+	itemUtil.applyClusterChoice(item, p.clusterSkill, nil)
 	local itemLevel = tonumber(p.itemLevel) or (IS_POE2 and 82 or 86)
 	item.itemLevel = itemLevel
 	local query = p.query and tostring(p.query):lower() or nil
@@ -5141,6 +5219,7 @@ M.list_affixes = function(p)
 		suffixFamiliesTotal = query and #itemUtil.affixPool(item, itemLevel, "Suffix", nil) or #suffixes,
 		prefixes = prefixes,
 		suffixes = suffixes,
+		cluster = itemUtil.clusterSummary(item),
 	}
 end
 
@@ -5166,8 +5245,9 @@ function itemUtil.resolveAffix(item, itemLevel, affixType, want, usedFamilies, u
 	end
 	local bestId, bestMod, blockedHit
 	local families = {}
+	local clusterTags = itemUtil.clusterTags(item)
 	for modId, mod in pairs(item.affixes) do
-		if mod.type == affixType and (IS_POE2 or item.affixes ~= data.itemMods.Item or data.itemMods.Explicit[modId]) and item:GetModSpawnWeight(mod) > 0 and (mod.level or 1) <= itemLevel then
+		if mod.type == affixType and (IS_POE2 or item.affixes ~= data.itemMods.Item or data.itemMods.Explicit[modId]) and item:GetModSpawnWeight(mod, clusterTags) > 0 and (mod.level or 1) <= itemLevel then
 			local g = mod.group or modId
 			families[g] = true
 			local label = table.concat(mod, "/")
@@ -5202,10 +5282,11 @@ M.craft_rare = function(p)
 	range = math.max(0, math.min(1, range))
 	local item = itemUtil.makeCraftedItem(entry, "RARE", p.title, range)
 	if not item.affixes then error(entry.name .. " cannot carry affixes", 0) end
+	itemUtil.applyClusterChoice(item, p.clusterSkill, p.clusterPassives)
 	local itemLevel = tonumber(p.itemLevel) or (IS_POE2 and 82 or 86)
 	item.itemLevel = itemLevel
 	local chosen = array({})
-	local usedFamilies, usedTags = {}, {}
+	local usedFamilies, usedTags = {}, itemUtil.clusterTags(item) or {}
 	for _, spec in ipairs({ { "prefixes", "Prefix" }, { "suffixes", "Suffix" } }) do
 		local tableName, affixType = spec[1], spec[2]
 		local wants = p[tableName] or {}
@@ -5252,6 +5333,7 @@ M.craft_rare = function(p)
 		requirements = { level = opt(item.requirements.level), str = opt(item.requirements.str), dex = opt(item.requirements.dex), int = opt(item.requirements.int) },
 		affixes = chosen,
 		mods = lines,
+		cluster = itemUtil.clusterSummary(item),
 		raw = item.raw,
 	}
 end
@@ -5692,6 +5774,9 @@ M.set_item_shape = function(p)
 	if p.clusterNodeCount ~= nil and item.clusterJewel then
 		local n = tonumber(p.clusterNodeCount) or item.clusterJewel.maxNodes
 		item.clusterJewelNodeCount = math.max(math.min(n, item.clusterJewel.maxNodes), item.clusterJewel.minNodes)
+	end
+	if (p.clusterSkill ~= nil or p.clusterNodeCount ~= nil) and item.clusterJewel and item.rarity ~= "UNIQUE" and item.rarity ~= "RELIC" then
+		itemUtil.craftClusterJewel(item)
 	end
 	itemUtil.commitItemEdit(item)
 	return M.item_shape(p)

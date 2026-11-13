@@ -794,6 +794,13 @@ fn adapt_for_poe1(defs: &mut Vec<ToolDef>) {
                 if let Some(p) = props.as_object_mut() {
                     p.remove("runes");
                 }
+                props["cluster_skill"] = prop("string", "Cluster jewel only: the enchant skill, by name or id from list_affixes' `cluster.skills` (default: the first by name)");
+                props["cluster_passives"] = prop("integer", "Cluster jewel only: how many passives it adds (default: the fewest the base allows)");
+                d.description.push_str(" A cluster jewel gets its enchants from `cluster_skill` and `cluster_passives`; its notables are prefixes and suffixes, and only the chosen skill's notables roll, so list them with list_affixes and the same `cluster_skill`.");
+            }
+            "list_affixes" => {
+                props["cluster_skill"] = prop("string", "Cluster jewel only: the enchant skill whose notables to list, by name or id (default: the first by name)");
+                d.description.push_str(" For a cluster jewel, `cluster` gives the enchant skills and the passive count range.");
             }
             "optimise_gear" => d.description.push_str(" Flasks are left alone. Influence, sockets and Eldritch implicits also carry over from the item a proposal replaces, and `carried` lists the implicits too."),
             "library" => {
@@ -1432,6 +1439,7 @@ pub(crate) fn run_tool(ctx: &ToolContext, name: &str, args: &JsonObject) -> Resu
                 "baseName": req_str(args, "base_name")?,
                 "itemLevel": arg_i64(args, "item_level")?,
                 "query": arg_str(args, "query"),
+                "clusterSkill": arg_str(args, "cluster_skill"),
             }),
         )?),
         "craft_rare" => {
@@ -1449,6 +1457,8 @@ pub(crate) fn run_tool(ctx: &ToolContext, name: &str, args: &JsonObject) -> Resu
                     "runes": list("runes"),
                     "slot": arg_str(args, "slot"),
                     "equip": arg_bool(args, "equip"),
+                    "clusterSkill": arg_str(args, "cluster_skill"),
+                    "clusterPassives": arg_i64(args, "cluster_passives")?,
                 }),
             )?)
         }
