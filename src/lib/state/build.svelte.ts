@@ -155,6 +155,8 @@ class BuildStore {
       return true;
     } catch (e) {
       console.warn("could not reopen the last build", e);
+      const reason = (e instanceof EngineError ? e.message : String(e)).split("\n")[0].replace(/^lua: runtime error: /, "");
+      this.error = m.app_reopen_failed({ build: saved.name ? `"${saved.name}"` : m.app_recover_build_fallback(), reason });
       return false;
     }
   }

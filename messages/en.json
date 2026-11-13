@@ -1694,6 +1694,7 @@
   "app_recover_title": "Reopen the last build?",
   "app_recover_message": "PoB Redux closed unexpectedly while {build} was open. If reopening it closes the app again, choose Start empty; the build is then saved to your builds folder as a recovered copy.",
   "app_recover_build_fallback": "a build",
+  "app_reopen_failed": "Could not reopen {build}. {reason}",
   "app_recover_ok": "Reopen",
   "app_recover_cancel": "Start empty",
   "app_recovered_saved": "Saved the last build as {file}",

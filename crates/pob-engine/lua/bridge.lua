@@ -713,10 +713,34 @@ end
 -- Build lifecycle
 -- ---------------------------------------------------------------------------
 
-local function loaded()
+-- A build PoB rejects leaves its emptied tree tab behind, which breaks the next build's Init.
+local function openBuild(path, name, xml)
+	local before = build and main.mode == "BUILD" and build.calcsTab and build.calcsTab.mainOutput
+		and { xml = build:SaveDB("code"), path = build.dbFileName or false, name = build.buildName, unsaved = build.unsaved }
+	local reason
+	local showMessage = main.OpenMessagePopup
+	main.OpenMessagePopup = function(_, title, msg) reason = msg or title end
+	launch.promptMsg = nil
+	main:SetMode("BUILD", path, name, xml)
+	local ok, err = pcall(frame)
+	main.OpenMessagePopup = showMessage
 	main.__reduxBuildGeneration = main.__reduxBuildGeneration + 1
 	build = main.modes["BUILD"]
-	ensureBuild()
+	if not ok or launch.promptMsg or main.mode ~= "BUILD" or not (build.calcsTab and build.calcsTab.mainOutput) then
+		local message = reason or (not ok and tostring(err))
+			or (launch.promptMsg and tostring(launch.promptMsg):match("In 'OnFrame': ([^\n]*)"))
+			or "Path of Building could not open this build"
+		launch.promptMsg = nil
+		build.treeTab, build.spec = nil, nil
+		if before then
+			main:SetMode("BUILD", before.path, before.name, before.xml)
+			frame()
+			build = main.modes["BUILD"]
+			if not before.unsaved then build:ResetModFlags() end
+			frame()
+		end
+		error(message:gsub("%s*\n%s*", " "), 0)
+	end
 	itemUtil.squireState()
 	local changed = calcsSelection.startOnMainSkill()
 	if calcsSelection.sync() then changed = true end
@@ -725,9 +749,7 @@ local function loaded()
 end
 
 M.new_build = function(p)
-	main:SetMode("BUILD", false, (p and p.name) or "Unnamed build")
-	frame()
-	return loaded()
+	return openBuild(false, (p and p.name) or "Unnamed build")
 end
 
 M.load_build_xml = function(p)
@@ -737,9 +759,7 @@ M.load_build_xml = function(p)
 	-- `path` keeps the build attached to its file, for a snapshot of a saved
 	-- build restored at startup.
 	local path = type(p.path) == "string" and p.path ~= "" and p.path or false
-	main:SetMode("BUILD", path, p.name or "Imported build", p.xml)
-	frame()
-	return loaded()
+	return openBuild(path, p.name or "Imported build", p.xml)
 end
 
 M.load_build_code = function(p)
@@ -767,9 +787,7 @@ M.load_build_file = function(p)
 		error("params.path is required", 0)
 	end
 	local name = p.path:match("([^/\\]+)%.xml$") or p.path:match("([^/\\]+)$")
-	main:SetMode("BUILD", p.path, name)
-	frame()
-	return loaded()
+	return openBuild(p.path, name)
 end
 
 M.save_build_xml = function()

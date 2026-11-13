@@ -63,7 +63,7 @@
   {/if}
   <div class="grow"></div>
   {#if build.error}
-    <button class="seg err" onclick={() => build.clearError()} title={m.status_dismiss()}>
+    <button class="seg err" onclick={() => build.clearError()} title={`${build.error}\n\n${m.status_dismiss()}`}>
       <span>{build.error}</span>
     </button>
   {:else if build.notice}
