@@ -9657,7 +9657,16 @@ M.party_import = function(p)
 					local ctl = pt.controls[names[node.attrib.name]]
 					local text = node[1] or ""
 					if append and #ctl.buf > 0 then
-						text = ctl.buf .. "\n" .. text
+						-- PoB reads a second curse limit header as a curse name, so keep one with the higher limit.
+						local header = "^%-%-%- Curse Limit %-%-%-\n(%d*)\n?"
+						local theirs, mine = text:match(header), ctl.buf:match(header)
+						if theirs and mine then
+							text = text:gsub(header, "", 1)
+							local merged = ctl.buf:gsub(header, "--- Curse Limit ---\n" .. math.max(tonumber(theirs) or 0, tonumber(mine) or 0) .. "\n", 1)
+							text = merged .. "\n" .. text
+						else
+							text = ctl.buf .. "\n" .. text
+						end
 					end
 					ctl:SetText(text)
 				end
