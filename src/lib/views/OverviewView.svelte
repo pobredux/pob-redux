@@ -38,12 +38,12 @@
   let stats = $state<Record<string, number>>({});
   let model = $state<TreeModel | null>(null);
   let ascOpen = $state(false);
-  let loadedRev = -1;
+  let loadedKey = "";
 
   $effect(() => {
-    const rev = build.rev;
-    if (!build.loaded || rev === loadedRev) return;
-    loadedRev = rev;
+    const key = `${build.info?.generation}:${build.rev}`;
+    if (!build.loaded || key === loadedKey) return;
+    loadedKey = key;
     Promise.all([engine.buildSummary(), engine.sanityCheck(), engine.listSlots(), engine.getItems(), engine.getStats(FIELDS)])
       .then(([s, c, l, i, st]) => {
         summary = s;

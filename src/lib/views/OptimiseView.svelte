@@ -24,12 +24,12 @@
   let summary = $state<BuildSummary | null>(null);
   let sanity = $state<SanityCheck | null>(null);
   let slots = $state<SlotInfo[]>([]);
-  let loadedRev = -1;
+  let loadedKey = "";
 
   $effect(() => {
-    const rev = build.rev;
-    if (!build.loaded || rev === loadedRev) return;
-    loadedRev = rev;
+    const key = `${build.info?.generation}:${build.rev}`;
+    if (!build.loaded || key === loadedKey) return;
+    loadedKey = key;
     Promise.all([engine.buildSummary(), engine.sanityCheck(), engine.listSlots()])
       .then(([s, c, l]) => {
         summary = s;
