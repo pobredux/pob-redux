@@ -416,16 +416,12 @@ end
 -- pob-sync can add trees (trees/<game>/) that GameVersions.lua does not list yet. Each copies the newest listed entry with the same suffix.
 local function registerAddedTrees()
 	local added = { }
-	local search = NewFileSearch("TreeData/*", true)
-	while search do
-		local name = search:GetFileName()
+	local listFunc = loadfile("TreeData/versions.lua")
+	for _, name in ipairs(listFunc and listFunc() or { }) do
 		local major, minor, variant = name:match("^(%d+)_(%d+)(.*)$")
-		local file = major and not treeVersions[name] and io.open("TreeData/" .. name .. "/tree.lua", "r")
-		if file then
-			file:close()
+		if major and not treeVersions[name] then
 			table.insert(added, { name = name, major = tonumber(major), minor = tonumber(minor), variant = variant })
 		end
-		if not search:NextFile() then break end
 	end
 	table.sort(added, function(a, b)
 		if a.major ~= b.major then return a.major < b.major end

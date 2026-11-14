@@ -9,10 +9,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use image::imageops::FilterType;
 use image::RgbaImage;
 use serde::Serialize;
 
@@ -57,7 +56,7 @@ pub struct AssetStats {
     pub skipped: Vec<String>,
 }
 
-pub fn build(src_tree: &Path, dest_tree: &Path, version: &str) -> Result<AssetStats> {
+pub fn build(src_tree: &Path, sheet_dir: &Path, art_root: &Path, dest_tree: &Path, version: &str) -> Result<AssetStats> {
     let tree: serde_json::Value =
         serde_json::from_slice(&fs::read(src_tree.join("tree.json")).context("read tree.json")?)?;
     let web = dest_tree.join("web");
@@ -75,7 +74,7 @@ pub fn build(src_tree: &Path, dest_tree: &Path, version: &str) -> Result<AssetSt
         sheets.sort_by_key(|(file, _)| (file.starts_with("skills-disabled"), file.as_str()));
         let mut written: Vec<(Vec<u8>, String)> = Vec::new();
         for (file, names) in sheets {
-            let path = src_tree.join(file);
+            let path = sheet_dir.join(file);
             if !path.is_file() {
                 stats.skipped.push(format!("{file}: missing"));
                 continue;
@@ -104,8 +103,7 @@ pub fn build(src_tree: &Path, dest_tree: &Path, version: &str) -> Result<AssetSt
     // tree.json "assets" (connector line/arc PNGs) are intentionally not
     // shipped; the renderer strokes connectors itself.
 
-    let src_root = src_tree.parent().and_then(Path::parent).unwrap_or(src_tree);
-    copy_standalone(src_root, &web, version, &ring_entries(), &mut manifest, &mut stats)?;
+    copy_standalone(art_root, &web, version, &ring_entries(), &mut manifest, &mut stats)?;
     fs::write(web.join("manifest.json"), serde_json::to_vec_pretty(&manifest)?)?;
     Ok(stats)
 }
@@ -329,20 +327,12 @@ fn decode_sheet(
     } else {
         let dir = web.join(base);
         fs::create_dir_all(&dir)?;
-        // Backgrounds are drawn large but soft; many-layer sheets get a tighter cap.
-        let max_dim: u32 = if layers > 16 { 512 } else { 1024 };
         for (&(layer, (x, y, rw, rh)), layer_names) in &wanted {
             let mut img = decode_layer(&dds, layer).with_context(|| format!("layer {layer}"))?;
             if (x, y, rw, rh) != (0, 0, w, h) {
                 img = image::imageops::crop_imm(&img, x, y, rw, rh).to_image();
             }
             let (ow, oh) = (img.width(), img.height());
-            if ow.max(oh) > max_dim {
-                let s = max_dim as f64 / ow.max(oh) as f64;
-                let nw = ((ow as f64 * s).round() as u32).max(1);
-                let nh = ((oh as f64 * s).round() as u32).max(1);
-                img = image::imageops::resize(&img, nw, nh, FilterType::Triangle);
-            }
             let shared = wanted.keys().filter(|(l, _)| *l == layer).count() > 1;
             let stem = if shared { format!("{layer}-{x}-{y}-{rw}-{rh}") } else { layer.to_string() };
             let out = dir.join(format!("{stem}.webp"));
@@ -373,7 +363,7 @@ fn decode_sheet(
 /// `sprites.lua`, so the manifest is a transcription: copy each sheet as it is
 /// and key every rect by the icon path or asset name PoB uses. The `*Inactive`
 /// sections are the greyscale icon variants.
-pub fn build_sprites(src_tree: &Path, src_root: &Path, dest_tree: &Path, version: &str) -> Result<AssetStats> {
+pub fn build_sprites(src_tree: &Path, art_root: &Path, dest_tree: &Path, version: &str) -> Result<AssetStats> {
     let sprites = crate::lua_json::eval_file(&src_tree.join("sprites.lua"))?;
     let web = dest_tree.join("web");
     if web.exists() {
@@ -479,6 +469,12 @@ pub fn build_sprites(src_tree: &Path, src_root: &Path, dest_tree: &Path, version
         let prefixes = bloodline_prefixes(section);
         for (name, rect) in sheet.get("coords").and_then(|v| v.as_object()).into_iter().flatten() {
             let (x, y, w, h) = (num(rect, "x"), num(rect, "y"), num(rect, "w"), num(rect, "h"));
+            let own_name = prefixes.is_empty() || name.starts_with("Classes");
+            if let Some(full) = full_size(art_root, name).filter(|_| own_name) {
+                target.insert(name.clone(), copy_full(&full, name, (w, h), &web, version, &mut manifest.lods, &mut stats)?);
+                stats.layers += 1;
+                continue;
+            }
             let r = if split {
                 let key = (basename.to_string(), (x, y, w, h));
                 let crop_file = match crops.get(&key) {
@@ -508,7 +504,7 @@ pub fn build_sprites(src_tree: &Path, src_root: &Path, dest_tree: &Path, version
             };
             // Plates ("ClassesAul") keep their own names; frames are prefixed
             // so they do not replace the regular ones from frame-3.png.
-            if prefixes.is_empty() || name.starts_with("Classes") {
+            if own_name {
                 target.insert(name.clone(), r);
             } else {
                 for p in &prefixes {
@@ -523,18 +519,18 @@ pub fn build_sprites(src_tree: &Path, src_root: &Path, dest_tree: &Path, version
     // jewel radius rings PassiveTreeView.lua opens by path.
     let mut standalone: Vec<(String, String)> = Vec::new();
     for name in ["BackgroundStr", "BackgroundDex", "BackgroundInt", "BackgroundStrDex", "BackgroundStrInt", "BackgroundDexInt"] {
-        standalone.push((name.to_string(), format!("TreeData/{name}.png")));
+        standalone.push((name.to_string(), format!("{name}.png")));
     }
     for name in ["EternalEmpire", "Karui", "Maraketh", "Templar", "Vaal", "Kalguuran"] {
         for i in 1..=2 {
-            standalone.push((format!("{name}JewelCircle{i}"), format!("TreeData/PassiveSkillScreen{name}JewelCircle{i}.png")));
+            standalone.push((format!("{name}JewelCircle{i}"), format!("PassiveSkillScreen{name}JewelCircle{i}.png")));
         }
     }
     standalone.extend(ring_entries());
     // Timeless jewel node art lives in its own sheets (PassiveTree.lua loads
     // TreeData/legion/tree-legion.lua): icon types as zoom-level arrays, plus
     // treeAssets for the Abyss frames.
-    let legion_dir = src_root.join("TreeData").join("legion");
+    let legion_dir = art_root.join("legion");
     let legion_table = legion_dir.join("tree-legion.lua");
     if legion_table.is_file() {
         let legion = crate::lua_json::eval_file(&legion_table)?;
@@ -574,7 +570,7 @@ pub fn build_sprites(src_tree: &Path, src_root: &Path, dest_tree: &Path, version
             }
         }
     }
-    copy_standalone(src_root, &web, version, &standalone, &mut manifest, &mut stats)?;
+    copy_standalone(art_root, &web, version, &standalone, &mut manifest, &mut stats)?;
     fs::write(web.join("manifest.json"), serde_json::to_vec_pretty(&manifest)?)?;
     Ok(stats)
 }
@@ -597,31 +593,62 @@ fn ring_entries() -> Vec<(String, String)> {
     v
 }
 
+/// PoB lays out PoE1 tree art at the size of GGG's 0.3835 zoom sheets.
+const SHEET_SCALE: f64 = 0.3835;
+
+/// The game's full-size image for asset `name`, kept in `trees/<game>/full/`.
+fn full_size(art_root: &Path, name: &str) -> Option<PathBuf> {
+    ["webp", "png"].into_iter().map(|ext| art_root.join("full").join(format!("{name}.{ext}"))).find(|p| p.is_file())
+}
+
+/// Copies `src` to `web/<rel>` with its LODs and returns its manifest path and pixel size.
+fn copy_image(src: &Path, web: &Path, version: &str, rel: &str, lods: &mut BTreeMap<String, Vec<Lod>>, stats: &mut AssetStats) -> Result<(String, u32, u32)> {
+    let (w, h) = image::image_dimensions(src).with_context(|| format!("read {}", src.display()))?;
+    let out = web.join(rel);
+    let file = format!("TreeData/{version}/web/{rel}");
+    if !out.is_file() {
+        if let Some(dir) = out.parent() {
+            fs::create_dir_all(dir)?;
+        }
+        fs::copy(src, &out).with_context(|| format!("copy {}", src.display()))?;
+        stats.files += 1;
+        stats.bytes += fs::metadata(&out)?.len();
+        let img = image::open(src).with_context(|| format!("read {}", src.display()))?.to_rgba8();
+        let stem = rel.rsplit_once('.').map_or(rel, |(stem, _)| stem);
+        let (list, n, b) = write_lods(&img, w.max(h), 64, web, version, &format!("{stem}.webp"))?;
+        stats.files += n;
+        stats.bytes += b;
+        if !list.is_empty() {
+            lods.insert(file.clone(), list);
+        }
+    }
+    Ok((file, w, h))
+}
+
+/// A sheet rect's full-size replacement, drawn at the rect's size (`ow`, `oh`).
+fn copy_full(full: &Path, name: &str, layout: (u32, u32), web: &Path, version: &str, lods: &mut BTreeMap<String, Vec<Lod>>, stats: &mut AssetStats) -> Result<AssetRect> {
+    let ext = full.extension().and_then(|e| e.to_str()).unwrap_or("webp");
+    let (file, w, h) = copy_image(full, web, version, &format!("full/{name}.{ext}"), lods, stats)?;
+    Ok(AssetRect { file, x: 0, y: 0, w, h, ow: layout.0, oh: layout.1, round: false })
+}
+
 /// Copies images PoB opens by path (not sheet rects) into `web/` and keys them
-/// by name; `entries` are (asset name, path relative to the PoB source root).
-fn copy_standalone(src_root: &Path, web: &Path, version: &str, entries: &[(String, String)], manifest: &mut Manifest, stats: &mut AssetStats) -> Result<()> {
+/// by name; `entries` are (asset name, path relative to `trees/<game>/`).
+fn copy_standalone(art_root: &Path, web: &Path, version: &str, entries: &[(String, String)], manifest: &mut Manifest, stats: &mut AssetStats) -> Result<()> {
     for (name, rel) in entries {
-        let src = src_root.join(rel);
+        if let Some(full) = full_size(art_root, name) {
+            let (w, h) = image::image_dimensions(&full).with_context(|| format!("read {}", full.display()))?;
+            let layout = |v: u32| (v as f64 * SHEET_SCALE).round() as u32;
+            let r = copy_full(&full, name, (layout(w), layout(h)), web, version, &mut manifest.lods, stats)?;
+            manifest.assets.insert(name.clone(), r);
+            continue;
+        }
+        let src = art_root.join(rel);
         if !src.is_file() {
             stats.skipped.push(format!("{rel} missing"));
             continue;
         }
-        let (w, h) = image::image_dimensions(&src).with_context(|| format!("read {}", src.display()))?;
-        let basename = format!("{name}.png");
-        let out = web.join(&basename);
-        let file = format!("TreeData/{version}/web/{basename}");
-        if !out.is_file() {
-            fs::copy(&src, &out).with_context(|| format!("copy {}", src.display()))?;
-            stats.files += 1;
-            stats.bytes += fs::metadata(&out)?.len();
-            let img = image::open(&src).with_context(|| format!("read {}", src.display()))?.to_rgba8();
-            let (list, n, b) = write_lods(&img, w.max(h), 64, web, version, &format!("{name}.webp"))?;
-            stats.files += n;
-            stats.bytes += b;
-            if !list.is_empty() {
-                manifest.lods.insert(file.clone(), list);
-            }
-        }
+        let (file, w, h) = copy_image(&src, web, version, &format!("{name}.png"), &mut manifest.lods, stats)?;
         manifest.assets.insert(name.clone(), AssetRect { file, x: 0, y: 0, w, h, ow: w, oh: h, round: false });
     }
     Ok(())

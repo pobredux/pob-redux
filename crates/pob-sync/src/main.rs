@@ -2,7 +2,8 @@
 //! engine needs into `src-tauri/resources/<pob|pob1>`, mirroring the file set
 //! of an installed PoB release (see upstream `manifest.cfg`). One checkout per
 //! game: `--game poe2` (the default) takes the PathOfBuilding-PoE2 fork,
-//! `--game poe1` the PathOfBuilding repository.
+//! `--game poe1` the PathOfBuilding repository. Passive trees and their art
+//! come from this workspace's `trees/<game>/`, never from the checkout.
 //!
 //!   cargo run -p pob-sync -- [--game poe1|poe2] [--source <checkout>] [--dest <dir>] [--clean] [--tree-assets]
 
@@ -114,7 +115,8 @@ struct SyncInfo {
     bytes: u64,
     tree_assets: bool,
     patches: Vec<String>,
-    own_trees: Vec<String>,
+    trees: Vec<String>,
+    unlisted_trees: Vec<String>,
 }
 
 const EXCLUDE_FILES: &[&str] = &[
@@ -163,11 +165,11 @@ fn main() -> Result<()> {
         .dest
         .unwrap_or_else(|| workspace.join("src-tauri/resources").join(game.dest_name()));
 
-    let tree_root = src.join("TreeData");
-    let own_root = workspace.join("trees").join(game.id());
+    let tree_root = workspace.join("trees").join(game.id());
+    let pob_tree_root = src.join("TreeData");
     if cli.inspect_assets {
-        let (_, latest_dir) = latest_tree_version(&[&tree_root, &own_root]).context("no TreeData version")?;
-        return assets::inspect(&latest_dir);
+        let (latest, latest_dir) = latest_tree_version(&tree_root).context("no tree version in trees/")?;
+        return assets::inspect(&sheet_dir(&latest_dir, &pob_tree_root.join(latest)));
     }
 
     let head = git(&source, &["rev-parse", "HEAD"]).unwrap_or_else(|_| "unknown".into());
@@ -218,52 +220,57 @@ fn main() -> Result<()> {
 
     // Tree data: Lua tables for the engine, JSON for the renderer. PoE1 ships
     // no tree.json, so one is generated from tree.lua per version.
+    let trees = tree_versions(&tree_root)?;
+    let listed = listed_tree_versions(&src.join("GameVersions.lua"))?;
+    let missing: Vec<&str> = listed.iter().filter(|v| !trees.contains(v)).map(String::as_str).collect();
+    if !missing.is_empty() {
+        bail!("PoB lists tree versions that trees/{} lacks: {} (export them with ggpk-explorer export-tree)", game.id(), missing.join(", "));
+    }
+    let unlisted: Vec<String> = trees.iter().filter(|v| !listed.contains(v)).cloned().collect();
     let mut generated = 0usize;
-    for entry in WalkDir::new(&tree_root) {
-        let entry = entry?;
-        if !entry.file_type().is_file() {
-            continue;
-        }
-        let rel = entry.path().strip_prefix(&src)?.to_path_buf();
-        let name = entry.file_name().to_string_lossy();
+    for version in &trees {
+        let rel_dir = Path::new("TreeData").join(version);
         // Connector art (*.png) is not copied: the renderer strokes lines and arcs.
-        let keep = name.ends_with(".lua") || name == "tree.json";
-        if keep {
-            copy_one(entry.path(), &dest.join(&rel), &mut stats)?;
-            wanted.insert(rel.clone());
+        for entry in fs::read_dir(tree_root.join(version))?.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if entry.path().is_file() && (name.ends_with(".lua") || name == "tree.json") {
+                let rel = rel_dir.join(&name);
+                copy_one(&entry.path(), &dest.join(&rel), &mut stats)?;
+                wanted.insert(rel);
+            }
         }
-        if name == "tree.lua" && !entry.path().with_file_name("tree.json").is_file() {
-            generated += write_tree_json(entry.path(), &dest, rel.with_file_name("tree.json"), &mut stats, &mut wanted)?;
+        if !tree_root.join(version).join("tree.json").is_file() {
+            generated += write_tree_json(&tree_root.join(version).join("tree.lua"), &dest, rel_dir.join("tree.json"), &mut stats, &mut wanted)?;
         }
     }
-
-    // Our own exports cover a patch the pinned PoB has no tree for yet; upstream's tree wins once it ships one.
-    let own_trees = own_tree_versions(&own_root, &tree_root, game)?;
-    for version in &own_trees {
-        let rel_dir = Path::new("TreeData").join(version);
-        for entry in fs::read_dir(own_root.join(version))?.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            if !entry.path().is_file() || !name.ends_with(".lua") {
-                continue;
-            }
-            let rel = rel_dir.join(&name);
+    // PoE1's PassiveTree.lua requires TreeData/legion/tree-legion.lua for every tree.
+    for entry in fs::read_dir(tree_root.join("legion")).into_iter().flatten().flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.ends_with(".lua") {
+            let rel = Path::new("TreeData").join("legion").join(&name);
             copy_one(&entry.path(), &dest.join(&rel), &mut stats)?;
             wanted.insert(rel);
-            if name == "tree.lua" {
-                generated += write_tree_json(&entry.path(), &dest, rel_dir.join("tree.json"), &mut stats, &mut wanted)?;
-            }
         }
     }
+    let versions_rel = Path::new("TreeData").join("versions.lua");
+    let versions_lua = format!("return {{ {} }}\n", trees.iter().map(|v| format!("\"{v}\"")).collect::<Vec<_>>().join(", "));
+    if fs::read_to_string(dest.join(&versions_rel)).ok().as_deref() != Some(versions_lua.as_str()) {
+        fs::create_dir_all(dest.join("TreeData"))?;
+        fs::write(dest.join(&versions_rel), &versions_lua)?;
+    }
+    wanted.insert(versions_rel);
 
-    let latest = latest_tree_version(&[&tree_root, &own_root]);
+    let latest = latest_tree_version(&tree_root);
     let web_rel = latest.as_ref().map(|(v, _)| Path::new("TreeData").join(v).join("web"));
     if cli.tree_assets {
-        let (latest, src_tree) = latest.as_ref().context("no TreeData/<major>_<minor> directory found")?;
+        let (latest, src_tree) = latest.as_ref().context("no <major>_<minor> tree folder in trees/")?;
         let dest_tree = dest.join("TreeData").join(latest);
         let a = if src_tree.join("sprites.lua").is_file() {
-            assets::build_sprites(src_tree, &src, &dest_tree, latest)?
+            assets::build_sprites(src_tree, &tree_root, &dest_tree, latest)?
         } else {
-            assets::build(src_tree, &dest_tree, latest)?
+            let sheets = sheet_dir(src_tree, &pob_tree_root.join(latest));
+            println!("tree sheets: {}", sheets.display());
+            assets::build(src_tree, &sheets, &tree_root, &dest_tree, latest)?
         };
         println!(
             "tree assets: {} sheets, {} layers -> {} files, {:.1} MB",
@@ -325,7 +332,8 @@ fn main() -> Result<()> {
         bytes: stats.1,
         tree_assets: has_web,
         patches: patches.clone(),
-        own_trees: own_trees.clone(),
+        trees: trees.clone(),
+        unlisted_trees: unlisted.clone(),
     };
     fs::write(dest.join("SYNC.json"), serde_json::to_string_pretty(&info)?)?;
     wanted.insert(PathBuf::from("SYNC.json"));
@@ -351,7 +359,7 @@ fn main() -> Result<()> {
     }
 
     println!(
-        "synced PoB {version} ({}) @ {} -> {}\n  {} files, {:.1} MB copied ({generated} tree.json generated), {} stale removed, {} patches applied, own trees: {}",
+        "synced PoB {version} ({}) @ {} -> {}\n  {} files, {:.1} MB copied ({generated} tree.json generated), {} stale removed, {} patches applied, {} trees, not in PoB's list: {}",
         game.id(),
         &head[..head.len().min(10)],
         dest.display(),
@@ -359,7 +367,8 @@ fn main() -> Result<()> {
         stats.1 as f64 / 1_048_576.0,
         removed,
         patches.len(),
-        if own_trees.is_empty() { "none".to_string() } else { own_trees.join(", ") }
+        trees.len(),
+        if unlisted.is_empty() { "none".to_string() } else { unlisted.join(", ") }
     );
     Ok(())
 }
@@ -378,23 +387,32 @@ fn write_tree_json(tree_lua: &Path, dest: &Path, out_rel: PathBuf, stats: &mut (
     Ok(1)
 }
 
-/// Version folders under `trees/<game>/` that upstream's TreeData does not have.
-fn own_tree_versions(own_root: &Path, upstream_tree_root: &Path, game: Game) -> Result<Vec<String>> {
-    let Ok(entries) = fs::read_dir(own_root) else { return Ok(Vec::new()) };
+/// Version folders ("3_29", "3_29_ruthless") under `trees/<game>/` that hold a tree.lua.
+fn tree_versions(root: &Path) -> Result<Vec<String>> {
     let mut versions = Vec::new();
-    for entry in entries.flatten() {
+    for entry in fs::read_dir(root).with_context(|| format!("read {}", root.display()))?.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
-        if !entry.path().join("tree.lua").is_file() {
-            continue;
+        if version_key(&name).is_some() && entry.path().join("tree.lua").is_file() {
+            versions.push(name);
         }
-        if upstream_tree_root.join(&name).is_dir() {
-            eprintln!("warning: upstream PoB now ships TreeData/{name}; remove trees/{}/{name}", game.id());
-            continue;
-        }
-        versions.push(name);
     }
     versions.sort();
     Ok(versions)
+}
+
+/// The `treeVersionList` entries in PoB's GameVersions.lua.
+fn listed_tree_versions(game_versions: &Path) -> Result<Vec<String>> {
+    let text = fs::read_to_string(game_versions).with_context(|| format!("read {}", game_versions.display()))?;
+    let list = text.split_once("treeVersionList").context("GameVersions.lua has no treeVersionList")?.1;
+    let (_, body) = list.split_once('{').context("treeVersionList is not a table")?;
+    let (body, _) = body.split_once('}').context("treeVersionList is not closed")?;
+    Ok(body.split(',').map(|s| s.trim().trim_matches('"').to_string()).filter(|s| !s.is_empty()).collect())
+}
+
+/// Where the newest PoE2 tree's DDS sheets are; they stay in the PoB checkout until tree art is served from R2.
+fn sheet_dir(own: &Path, pob: &Path) -> PathBuf {
+    let has_sheets = fs::read_dir(own).into_iter().flatten().flatten().any(|e| e.file_name().to_string_lossy().ends_with(".dds.zst"));
+    if has_sheets { own.to_path_buf() } else { pob.to_path_buf() }
 }
 
 /// Fixes carried in `patches/<game>/` until upstream merges them. Every file a
@@ -503,21 +521,22 @@ fn read_version(manifest: &Path) -> Option<String> {
     Some(rest[..j].to_string())
 }
 
-/// Variant trees ("3_29_ruthless") are not the live game's tree, and on a tie the earlier root wins.
-fn latest_tree_version(tree_roots: &[&Path]) -> Option<(String, PathBuf)> {
+/// (major, minor, is a variant such as "_ruthless") for a tree folder name.
+fn version_key(name: &str) -> Option<(u32, u32, bool)> {
+    let mut parts = name.splitn(3, '_');
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next()?.parse().ok()?;
+    Some((major, minor, parts.next().is_some()))
+}
+
+/// Variant trees ("3_29_ruthless") are not the live game's tree.
+fn latest_tree_version(root: &Path) -> Option<(String, PathBuf)> {
     let mut best: Option<((u32, u32), String, PathBuf)> = None;
-    for root in tree_roots {
-        let Ok(entries) = fs::read_dir(root) else { continue };
-        for e in entries.flatten() {
-            let name = e.file_name().to_string_lossy().to_string();
-            let mut parts = name.split('_');
-            if let (Some(a), Some(b), None) = (parts.next(), parts.next(), parts.next()) {
-                if let (Ok(a), Ok(b)) = (a.parse::<u32>(), b.parse::<u32>()) {
-                    if best.as_ref().map(|(k, _, _)| (a, b) > *k).unwrap_or(true) {
-                        best = Some(((a, b), name.clone(), e.path()));
-                    }
-                }
-            }
+    for e in fs::read_dir(root).ok()?.flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        let Some((major, minor, false)) = version_key(&name) else { continue };
+        if best.as_ref().map(|(k, _, _)| (major, minor) > *k).unwrap_or(true) {
+            best = Some(((major, minor), name, e.path()));
         }
     }
     best.map(|(_, n, p)| (n, p))

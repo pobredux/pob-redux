@@ -1101,10 +1101,10 @@
       // PoB's DrawAsset: half extents are the sheet size × 1.33 tree units.
       const drawArt = (name: string, x: number, y: number, mirrored = false) => {
         const r = store.rect(name);
-        if (!r || !inView(x, y, Math.max(r.w, r.h * (mirrored ? 2 : 1)) * 1.33)) return;
+        if (!r || !inView(x, y, Math.max(r.ow, r.oh * (mirrored ? 2 : 1)) * 1.33)) return;
         const [sx, sy] = toScreen(x, y);
-        const hw = r.w * 1.33 * scale;
-        const hh = r.h * 1.33 * scale;
+        const hw = r.ow * 1.33 * scale;
+        const hh = r.oh * 1.33 * scale;
         if (!mirrored) {
           store.draw(ctx, name, sx, sy, hw, hh);
           return;
@@ -1169,7 +1169,7 @@
         if (ov?.effect) {
           const r = A.rect(ov.effect);
           if (!r) continue;
-          reach = r.w * 1.33;
+          reach = r.ow * (M.poe1 ? 1.33 : 1);
         } else if (reach <= 0) continue;
         if (!inView(n.x, n.y, reach)) continue;
         const half = reach * scale;
