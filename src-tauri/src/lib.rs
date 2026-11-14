@@ -1275,7 +1275,7 @@ pub fn run() {
             log::info!("game: {}", game.id());
             log::info!("user dir: {}", user_dir.display());
             let rt = boot_runtime(handle, game, &user_dir);
-            downloads::start(handle, game, rt.pob_root.clone());
+            let pob_root = rt.pob_root.clone();
             let session = begin_session(handle);
             app.manage(AppState {
                 rt: std::sync::RwLock::new(rt),
@@ -1287,6 +1287,7 @@ pub fn run() {
                 recovery_pending: std::sync::atomic::AtomicBool::new(session.unclean_exit),
                 session,
             });
+            downloads::start(app.handle(), game, pob_root);
             watch_links(app.handle());
             spawn_pool_reaper(app.handle().clone());
             app.manage(ai::AiState::new(&app.handle().clone()));
