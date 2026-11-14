@@ -296,7 +296,7 @@
           <section class="scard"><div class="cardbody">{@render statRows(sec)}</div></section>
         {/each}
         {#each cards as card (card.key)}
-          <section class="scard" class:warncard={card.kind === "warnings"} class:dragging={sorting === card.key} data-sort={card.key} animate:flip={{ duration: 160 }}>
+          <section class="scard" class:warncard={card.kind === "warnings"} class:dragging={sorting === card.key} data-sort={card.key} animate:flip={{ duration: sorting === card.key ? 0 : 200 }}>
             {@render cardHead(card.label, card.open, card.toggle, cardSum(card), card.key, card.title)}
             {#if card.open}
               {#if card.sec}
@@ -486,7 +486,12 @@
     overflow: clip;
   }
   .scard.dragging {
-    border-color: var(--focus);
+    position: relative;
+    z-index: 20;
+    opacity: 0.8;
+    box-shadow: var(--shadow-pop);
+    pointer-events: none;
+    will-change: transform;
   }
   .sorting {
     cursor: grabbing;

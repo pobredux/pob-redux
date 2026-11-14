@@ -17,10 +17,26 @@ interface SortOptions<C extends string> {
 
 const THRESHOLD = 4;
 const EDGE = 48;
+const LIFT = 1.015;
+const SETTLE = "transform 220ms cubic-bezier(.2, .8, .2, 1), opacity 180ms ease, box-shadow 180ms ease";
 
 function swallow(e: Event) {
   e.stopPropagation();
   e.preventDefault();
+}
+
+function findItem<C extends string>(zones: SortZone<C>[], id: string): { el: HTMLElement; zone: HTMLElement } | null {
+  for (const zone of zones) {
+    const el = zone.el?.querySelector<HTMLElement>(`:scope > [data-sort="${CSS.escape(id)}"]`);
+    if (el && zone.el) return { el, zone: zone.el };
+  }
+  return null;
+}
+
+/** Where an item's slot is on screen, without the transform that carries it under the pointer. */
+function slot(el: HTMLElement, zone: HTMLElement) {
+  const r = zone.getBoundingClientRect();
+  return { left: r.left + zone.clientLeft - zone.scrollLeft + el.offsetLeft, top: r.top + zone.clientTop - zone.scrollTop + el.offsetTop, width: el.offsetWidth };
 }
 
 function dropTarget<C extends string>(id: string, zones: SortZone<C>[], x: number, y: number): { column: C; index: number } | null {
@@ -64,11 +80,20 @@ export function sortDrag<C extends string>(e: PointerEvent, o: SortOptions<C>) {
   let y = sy;
   let active = false;
   let frame = 0;
+  // Where the item was grabbed: a share of its width, since a move to another column can change the width.
+  let grab = { rx: 0, dy: 0 };
   const place = () => {
     const t = dropTarget(o.id, o.zones(), x, y);
     if (t) o.move(t.column, t.index);
   };
-  const autoscroll = () => {
+  // Runs every frame: the item may have been remounted or re-laid out since the last one.
+  const follow = () => {
+    const found = findItem(o.zones(), o.id);
+    if (!found) return;
+    const s = slot(found.el, found.zone);
+    found.el.style.transform = `translate(${x - grab.rx * s.width - s.left}px, ${y - grab.dy - s.top}px) scale(${LIFT})`;
+  };
+  const tick = () => {
     const el = o.scroller();
     const r = el?.getBoundingClientRect();
     const dy = !r ? 0 : y < r.top + EDGE ? y - r.top - EDGE : y > r.bottom - EDGE ? y - r.bottom + EDGE : 0;
@@ -76,7 +101,8 @@ export function sortDrag<C extends string>(e: PointerEvent, o: SortOptions<C>) {
       el.scrollTop += dy / 4;
       place();
     }
-    frame = requestAnimationFrame(autoscroll);
+    follow();
+    frame = requestAnimationFrame(tick);
   };
   const onmove = (ev: PointerEvent) => {
     x = ev.clientX;
@@ -84,8 +110,14 @@ export function sortDrag<C extends string>(e: PointerEvent, o: SortOptions<C>) {
     if (!active) {
       if (Math.hypot(x - sx, y - sy) < THRESHOLD) return;
       active = true;
+      const found = findItem(o.zones(), o.id);
+      if (found) {
+        const r = found.el.getBoundingClientRect();
+        grab = { rx: (sx - r.left) / r.width, dy: sy - r.top };
+        found.el.style.transition = "opacity 180ms ease, box-shadow 180ms ease";
+      }
       o.onstart();
-      frame = requestAnimationFrame(autoscroll);
+      frame = requestAnimationFrame(tick);
     }
     place();
   };
@@ -98,6 +130,15 @@ export function sortDrag<C extends string>(e: PointerEvent, o: SortOptions<C>) {
     cancelAnimationFrame(frame);
     window.addEventListener("click", swallow, { capture: true, once: true });
     setTimeout(() => window.removeEventListener("click", swallow, true), 0);
+    const found = findItem(o.zones(), o.id);
+    if (found) {
+      const el = found.el;
+      el.style.transition = SETTLE;
+      el.style.transform = "";
+      setTimeout(() => {
+        if (!el.style.transform) el.style.transition = "";
+      }, 260);
+    }
     o.onend();
   };
   window.addEventListener("pointermove", onmove);
