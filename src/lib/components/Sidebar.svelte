@@ -1,18 +1,20 @@
 <script lang="ts">
   import { tick } from "svelte";
+  import { flip } from "svelte/animate";
+  import { sortDrag } from "$lib/sortable";
+  import { statsOrder } from "$lib/state/saved-order.svelte";
+  import CardHead from "./CardHead.svelte";
   import PobText from "./PobText.svelte";
   import BreakdownPanel from "./BreakdownPanel.svelte";
   import Icon from "./Icon.svelte";
   import MoreMenu, { type MenuItem } from "./MoreMenu.svelte";
-  import MinionLibrary from "./MinionLibrary.svelte";
+  import SkillSwitcher from "./SkillSwitcher.svelte";
   import { engine, type BreakdownSection } from "$lib/engine.svelte";
   import { build } from "$lib/state/build.svelte";
   import { groupSidebar, type SidebarSection } from "$lib/sidebar-groups";
   import { statLabelText } from "$lib/pob-labels";
   import { parsePobText, stripPobText } from "$lib/pobtext";
   import { m } from "$lib/paraglide/messages";
-
-  let libraryOpen = $state(false);
 
   const COLLAPSED_KEY = "pob-redux:stats-collapsed";
   let collapsed = $state<Set<string>>(new Set());
@@ -108,14 +110,6 @@
   const info = $derived(build.info);
   const side = $derived(build.sidebar);
   const sections = $derived(side ? groupSidebar(side.rows) : []);
-  const groups = $derived(build.skills?.socketGroups ?? []);
-  const mainGroup = $derived(groups.find((g) => g.index === info?.mainSocketGroup));
-  const mainSkill = $derived(mainGroup?.skills.find((s) => s.index === (mainGroup?.mainActiveSkill ?? 1)) ?? mainGroup?.skills[0]);
-
-  function patchMainSkill(patch: Parameters<typeof engine.setMainSkillOptions>[1]) {
-    if (mainGroup) build.run(() => engine.setMainSkillOptions(mainGroup.index, patch));
-  }
-
   // loadouts: PoB's named tree+items+skills+config combos
   let loadouts = $state<{ loadouts: string[]; active: string | null }>({ loadouts: [], active: null });
   let loEdit = $state<{ mode: "new" | "copy" | "rename"; draft: string } | null>(null);
@@ -133,16 +127,6 @@
     else if (e.mode === "copy" && loadouts.active) build.run(() => engine.copyLoadout(loadouts.active!, name));
     else if (e.mode === "rename" && loadouts.active && name !== loadouts.active) build.run(() => engine.renameLoadout(loadouts.active!, name));
   }
-
-  const skillOpen = $derived(!collapsed.has("mainskill"));
-  const skillSummary = $derived(
-    [
-      mainSkill?.name ?? (mainGroup ? stripPobText(mainGroup.displayLabel ?? mainGroup.label ?? "") : ""),
-      mainSkill?.statSets?.[(mainSkill.statSet ?? 1) - 1],
-      mainSkill?.parts?.[(mainSkill.part ?? 1) - 1]?.name,
-      mainSkill?.minions?.find((x) => x.id === (mainSkill?.minion ?? mainSkill?.minions?.[0]?.id))?.name,
-    ].filter((x): x is string => !!x),
-  );
 
   const buildMenu = $derived<MenuItem[]>([
     ...(loadouts.loadouts.length
@@ -169,8 +153,68 @@
     if (name && name !== info?.name) build.rename(name);
   }
 
-  function onMainSkill(e: Event) {
-    build.setMainSkill(Number((e.target as HTMLSelectElement).value));
+  interface Card {
+    key: string;
+    label: string;
+    kind: "stats" | "warnings" | "notcounted";
+    open: boolean;
+    toggle: string;
+    sec?: SidebarSection;
+    title?: string;
+  }
+  interface CardSum {
+    parts: { text: string; color?: string | null }[];
+    sep: string;
+    num?: boolean;
+  }
+
+  const infoSections = $derived(sections.filter((s) => !s.label));
+  const cards = $derived.by(() => {
+    const list: Card[] = sections
+      .filter((s) => s.label)
+      .map((s) => ({ key: s.key, label: s.label!, kind: "stats", sec: s, open: !collapsed.has(s.key), toggle: s.key }));
+    if (side?.warnings.length) list.push({ key: "warnings", label: m.sidebar_warnings(), kind: "warnings", open: !collapsed.has("warnings"), toggle: "warnings" });
+    // Starts collapsed: the stored key marks it opened rather than closed.
+    if (side?.notCounted?.count) {
+      list.push({ key: "notcounted", label: m.sidebar_not_counted(), kind: "notcounted", open: collapsed.has("notcounted-open"), toggle: "notcounted-open", title: m.sidebar_not_counted_title() });
+    }
+    return statsOrder.sort(list, (c) => c.key);
+  });
+
+  function cardSum(card: Card): CardSum | null {
+    if (card.kind === "warnings") return { parts: [{ text: String(side?.warnings.length ?? 0) }], sep: "", num: true };
+    if (card.sec && !card.open) return { parts: headline(card.sec), sep: "/", num: true };
+    return null;
+  }
+
+  let statsEl = $state<HTMLDivElement>();
+  let sorting = $state<string | null>(null);
+
+  function startSort(e: PointerEvent, key: string) {
+    sortDrag(e, {
+      id: key,
+      zones: () => [{ column: "stats", el: statsEl }],
+      scroller: () => statsEl,
+      move: (_column, index) => statsOrder.move(key, cards.map((c) => c.key), index),
+      onstart: () => {
+        sorting = key;
+        rowLeave();
+      },
+      onend: () => {
+        sorting = null;
+        statsOrder.save();
+      },
+    });
+  }
+
+  async function nudgeCard(e: KeyboardEvent, key: string) {
+    if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+    e.preventDefault();
+    const shown = cards.map((c) => c.key);
+    if (!statsOrder.move(key, shown, shown.indexOf(key) + (e.key === "ArrowUp" ? -1 : 1))) return;
+    statsOrder.save();
+    await tick();
+    statsEl?.querySelector<HTMLElement>(`[data-sort="${key}"] > .cardhead`)?.focus();
   }
 
   // PoB emits "label:" / "value" pairs plus header rows (only lhs) and spacer
@@ -243,184 +287,41 @@
       {/if}
     </section>
     <div class="charwrap">
-      <section class="scard">
-        <button class="cardhead" aria-expanded={skillOpen} onclick={() => toggleGroup("mainskill")}>
-          <span class="caret" class:open={skillOpen}>▸</span>
-          <span class="cardname">{m.sidebar_stats_for()}</span>
-          {#if !skillOpen && skillSummary.length}
-            <span class="cardsum">{#each skillSummary as part, i}{#if i}<span class="sep">·</span>{/if}{part}{/each}</span>
-          {/if}
-        </button>
-        {#if skillOpen}
-          <div class="cardbody charbody">
-            <label class="field">
-              <span class="label">{m.sidebar_skill()}</span>
-              <select class="select" value={info.mainSocketGroup} onchange={onMainSkill} disabled={groups.length === 0 || build.busy > 0}>
-                {#if groups.length === 0}
-                  <option value={0}>{m.sidebar_no_skills()}</option>
-                {/if}
-                {#each groups as g}
-                  <option value={g.index}>{g.grantedBy?.kind === "mechanic" ? "◈ " : g.grantedBy?.kind === "node" ? "✦ " : g.grantedBy ? "⚔ " : ""}{stripPobText(g.displayLabel ?? g.label ?? m.sidebar_group_fallback({ index: g.index }))}{g.duplicateOf ? m.sidebar_group_item_copy({ source: g.duplicateOf }) : ""}</option>
-                {/each}
-              </select>
-            </label>
-            {#if mainGroup && mainGroup.skills.length > 1}
-              <label class="field">
-                <span class="label">{m.sidebar_active_skill()}</span>
-                <select class="select" value={mainGroup.mainActiveSkill ?? 1} onchange={(e) => patchMainSkill({ mainActiveSkill: Number((e.target as HTMLSelectElement).value) })}>
-                  {#each mainGroup.skills as s}
-                    <option value={s.index}>{s.name}</option>
-                  {/each}
-                </select>
-              </label>
-            {/if}
-            {#if mainSkill?.statSets?.length}
-              <label class="field">
-                <span class="label">{m.sidebar_stat_set()}</span>
-                <select class="select" value={mainSkill.statSet ?? 1} onchange={(e) => patchMainSkill({ statSet: Number((e.target as HTMLSelectElement).value) })}>
-                  {#each mainSkill.statSets as label, i}
-                    <option value={i + 1}>{label}</option>
-                  {/each}
-                </select>
-              </label>
-            {/if}
-            {#if mainSkill?.parts?.length}
-              <label class="field">
-                <span class="label">{m.sidebar_skill_part()}</span>
-                <select class="select" value={mainSkill.part ?? 1} onchange={(e) => patchMainSkill({ part: Number((e.target as HTMLSelectElement).value) })}>
-                  {#each mainSkill.parts as part, i}
-                    <option value={i + 1}>{part.name}</option>
-                  {/each}
-                </select>
-              </label>
-            {/if}
-            {#if mainSkill?.minions?.length}
-              <label class="field">
-                <span class="label">{m.sidebar_minion()}</span>
-                <select class="select" value={mainSkill.minion ?? mainSkill.minions[0].id} onchange={(e) => patchMainSkill({ minionId: (e.target as HTMLSelectElement).value })}>
-                  {#each mainSkill.minions as minion}
-                    <option value={minion.id}>{minion.name}</option>
-                  {/each}
-                </select>
-              </label>
-            {/if}
-            {#if mainSkill?.minionItemSets?.length}
-              <label class="field">
-                <span class="label">{m.skills_minion_item_set()}</span>
-                <select class="select" value={mainSkill.minionItemSet ?? mainSkill.minionItemSets[0].id} disabled={mainSkill.minionItemSets.length < 2} onchange={(e) => patchMainSkill({ minionItemSet: Number((e.target as HTMLSelectElement).value) })}>
-                  {#each mainSkill.minionItemSets as set}
-                    <option value={set.id}>{set.title}</option>
-                  {/each}
-                </select>
-              </label>
-            {/if}
-            {#if mainSkill?.minionLibrary}
-              <button
-                class="btn sm wide"
-                title={mainSkill.minionLibrary === "beast" ? m.sidebar_manage_beasts_title() : m.sidebar_manage_spectres_title()}
-                onclick={() => (libraryOpen = true)}
-              >
-                {mainSkill.minionLibrary === "beast" ? m.sidebar_manage_beasts() : m.sidebar_manage_spectres()}
-              </button>
-            {/if}
-          </div>
-        {/if}
-      </section>
+      <SkillSwitcher />
     </div>
 
-    {#if libraryOpen}
-      <MinionLibrary kind={mainSkill?.minionLibrary ?? "spectre"} onclose={() => (libraryOpen = false)} />
-    {/if}
-
-    <div class="stats" class:busy={build.busy > 0}>
+    <div class="stats" class:busy={build.busy > 0} class:sorting={sorting !== null} bind:this={statsEl}>
       {#if side}
-        {#each sections as sec (sec.key)}
-          {@const open = !sec.label || !collapsed.has(sec.key)}
-          <section class="scard">
-            {#if sec.label}
-              <button class="cardhead" aria-expanded={open} onclick={() => toggleGroup(sec.key)}>
-                <span class="caret" class:open>▸</span>
-                <span class="cardname">{sec.label}</span>
-                {#if !open}
-                  <span class="cardsum num">
-                    {#each headline(sec) as v, i}{#if i}<span class="sep">/</span>{/if}<PobText text={v.text} defaultColor={v.color} />{/each}
-                  </span>
-                {/if}
-              </button>
-            {/if}
-            {#if open}
-              <div class="cardbody">
-                {#each sec.items as { row: r, index: rowIndex } (rowIndex)}
-                  {@const k = kind(r)}
-                  {#if k === "space"}
-                    <div class="space"></div>
-                  {:else if k === "head"}
-                    <div class="shead"><PobText text={r.lhs} /></div>
-                  {:else if k === "center"}
-                    <div class="scenter"><PobText text={r.lhs} defaultColor="var(--fg-2)" /></div>
-                  {:else}
-                    {@const pinned = bd?.pinned && bd.row === rowIndex + 1}
-                    <div
-                      class="srow"
-                      class:hasbd={r.hasBreakdown}
-                      aria-pressed={pinned}
-                      role="button"
-                      tabindex={r.hasBreakdown ? 0 : -1}
-                      onmouseenter={(e) => r.hasBreakdown && rowBreakdown(e.clientY, rowIndex + 1, rowTitle(r.lhs), false)}
-                      onmouseleave={rowLeave}
-                      onclick={(e) => r.hasBreakdown && rowBreakdown(e.clientY, rowIndex + 1, rowTitle(r.lhs), true)}
-                      onkeydown={(e) => e.key === "Enter" && r.hasBreakdown && rowBreakdown(200, rowIndex + 1, rowTitle(r.lhs), true)}
-                    >
-                      <span class="k"><PobText text={statLabelText(r.lhs).replace(/:\s*$/, "")} defaultColor="var(--fg-1)" /></span>
-                      <span class="svalue">
-                        <span class="v num"><PobText text={r.rhs} /></span>
-                        {#if pinned}<span class="pinmark" title={m.sidebar_breakdown_pinned()}><Icon name="push-pin" size={11} /></span>{/if}
-                      </span>
+        {#each infoSections as sec (sec.key)}
+          <section class="scard"><div class="cardbody">{@render statRows(sec)}</div></section>
+        {/each}
+        {#each cards as card (card.key)}
+          <section class="scard" class:warncard={card.kind === "warnings"} class:dragging={sorting === card.key} data-sort={card.key} animate:flip={{ duration: 160 }}>
+            {@render cardHead(card.label, card.open, card.toggle, cardSum(card), card.key, card.title)}
+            {#if card.open}
+              {#if card.sec}
+                <div class="cardbody">{@render statRows(card.sec)}</div>
+              {:else if card.kind === "warnings"}
+                <div class="cardbody warnings">
+                  {#each side.warnings as w}
+                    <div class="warn">{w}</div>
+                  {/each}
+                </div>
+              {:else if side.notCounted}
+                {@const nc = side.notCounted}
+                <div class="cardbody notcounted">
+                  {#each [...nc.items.map((x) => ({ key: x.slot, head: x.slot, sub: stripPobText(x.name), lines: x.lines })), ...nc.nodes.map((x) => ({ key: String(x.id), head: x.name ?? "", sub: "", lines: x.lines }))] as src (src.key)}
+                    <div class="ncsrc">
+                      <div class="nchead">{src.head}{#if src.sub}<span class="dim">{` · ${src.sub}`}</span>{/if}</div>
+                      {#each src.lines as l}<div class="ncline">{l}</div>{/each}
                     </div>
-                  {/if}
-                {/each}
-              </div>
+                  {/each}
+                </div>
+              {/if}
             {/if}
           </section>
         {/each}
-        {#if side.warnings.length}
-          {@const open = !collapsed.has("warnings")}
-          <section class="scard warncard">
-            <button class="cardhead" aria-expanded={open} onclick={() => toggleGroup("warnings")}>
-              <span class="caret" class:open>▸</span>
-              <span class="cardname">{m.sidebar_warnings()}</span>
-              <span class="cardsum num">{side.warnings.length}</span>
-            </button>
-            {#if open}
-              <div class="cardbody warnings">
-                {#each side.warnings as w}
-                  <div class="warn">{w}</div>
-                {/each}
-              </div>
-            {/if}
-          </section>
-        {/if}
-        {#if side.notCounted?.count}
-          {@const nc = side.notCounted}
-          <!-- Starts collapsed: the stored key marks it opened rather than closed. -->
-          {@const open = collapsed.has("notcounted-open")}
-          <section class="scard">
-            <button class="cardhead" aria-expanded={open} title={m.sidebar_not_counted_title()} onclick={() => toggleGroup("notcounted-open")}>
-              <span class="caret" class:open>▸</span>
-              <span class="cardname">{m.sidebar_not_counted()}</span>
-            </button>
-            {#if open}
-              <div class="cardbody notcounted">
-                {#each [...nc.items.map((x) => ({ key: x.slot, head: x.slot, sub: stripPobText(x.name), lines: x.lines })), ...nc.nodes.map((x) => ({ key: String(x.id), head: x.name ?? "", sub: "", lines: x.lines }))] as src (src.key)}
-                  <div class="ncsrc">
-                    <div class="nchead">{src.head}{#if src.sub}<span class="dim">{` · ${src.sub}`}</span>{/if}</div>
-                    {#each src.lines as l}<div class="ncline">{l}</div>{/each}
-                  </div>
-                {/each}
-              </div>
-            {/if}
-          </section>
-        {/if}
+        {#if statsOrder.changed}<button class="reset" onclick={() => statsOrder.reset()}>{m.common_reset_order()}</button>{/if}
       {/if}
     </div>
   {:else}
@@ -428,6 +329,55 @@
       <span class="label">{m.sidebar_no_build()}</span>
     </div>
   {/if}
+
+  {#snippet cardHead(label: string, open: boolean, toggle: string, sum: CardSum | null, sortKey: string | null, title: string | undefined)}
+    {#snippet summary()}
+      {#if sum}<span class:num={sum.num}>{#each sum.parts as p, i}{#if i}<span class="sep">{sum.sep}</span>{/if}<PobText text={p.text} defaultColor={p.color ?? null} />{/each}</span>{/if}
+    {/snippet}
+    <CardHead
+      {open}
+      {title}
+      sortable={sortKey !== null}
+      onclick={() => toggleGroup(toggle)}
+      onpointerdown={sortKey ? (e) => startSort(e, sortKey) : undefined}
+      onkeydown={sortKey ? (e) => nudgeCard(e, sortKey) : undefined}
+      extra={sum ? summary : undefined}
+    >
+      {#snippet name()}{label}{/snippet}
+    </CardHead>
+  {/snippet}
+
+  {#snippet statRows(sec: SidebarSection)}
+    {#each sec.items as { row: r, index: rowIndex } (rowIndex)}
+      {@const k = kind(r)}
+      {#if k === "space"}
+        <div class="space"></div>
+      {:else if k === "head"}
+        <div class="shead"><PobText text={r.lhs} /></div>
+      {:else if k === "center"}
+        <div class="scenter"><PobText text={r.lhs} defaultColor="var(--fg-2)" /></div>
+      {:else}
+        {@const pinned = bd?.pinned && bd.row === rowIndex + 1}
+        <div
+          class="srow"
+          class:hasbd={r.hasBreakdown}
+          aria-pressed={pinned}
+          role="button"
+          tabindex={r.hasBreakdown ? 0 : -1}
+          onmouseenter={(e) => r.hasBreakdown && rowBreakdown(e.clientY, rowIndex + 1, rowTitle(r.lhs), false)}
+          onmouseleave={rowLeave}
+          onclick={(e) => r.hasBreakdown && rowBreakdown(e.clientY, rowIndex + 1, rowTitle(r.lhs), true)}
+          onkeydown={(e) => e.key === "Enter" && r.hasBreakdown && rowBreakdown(200, rowIndex + 1, rowTitle(r.lhs), true)}
+        >
+          <span class="k"><PobText text={statLabelText(r.lhs).replace(/:\s*$/, "")} defaultColor="var(--fg-1)" /></span>
+          <span class="svalue">
+            <span class="v num"><PobText text={r.rhs} /></span>
+            {#if pinned}<span class="pinmark" title={m.sidebar_breakdown_pinned()}><Icon name="push-pin" size={11} /></span>{/if}
+          </span>
+        </div>
+      {/if}
+    {/each}
+  {/snippet}
 
   {#if bd}
     <div bind:this={bdPop} class="bdpop" class:ready={bd.ready} style:top={`${bd.y}px`}>
@@ -481,27 +431,8 @@
     color: var(--fg-0);
   }
   .charwrap {
-    padding: 0 12px 12px;
+    padding: 0 6px 8px;
     border-bottom: 1px solid var(--line-0);
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .charbody {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 8px 10px 10px;
-  }
-  .btn.wide {
-    width: 100%;
-    margin-top: 2px;
-  }
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    min-width: 0;
   }
   .bname {
     appearance: none;
@@ -533,6 +464,7 @@
     flex: 0 0 auto;
   }
   .stats {
+    position: relative;
     flex: 1;
     overflow-y: auto;
     display: flex;
@@ -553,55 +485,36 @@
     border-radius: var(--r-2);
     overflow: clip;
   }
-  .cardhead {
+  .scard.dragging {
+    border-color: var(--focus);
+  }
+  .sorting {
+    cursor: grabbing;
+  }
+  .sorting .cardbody {
+    pointer-events: none;
+  }
+  .reset {
+    align-self: flex-end;
     appearance: none;
-    width: 100%;
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    padding: 6px 10px;
+    margin-top: 2px;
+    padding: 0 4px;
     border: 0;
-    border-bottom: 1px solid var(--line-1);
-    background: var(--bg-3);
-    color: var(--fg-0);
-    text-align: left;
-  }
-  .cardhead[aria-expanded="false"] {
-    border-bottom: 0;
-  }
-  .cardhead:hover {
-    background: var(--bg-hover);
-  }
-  .caret {
-    display: inline-block;
-    width: 9px;
+    background: none;
+    color: var(--fg-3);
+    font: inherit;
     font-size: var(--fs-xs);
-    color: var(--fg-2);
-    transition: transform 100ms;
+    cursor: pointer;
   }
-  .caret.open {
-    transform: rotate(90deg);
+  .reset:hover {
+    color: var(--fg-1);
+    text-decoration: underline;
   }
-  .cardname {
-    flex: 1 0 auto;
-    font-size: var(--fs-xs);
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-  .cardsum {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-size: var(--fs-xs);
-    color: var(--fg-0);
-    white-space: nowrap;
-  }
-  .cardsum .sep {
+  .sep {
     margin: 0 4px;
     color: var(--fg-3);
   }
-  .warncard .cardname {
+  .warncard :global(.cardname) {
     color: var(--warn);
   }
   .cardbody {

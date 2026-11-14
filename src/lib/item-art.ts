@@ -184,6 +184,18 @@ export function statusArtPath(map: ArtMap, name: string): string | undefined {
   return undefined;
 }
 
+export async function skillArtUrls(game: Game, names: string[]): Promise<Record<string, string>> {
+  const map = await artMap(game);
+  if (!map) return {};
+  const urls: [string, string][] = [];
+  for (const name of names) {
+    const path = lookup(map.skills, name) ?? statusArtPath(map, name) ?? artPath(map, { game, name, baseName: name, rarity: null });
+    const url = path && artUrl(map, path);
+    if (url) urls.push([name, url]);
+  }
+  return Object.fromEntries(urls);
+}
+
 export async function statusEffectArtUrls(game: Game, names: string[]): Promise<Record<string, string>> {
   const map = await artMap(game);
   if (!map) return {};
