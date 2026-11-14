@@ -1,5 +1,9 @@
 <script lang="ts">
-  import { untrack } from "svelte";
+  import { tick, untrack } from "svelte";
+  import { flip } from "svelte/animate";
+  import { sortDrag } from "$lib/sortable";
+  import { calcsOrder } from "$lib/state/saved-order.svelte";
+  import CardHead from "$lib/components/CardHead.svelte";
   import { engine, type CalcEffect, type CalcRow, type CalcSection, type CalcSkillSelection, type CalcSubSection } from "$lib/engine.svelte";
   import { build } from "$lib/state/build.svelte";
   import { ui } from "$lib/state/ui.svelte";
@@ -203,8 +207,43 @@
       { id: "offence", label: m.calcs_group_offence(), sections: offence },
       { id: "defence", label: m.calcs_group_defence(), sections: defence },
       { id: "other", label: m.calcs_group_other(), sections: other },
-    ].filter((band) => band.sections.length > 0);
+    ]
+      .map((band) => ({ ...band, sections: calcsOrder[band.id].sort(band.sections, (s) => s.id) }))
+      .filter((band) => band.sections.length > 0);
   });
+
+  let cardsEl = $state<HTMLDivElement>();
+  const gridEls: Record<string, HTMLDivElement | undefined> = {};
+  let sorting = $state<string | null>(null);
+  const shownIds = (band: string) => sectionBands.find((b) => b.id === band)?.sections.map((s) => s.id) ?? [];
+
+  function startSort(e: PointerEvent, band: string, id: string) {
+    sortDrag(e, {
+      id,
+      zones: () => [{ column: band, el: gridEls[band], grid: true }],
+      scroller: () => cardsEl,
+      move: (_column, index) => calcsOrder[band].move(id, shownIds(band), index),
+      onstart: () => {
+        sorting = id;
+        leaveBreakdown();
+      },
+      onend: () => {
+        sorting = null;
+        calcsOrder[band].save();
+      },
+    });
+  }
+
+  async function nudgeSection(e: KeyboardEvent, band: string, id: string) {
+    if (!e.altKey || !e.key.startsWith("Arrow")) return;
+    e.preventDefault();
+    const shown = shownIds(band);
+    const step = e.key === "ArrowUp" || e.key === "ArrowLeft" ? -1 : 1;
+    if (!calcsOrder[band].move(id, shown, shown.indexOf(id) + step)) return;
+    calcsOrder[band].save();
+    await tick();
+    gridEls[band]?.querySelector<HTMLElement>(`[data-sort="${id}"] > .cardhead`)?.focus();
+  }
 
   function breakdownKey(sec: CalcSection, sub: number, row: number, col: number) {
     return calcBreakdownKey(breakdownRef(sec, sub, row, col));
@@ -422,7 +461,7 @@
   </div>
 
   <div class="body">
-      <div class="cards">
+      <div class="cards" class:sorting={sorting !== null} bind:this={cardsEl}>
         {#if effects.length > 0}
           <div class="effectbar" role="list">
             {#each effects as effect (`${effect.kind}:${effect.name}`)}
@@ -446,24 +485,32 @@
         {/if}
         {#each sectionBands as band (band.id)}
           <div class="sectionband">
-            <div class="section-title"><span>{band.label}</span></div>
-            <div class="sectiongrid">
-              {#each band.sections as sec (sec.index)}
+            <div class="section-title">
+              <span>{band.label}</span>
+              {#if calcsOrder[band.id].changed}<button class="reset" onclick={() => calcsOrder[band.id].reset()}>{m.common_reset_order()}</button>{/if}
+            </div>
+            <div class="sectiongrid" bind:this={gridEls[band.id]}>
+              {#each band.sections as sec (sec.id)}
               {@const table = sec.subSections.some((s) => s.rows.some((r) => r.cells.length >= 4))}
-              {@const head = sec.subSections[0]}
+              {@const head = sec.subSections[0]!}
               {@const open = needle !== "" || sectionIsOpen(sec)}
               {@const damageHeroes = damageTakenHeroes(sec).filter((hero) => !needle || sectionHit(sec) || hit(hero.label))}
               {@const bodySubSections = sec.subSections.filter(
                 (sub) => subsectionHasContent(sub) && !isPromotedDamageTakenSubsection(sec, sub.label) && (!needle || subHit(sec, sub)),
               )}
-              {@const headerExtra = cardHeaderExtra(sec, head?.extra ?? null)}
-              {#if head}
-                <section class="section" class:table use:masonryCard>
-                <button class="cardhead" aria-expanded={open} onclick={() => toggleSection(sec)}>
-                  <span class="caret" class:open>▸</span>
-                  <span class="cardname"><PobText text={calcLabel(head.label)} /></span>
-                  {#if headerExtra && (!open || sec.id !== "HitDamage")}<span class="extra num"><PobText text={headerExtra} /></span>{/if}
-                </button>
+              {@const headerExtra = cardHeaderExtra(sec, head.extra ?? null)}
+                <section class="section" class:table class:dragging={sorting === sec.id} data-sort={sec.id} use:masonryCard animate:flip={{ duration: 160 }}>
+                {#snippet extraText()}<span class="num"><PobText text={headerExtra} /></span>{/snippet}
+                <CardHead
+                  {open}
+                  sortable
+                  onclick={() => toggleSection(sec)}
+                  onpointerdown={(e) => startSort(e, band.id, sec.id)}
+                  onkeydown={(e) => nudgeSection(e, band.id, sec.id)}
+                  extra={headerExtra && (!open || sec.id !== "HitDamage") ? extraText : undefined}
+                >
+                  {#snippet name()}<PobText text={calcLabel(head.label)} />{/snippet}
+                </CardHead>
                 {#if open}
                   <div class="cardbody">
                     {#if sec.id === "HitDamage"}
@@ -576,7 +623,6 @@
                   </div>
                 {/if}
                 </section>
-              {/if}
               {/each}
             </div>
           </div>
@@ -663,6 +709,7 @@
     padding: 14px;
   }
   .sectiongrid {
+    position: relative;
     min-width: 0;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
@@ -700,6 +747,22 @@
   }
   .section-title::before {
     flex: 0 0 16px;
+  }
+  .reset {
+    order: 1;
+    appearance: none;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--fg-3);
+    font: inherit;
+    font-weight: 400;
+    letter-spacing: normal;
+    cursor: pointer;
+  }
+  .reset:hover {
+    color: var(--fg-1);
+    text-decoration: underline;
   }
   .effectbar {
     flex: none;
@@ -784,41 +847,14 @@
       grid-column: auto;
     }
   }
-  .cardhead {
-    appearance: none;
-    width: 100%;
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    padding: 6px 10px;
-    border: 0;
-    border-bottom: 1px solid var(--line-1);
-    background: var(--bg-3);
-    color: var(--fg-0);
-    text-align: left;
+  .section.dragging {
+    border-color: var(--focus);
   }
-  .cardhead[aria-expanded="false"] {
-    border-bottom: 0;
+  .sorting {
+    cursor: grabbing;
   }
-  .cardhead:hover {
-    background: var(--bg-hover);
-  }
-  .caret {
-    display: inline-block;
-    width: 9px;
-    font-size: var(--fs-xs);
-    color: var(--fg-2);
-    transition: transform 100ms;
-  }
-  .caret.open {
-    transform: rotate(90deg);
-  }
-  .cardname {
-    flex: 1 0 auto;
-    font-size: var(--fs-xs);
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+  .sorting .cardbody {
+    pointer-events: none;
   }
   .extra {
     font-size: var(--fs-xs);
