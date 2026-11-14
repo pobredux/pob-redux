@@ -1172,13 +1172,9 @@ fn serve_pob_asset(
     if rel.contains("..") {
         return respond(StatusCode::FORBIDDEN, Vec::new(), "text/plain");
     }
-    let pob_root = state.pob_root();
-    let mut path = pob_root.join(&rel);
-    if !path.is_file() {
-        if let Some(found) = tree_art::locate(ctx.app_handle(), &pob_root, &rel) {
-            path = found;
-        }
-    }
+    let Some(path) = tree_art::locate(ctx.app_handle(), &state.pob_root(), &rel) else {
+        return respond(StatusCode::NOT_FOUND, Vec::new(), "text/plain");
+    };
     let mime = match path.extension().and_then(|e| e.to_str()) {
         Some("png") => "image/png",
         Some("webp") => "image/webp",

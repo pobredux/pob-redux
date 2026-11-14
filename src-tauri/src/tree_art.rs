@@ -14,7 +14,7 @@ use crate::AppState;
 #[derive(Deserialize)]
 struct FileList {
     files: BTreeMap<String, ArtFile>,
-    offline: Vec<String>,
+    offline: HashSet<String>,
 }
 
 #[derive(Deserialize)]
@@ -68,19 +68,18 @@ fn file_list(pob_root: &Path) -> Option<ArtList> {
     Some(found)
 }
 
-/// Where a `TreeData/<version>/web/...` file the bundle does not ship lives on disk.
+/// The file behind a PoB root path, or `None` when downloaded art is not in the store yet.
 pub fn locate(app: &AppHandle, pob_root: &Path, rel: &str) -> Option<PathBuf> {
-    let (version, inner) = rel.strip_prefix("TreeData/")?.split_once("/web/")?;
-    let (art_version, list) = file_list(pob_root)?;
-    if art_version != version {
-        return None;
+    let bundled = pob_root.join(rel);
+    let Some((version, inner)) = rel.strip_prefix("TreeData/").and_then(|r| r.split_once("/web/")) else { return Some(bundled) };
+    let Some((art_version, list)) = file_list(pob_root) else { return Some(bundled) };
+    let Some(file) = list.files.get(inner).filter(|_| art_version == version) else { return Some(bundled) };
+    if list.offline.contains(inner) {
+        return Some(bundled);
     }
-    let key = key(inner, list.files.get(inner)?);
-    let stored = store_dir(app)?.join(&key);
-    if stored.is_file() {
-        return Some(stored);
-    }
-    dev_store().map(|d| d.join(&key)).filter(|p| p.is_file())
+    // An update leaves the previous version's art in the install folder, under the same names.
+    let key = key(inner, file);
+    store_dir(app).into_iter().chain(dev_store()).map(|d| d.join(&key)).find(|p| p.is_file())
 }
 
 /// Downloads the game's missing tree art, reporting progress as `tree-art` events.
@@ -105,12 +104,11 @@ async fn download(app: &AppHandle, game: Game, pob_root: &Path) -> Status {
     let Some(store) = store_dir(app) else {
         return Status { error: Some("no app data folder".into()), ..Status::new(game, "failed") };
     };
-    let offline: HashSet<&str> = list.offline.iter().map(String::as_str).collect();
     let base = downloads::base_url();
     let jobs: Vec<Job> = list
         .files
         .iter()
-        .filter(|(rel, _)| !offline.contains(rel.as_str()))
+        .filter(|(rel, _)| !list.offline.contains(rel.as_str()))
         .map(|(rel, f)| (key(rel, f), f))
         .filter(|(key, _)| !present(&store, key))
         .map(|(key, f)| Job { url: format!("{base}/tree/{key}"), hash: f.hash.clone(), size: f.size, dest: store.join(&key) })
