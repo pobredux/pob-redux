@@ -8,6 +8,7 @@
   import ContextMeter from "$lib/components/ContextMeter.svelte";
   import WorkingTimer from "$lib/components/WorkingTimer.svelte";
   import Markdown from "$lib/components/Markdown.svelte";
+  import ThreadList from "$lib/components/ThreadList.svelte";
   import { build } from "$lib/state/build.svelte";
   import { game } from "$lib/state/game.svelte";
   import { voice } from "$lib/state/voice.svelte";
@@ -15,7 +16,25 @@
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
   import { m } from "$lib/paraglide/messages";
 
-  let { windowed = false }: { windowed?: boolean } = $props();
+  let { windowed = false, threadsInline = false }: { windowed?: boolean; threadsInline?: boolean } = $props();
+
+  let threadsOpen = $state(false);
+  let head = $state<HTMLDivElement>();
+
+  function closeThreads(e: PointerEvent) {
+    if (threadsOpen && head && !head.parentElement?.querySelector(".tmenu")?.contains(e.target as Node) && !head.contains(e.target as Node)) threadsOpen = false;
+  }
+
+  function onPanelKey(e: KeyboardEvent) {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+    if (!e.shiftKey && e.key.toLowerCase() === "n") {
+      e.preventDefault();
+      void chat.startThread();
+    } else if (e.shiftKey && (e.code === "BracketLeft" || e.code === "BracketRight")) {
+      e.preventDefault();
+      void chat.stepThread(e.code === "BracketLeft" ? -1 : 1);
+    }
+  }
 
   let scroller = $state<HTMLDivElement | undefined>();
   let box = $state<HTMLTextAreaElement | undefined>();
@@ -225,9 +244,10 @@
   };
 </script>
 
-<svelte:window onkeydown={onWindowKey} />
+<svelte:window onkeydown={onWindowKey} onpointerdown={closeThreads} />
 
-<aside class="chat" class:windowed style:width={windowed ? null : `${chat.width}px`}>
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<aside class="chat" class:windowed style:width={windowed ? null : `${chat.width}px`} onkeydown={onPanelKey}>
   {#if !windowed}<div
     class="grip"
     class:dragging
@@ -243,18 +263,25 @@
     ondblclick={() => chat.setWidth(400, true)}
     title={m.chat_resize_title()}
   ></div>{/if}
-  <div class="head">
+  <div class="head" bind:this={head}>
     <span class="title">
-      <span class="label">{m.chat_title()}</span>
+      {#if threadsInline}
+        <span class="tname">{chat.thread.title || m.threads_new()}</span>
+      {:else}
+        <button class="tpick" class:on={threadsOpen} aria-expanded={threadsOpen} aria-haspopup="true" title={m.threads_menu_title()} onclick={() => (threadsOpen = !threadsOpen)}>
+          <span class="tname">{chat.thread.title || m.threads_new()}</span>
+          <Icon name="caret-down" size={11} />
+        </button>
+      {/if}
       {#if game.isPoe1}<span class="beta" title={m.chat_poe1_beta_title()}>{m.chat_poe1_beta()}</span>{/if}
     </span>
     <div class="acts">
       <button
         class="icon fresh"
-        onclick={() => chat.reset()}
+        onclick={() => chat.startThread()}
         disabled={chat.busy}
-        title={m.chat_new()}
-        aria-label={m.chat_new()}
+        title={m.threads_new_title()}
+        aria-label={m.threads_new()}
       >
         <Icon name="plus-square" size={17} />
       </button>
@@ -276,6 +303,11 @@
       {/if}
     </div>
   </div>
+  {#if threadsOpen && !threadsInline}
+    <div class="tmenu">
+      <ThreadList autofocus onpick={() => (threadsOpen = false)} />
+    </div>
+  {/if}
 
   {#if chat.experiment}
     <div class="trying" class:warn={chat.undoWarning}>
@@ -550,6 +582,51 @@
     align-items: center;
     gap: 6px;
     min-width: 0;
+  }
+  .tpick {
+    appearance: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    max-width: 100%;
+    padding: 3px 6px;
+    margin-left: -6px;
+    border: 0;
+    border-radius: var(--r-1);
+    background: none;
+    color: var(--fg-0);
+    font: inherit;
+  }
+  .tpick:hover,
+  .tpick.on {
+    background: var(--bg-hover);
+  }
+  .tpick :global(svg) {
+    flex: none;
+    color: var(--fg-2);
+  }
+  .tname {
+    min-width: 0;
+    overflow: hidden;
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--fg-0);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tmenu {
+    position: absolute;
+    top: 44px;
+    left: 8px;
+    right: 8px;
+    z-index: 30;
+    height: min(440px, 70%);
+    border: 1px solid var(--line-2);
+    border-radius: var(--r-2);
+    background: var(--bg-1);
+    box-shadow: var(--shadow-pop);
+    overflow: hidden;
   }
   .beta {
     padding: 0 5px;

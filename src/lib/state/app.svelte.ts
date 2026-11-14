@@ -55,7 +55,7 @@ class AppStore {
     this.paths = await appPaths().catch(() => null);
     await appOptions.init().catch(() => {});
     // A conversation about the other game's build does not carry over.
-    if (this.bootedGame && this.bootedGame !== game.current) chat.reset();
+    if (this.bootedGame && this.bootedGame !== game.current) await chat.switchGame();
     this.bootedGame = game.current;
     await mcp.init().catch(() => {});
     // Checking the agent CLIs takes seconds; the build must not wait for it.
@@ -97,10 +97,15 @@ class AppStore {
       if (this.paths?.chat_allow) chat.allowWrites = true;
       if (this.paths?.chat_log) chat.logPath = this.paths.chat_log;
       if (this.paths?.chat_ask) {
-        chat.input = this.paths.chat_ask;
-        // A value starting with "/" only fills the box, so the tool menu can
-        // be inspected without spending a request.
-        if (!this.paths.chat_ask.startsWith("/")) void chatReady.then(() => chat.send());
+        const ask = this.paths.chat_ask;
+        void chatReady.then(async () => {
+          // A fresh thread, not the one reopened from last time.
+          await chat.startThread();
+          chat.input = ask;
+          // A value starting with "/" only fills the box, so the tool menu can
+          // be inspected without spending a request.
+          if (!ask.startsWith("/")) await chat.send();
+        });
       }
     }
   }

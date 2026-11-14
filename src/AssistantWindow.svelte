@@ -4,6 +4,7 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import "$lib/state/ui.svelte";
   import ChatPanel from "$lib/components/ChatPanel.svelte";
+  import ThreadList from "$lib/components/ThreadList.svelte";
   import Tooltip from "$lib/components/Tooltip.svelte";
   import LogoMark from "$lib/components/LogoMark.svelte";
   import Icon from "$lib/components/Icon.svelte";
@@ -15,6 +16,8 @@
 
   const win = getCurrentWindow();
   let ready = $state(false);
+  let width = $state(window.innerWidth);
+  const wide = $derived(width >= 760);
 
   onMount(() => {
     const offTips = tooltip.install();
@@ -36,10 +39,10 @@
         }),
       );
       offs.push(
-        await listen("assistant:reset", async () => {
+        await listen("assistant:switch-game", async () => {
           await game.init().catch(() => {});
           mirror();
-          chat.reset();
+          await chat.switchGame();
         }),
       );
       await game.init().catch(() => {});
@@ -53,6 +56,8 @@
     };
   });
 </script>
+
+<svelte:window bind:innerWidth={width} />
 
 <div class="win">
   <header class="bar" data-tauri-drag-region>
@@ -70,7 +75,14 @@
       <svg width="10" height="10" viewBox="0 0 10 10"><path d="M0.5 0.5l9 9M9.5 0.5l-9 9" stroke="currentColor" stroke-width="1.1" /></svg>
     </button>
   </header>
-  {#if ready}<ChatPanel windowed />{/if}
+  {#if ready}
+    <div class="body">
+      {#if wide}
+        <aside class="side"><ThreadList /></aside>
+      {/if}
+      <ChatPanel windowed threadsInline={wide} />
+    </div>
+  {/if}
   <Tooltip />
 </div>
 
@@ -80,6 +92,17 @@
     display: flex;
     flex-direction: column;
     background: var(--bg-1);
+  }
+  .body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+  }
+  .side {
+    flex: none;
+    width: 270px;
+    border-right: 1px solid var(--line-1);
+    background: var(--bg-0);
   }
   .bar {
     flex: none;

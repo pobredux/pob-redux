@@ -280,6 +280,8 @@ pub(crate) struct Session {
     pub(crate) mcp_token: String,
     server: tauri::async_runtime::JoinHandle<()>,
     pub(crate) dir: PathBuf,
+    /// A thread's folder outlives its sessions so a later one can resume there.
+    thread: bool,
     config: Mutex<Config>,
     /// The CLI's own id for the conversation, so a restarted process resumes it.
     pub(crate) resume: Mutex<Option<String>>,
@@ -309,20 +311,25 @@ impl Session {
 impl Drop for Session {
     fn drop(&mut self) {
         self.server.abort();
-        let _ = std::fs::remove_dir_all(&self.dir);
-        if let Ok(mut proc) = self.proc.try_lock() {
-            *proc = None;
+        *self.proc.get_mut() = None;
+        if !self.thread {
+            remove_later(self.dir.clone());
         }
-        remove_later(&self.launch);
+        remove_launch(&self.launch);
     }
 }
 
-/// Delete a launch's temporary folder once its processes have let go of it.
-fn remove_later(launch: &Launch) {
-    let Some(scratch) = launch.scratch.clone() else { return };
+fn remove_launch(launch: &Launch) {
+    if let Some(scratch) = launch.scratch.clone() {
+        remove_later(scratch);
+    }
+}
+
+/// Delete a folder once the processes that ran in it have let go of it.
+pub(crate) fn remove_later(dir: PathBuf) {
     std::thread::spawn(move || {
         for _ in 0..20 {
-            if std::fs::remove_dir_all(&scratch).is_ok() || !scratch.exists() {
+            if std::fs::remove_dir_all(&dir).is_ok() || !dir.exists() {
                 break;
             }
             std::thread::sleep(Duration::from_millis(500));
@@ -449,7 +456,7 @@ pub(crate) async fn models(app: &AppHandle, cli: Cli) -> Result<Vec<crate::ai::M
         Some(spec) => acp::models(spec, &launch).await,
         None => codex::models(&launch).await,
     };
-    remove_later(&launch);
+    remove_launch(&launch);
     let list = list?;
     if !list.is_empty() {
         state.models.lock().unwrap().insert(cli, list.clone());
@@ -588,13 +595,18 @@ pub async fn agent_open(
     fast: Option<bool>,
     tools: Vec<String>,
     instructions: String,
+    thread: Option<String>,
+    resume: Option<String>,
 ) -> Result<String, String> {
     let cli = Cli::from_id(&provider).ok_or_else(|| format!("unknown provider {provider}"))?;
     let state = app.state::<AgentState>();
     let launch = state.launch(&app, cli).ok_or_else(|| format!("{} is not installed", cli.label()))?;
     let id = random_hex(8)?;
     let token = random_hex(32)?;
-    let dir = app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("agent").join(&id);
+    // Claude Code files its sessions by working folder, so a thread keeps one folder to stay resumable.
+    let thread = thread.filter(|t| crate::threads::valid_id(t));
+    let folder = thread.as_ref().map_or_else(|| id.clone(), |t| format!("t-{t}"));
+    let dir = app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("agent").join(folder);
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
 
     let gate = Arc::new(Gate::new(id[..6].to_string(), tools.into_iter().collect()));
@@ -610,8 +622,9 @@ pub async fn agent_open(
         mcp_token: token,
         server,
         dir,
+        thread: thread.is_some(),
         config: Mutex::new(Config { model, effort: effort.filter(|e| !e.is_empty()), fast: fast.unwrap_or(false), instructions }),
-        resume: Mutex::new(None),
+        resume: Mutex::new(resume.filter(|r| !r.is_empty())),
         proc: tokio::sync::Mutex::new(None),
         restart: AtomicBool::new(false),
         stop: watch::channel(0).0,
@@ -699,6 +712,11 @@ pub async fn agent_configure(app: AppHandle, session: String, model: String, eff
         s.restart.store(true, Ordering::Relaxed);
     }
     Ok(())
+}
+
+#[tauri::command]
+pub fn agent_resume_id(app: AppHandle, session: String) -> Option<String> {
+    self::session(&app, &session).ok()?.resume.lock().unwrap().clone()
 }
 
 #[tauri::command]

@@ -23,6 +23,7 @@ mod diagnostics;
 mod game;
 mod trade;
 mod assistant;
+mod threads;
 mod voice;
 
 use std::sync::Arc;
@@ -1383,6 +1384,7 @@ pub fn run() {
             agent::agent_stop,
             agent::agent_configure,
             agent::agent_close,
+            agent::agent_resume_id,
             agent::agent_path_set,
             agent::agent_install,
             agent::agent_sign_in,
@@ -1406,6 +1408,10 @@ pub fn run() {
             assistant::main_window_focus,
             assistant::chat_handoff_put,
             assistant::chat_handoff_take,
+            threads::threads_list,
+            threads::thread_load,
+            threads::thread_save,
+            threads::thread_delete,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
