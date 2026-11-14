@@ -23,6 +23,8 @@ pub struct EngineConfig {
     pub user_dir: PathBuf,
     /// Where compiled Lua is kept between runs. `None` compiles every source on every boot.
     pub cache_dir: Option<PathBuf>,
+    /// Files the app downloads instead of shipping, by PoB path. `None` uses `<pob_root>-data` when it exists.
+    pub data_dir: Option<PathBuf>,
 }
 
 /// A booted PoB instance. Not `Send`: keep it on one thread (see [`crate::EngineHandle`]).
@@ -67,6 +69,10 @@ impl Engine {
         let user_dir = cfg.user_dir.canonicalize().unwrap_or_else(|_| cfg.user_dir.clone());
         globals.set("__pob_root", slash(&pob_root))?;
         globals.set("__user_dir", slash(&user_dir))?;
+        let sibling = || pob_root.file_name().map(|n| pob_root.with_file_name(format!("{}-data", n.to_string_lossy()))).filter(|d| d.is_dir());
+        if let Some(dir) = cfg.data_dir.clone().or_else(sibling) {
+            globals.set("__data_dir", slash(&dir))?;
+        }
         let native = native::build_table(&lua, t0)?;
         if let Some(dir) = &cfg.cache_dir {
             let runtime: String = lua.load("return jit.version .. ' ' .. jit.arch").eval()?;

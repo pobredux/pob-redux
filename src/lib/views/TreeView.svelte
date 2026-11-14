@@ -2121,8 +2121,6 @@
     deriveModel();
   });
 
-  const mb = (bytes: number) => (bytes / 1048576).toFixed(1);
-
   let loadedVersion = "";
   let loadedArt = 0;
   $effect(() => {
@@ -2361,20 +2359,7 @@
       </div>
     {/if}
 
-    {#if treeArt.busy && treeArt.status}
-      <div class="scanning" role="status">
-        <span>{m.tree_art_downloading()}</span>
-        <span class="num">{mb(treeArt.status.done)} / {mb(treeArt.status.total)} MB</span>
-        <div class="scan-track">
-          <div class="scan-fill" class:idle={!treeArt.status.total} style:width="{treeArt.status.total ? (treeArt.status.done / treeArt.status.total) * 100 : 100}%"></div>
-        </div>
-      </div>
-    {:else if treeArt.status?.state === "failed"}
-      <div class="notice art-failed">
-        <span>{m.tree_art_failed()}</span>
-        <button class="btn sm" onclick={() => treeArt.retry()}>{m.tree_art_retry()}</button>
-      </div>
-    {:else if assetsMissing}
+    {#if assetsMissing}
       <div class="notice">{m.tree_assets_missing_before()} <span class="mono">bun run sync</span>{m.tree_assets_missing_after()}</div>
     {/if}
   
@@ -2926,11 +2911,6 @@
     background: color-mix(in srgb, var(--bg-1) 90%, transparent);
     border: 1px solid var(--line-1);
     border-radius: var(--r-1);
-  }
-  .notice.art-failed {
-    display: flex;
-    align-items: center;
-    gap: 10px;
   }
   .overlay {
     position: absolute;

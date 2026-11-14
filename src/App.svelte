@@ -3,6 +3,7 @@
   import TitleBar from "$lib/components/TitleBar.svelte";
   import Sidebar from "$lib/components/Sidebar.svelte";
   import StatusBar from "$lib/components/StatusBar.svelte";
+  import DownloadToast from "$lib/components/DownloadToast.svelte";
   import TreeView from "$lib/views/TreeView.svelte";
   import OverviewView from "$lib/views/OverviewView.svelte";
   import CharacterDialog from "$lib/components/CharacterDialog.svelte";
@@ -135,6 +136,7 @@
     {#if chat.open && !appOptions.open && status?.state === "ready"}<ChatPanel />{/if}
   </div>
   <StatusBar {status} {paths} />
+  <DownloadToast />
   <ConfirmModal />
   <CommandPalette />
   {#if ui.newBuildOpen && build.loaded}<CharacterDialog mode="new" onclose={() => (ui.newBuildOpen = false)} />{/if}

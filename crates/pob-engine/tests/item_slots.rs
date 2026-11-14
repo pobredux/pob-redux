@@ -18,7 +18,7 @@ fn items_report_only_the_slots_they_fit() {
         return;
     };
     let user_dir = std::env::temp_dir().join(format!("pob-engine-slots-test-{}", std::process::id()));
-    let engine = Engine::boot(EngineConfig { pob_root: root, user_dir: user_dir.clone(), cache_dir: None }).expect("boot");
+    let engine = Engine::boot(EngineConfig { pob_root: root, user_dir: user_dir.clone(), cache_dir: None, data_dir: None }).expect("boot");
 
     engine
         .call("equip_item_raw", &json!({ "text": "Rarity: NORMAL\nHunter Hood" }))

@@ -797,23 +797,23 @@ fn main() {
 
     let pooled: Option<Result<Value, pob_engine::Error>> = match &cli.cmd {
         Cmd::Power { file, stat, depth, pool, no_sequential, rounds } => {
-            let cfg = EngineConfig { pob_root: cli.pob_root.clone(), user_dir: user_dir.clone(), cache_dir: cli.cache_dir.clone() };
+            let cfg = EngineConfig { pob_root: cli.pob_root.clone(), user_dir: user_dir.clone(), cache_dir: cli.cache_dir.clone(), data_dir: None };
             Some(power_cmd(cfg, file.clone(), stat.clone(), *depth, *pool, *no_sequential, *rounds))
         }
         Cmd::Gems { file, group, pool } => {
-            let cfg = EngineConfig { pob_root: cli.pob_root.clone(), user_dir: user_dir.clone(), cache_dir: cli.cache_dir.clone() };
+            let cfg = EngineConfig { pob_root: cli.pob_root.clone(), user_dir: user_dir.clone(), cache_dir: cli.cache_dir.clone(), data_dir: None };
             Some(gems_cmd(cfg, file.clone(), *group, *pool))
         }
         Cmd::Jewels { file, aim, pool, no_sequential } => {
-            let cfg = EngineConfig { pob_root: cli.pob_root.clone(), user_dir: user_dir.clone(), cache_dir: cli.cache_dir.clone() };
+            let cfg = EngineConfig { pob_root: cli.pob_root.clone(), user_dir: user_dir.clone(), cache_dir: cli.cache_dir.clone(), data_dir: None };
             Some(jewels_cmd(cfg, file.clone(), aim.clone(), *pool, *no_sequential))
         }
         Cmd::Plan { file, stat, budget, pool } => {
-            let cfg = EngineConfig { pob_root: cli.pob_root.clone(), user_dir: user_dir.clone(), cache_dir: cli.cache_dir.clone() };
+            let cfg = EngineConfig { pob_root: cli.pob_root.clone(), user_dir: user_dir.clone(), cache_dir: cli.cache_dir.clone(), data_dir: None };
             Some(plan_cmd(cfg, file.clone(), stat.clone(), *budget, *pool))
         }
         Cmd::Corpus { index, out, budget, stats, pool, per_ascendancy, limit, no_gear, no_tree } => {
-            let cfg = EngineConfig { pob_root: cli.pob_root.clone(), user_dir: user_dir.clone(), cache_dir: cli.cache_dir.clone() };
+            let cfg = EngineConfig { pob_root: cli.pob_root.clone(), user_dir: user_dir.clone(), cache_dir: cli.cache_dir.clone(), data_dir: None };
             let opts = CorpusOpts {
                 index: index.clone(),
                 out: out.clone(),
@@ -828,7 +828,7 @@ fn main() {
             Some(corpus_cmd(cfg, opts))
         }
         Cmd::Golden { index, out, baseline, tolerance, all, jobs, .. } => {
-            let cfg = EngineConfig { pob_root: cli.pob_root.clone(), user_dir: user_dir.clone(), cache_dir: cli.cache_dir.clone() };
+            let cfg = EngineConfig { pob_root: cli.pob_root.clone(), user_dir: user_dir.clone(), cache_dir: cli.cache_dir.clone(), data_dir: None };
             let opts = GoldenOpts { index: index.clone(), out: out.clone(), baseline: baseline.clone(), tolerance: *tolerance, all: *all, jobs: *jobs };
             Some(golden_cmd(cfg, opts))
         }
@@ -851,7 +851,7 @@ fn main() {
     }
 
     let t0 = Instant::now();
-    let engine = match Engine::boot(EngineConfig { pob_root: cli.pob_root, user_dir, cache_dir: cli.cache_dir }) {
+    let engine = match Engine::boot(EngineConfig { pob_root: cli.pob_root, user_dir, cache_dir: cli.cache_dir, data_dir: None }) {
         Ok(e) => e,
         Err(e) => {
             eprintln!("boot failed: {e}");

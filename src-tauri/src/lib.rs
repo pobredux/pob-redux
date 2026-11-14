@@ -2,6 +2,8 @@ use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 mod art;
+mod downloads;
+mod game_data;
 mod tree_art;
 mod mcp;
 mod tools;
@@ -1059,7 +1061,7 @@ fn boot_runtime(app: &tauri::AppHandle, game: Game, user_dir: &Path) -> Runtime 
     log::info!("pob root: {}", pob_root.display());
     // Safe mode compiles PoB from source, so a bad cache cannot keep the app from starting.
     let cache_dir = if safe_mode() { None } else { app.path().app_cache_dir().ok().map(|d| d.join("engine")) };
-    let cfg = EngineConfig { pob_root: pob_root.clone(), user_dir: user_dir.to_path_buf(), cache_dir };
+    let cfg = EngineConfig { pob_root: pob_root.clone(), user_dir: user_dir.to_path_buf(), cache_dir, data_dir: game_data::dir(app, game) };
     let engine = EngineHandle::spawn_with_idle_work(cfg.clone());
     // Workers boot on the first scan and are released again once the pool
     // goes idle. Warming them here cost every session ~240 MB per worker for
@@ -1104,7 +1106,7 @@ fn set_game(app: tauri::AppHandle, state: State<'_, AppState>, game: Game) -> Re
         let old = std::mem::replace(&mut *state.rt.write().unwrap(), fresh);
         old.pool.release();
         old.engine.shutdown();
-        tree_art::ensure(&app, game, state.pob_root());
+        downloads::start(&app, game, state.pob_root());
     }
     Ok(game_status_of(&state))
 }
@@ -1275,7 +1277,7 @@ pub fn run() {
             log::info!("game: {}", game.id());
             log::info!("user dir: {}", user_dir.display());
             let rt = boot_runtime(handle, game, &user_dir);
-            tree_art::ensure(handle, game, rt.pob_root.clone());
+            downloads::start(handle, game, rt.pob_root.clone());
             let session = begin_session(handle);
             app.manage(AppState {
                 rt: std::sync::RwLock::new(rt),
@@ -1335,6 +1337,7 @@ pub fn run() {
             build_xml_game,
             tree_art::tree_art_status,
             tree_art::tree_art_retry,
+            game_data::game_data_status,
             read_tree_json,
             list_builds,
             list_game_builds,

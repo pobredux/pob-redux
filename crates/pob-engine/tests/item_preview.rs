@@ -43,6 +43,7 @@ fn preview_is_temporary_and_commit_matches_candidate() {
         pob_root: root,
         user_dir: user_dir.clone(),
         cache_dir: None,
+        data_dir: None,
     })
     .unwrap();
     engine
@@ -276,6 +277,7 @@ fn customization_edits_drafts_and_commits_saved_items() {
         pob_root: root,
         user_dir: user_dir.clone(),
         cache_dir: None,
+        data_dir: None,
     })
     .unwrap();
     engine
@@ -663,6 +665,7 @@ fn affix_family_edit_chooses_and_returns_rolls_in_one_command() {
         pob_root: root,
         user_dir: user_dir.clone(),
         cache_dir: None,
+        data_dir: None,
     })
     .unwrap();
     engine.call("new_build", &json!({})).unwrap();
@@ -826,6 +829,7 @@ fn advanced_customization_has_saved_and_draft_parity() {
         pob_root: root,
         user_dir: user_dir.clone(),
         cache_dir: None,
+        data_dir: None,
     })
     .unwrap();
     engine
@@ -1049,6 +1053,7 @@ fn crafted_customization_preserves_custom_edits_across_affix_changes() {
         pob_root: root,
         user_dir: user_dir.clone(),
         cache_dir: None,
+        data_dir: None,
     })
     .unwrap();
     engine.call("new_build", &json!({})).unwrap();
@@ -1233,6 +1238,7 @@ fn paste_defaults_match_legacy() {
         pob_root: root,
         user_dir: user_dir.clone(),
         cache_dir: None,
+        data_dir: None,
     })
     .unwrap();
     engine.call("new_build", &json!({})).unwrap();
@@ -1435,6 +1441,7 @@ fn implicit_additions_follow_pob_add_implicit() {
         pob_root: root,
         user_dir: user_dir.clone(),
         cache_dir: None,
+        data_dir: None,
     })
     .unwrap();
     engine

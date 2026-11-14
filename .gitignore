@@ -16,6 +16,7 @@ vite.config.*.timestamp-*
 # Vendored Path of Building programs + data (regenerate with `bun run sync`)
 /src-tauri/resources/pob/
 /src-tauri/resources/pob1/
+/src-tauri/resources/pob1-data/
 
 # Editors / OS
 .DS_Store

@@ -8599,6 +8599,27 @@ function timelessUtil.timelessRadius(tree, socketId)
 	return out
 end
 
+-- Until the app has downloaded the timeless jewel archives, a timeless jewel changes no passives instead of failing the build load.
+if data.readLUT then
+	local readLUT = data.readLUT
+	data.readLUT = function(...)
+		local ok, result = pcall(readLUT, ...)
+		if ok then return result end
+		ConPrintf("Timeless jewel data unavailable: %s", tostring(result))
+		return { }
+	end
+end
+
+-- The app calls this once the timeless jewel archives finish downloading; a lookup before then cached nothing.
+M.reload_timeless_data = function()
+	data.timelessJewelLUTs = { }
+	if build and build.spec and build.calcsTab then
+		build.spec:BuildAllDependsAndPaths()
+		refresh()
+	end
+	return true
+end
+
 M.timeless_info = function(p)
 	ensureBuild()
 	local tree = timelessUtil.timelessTree()

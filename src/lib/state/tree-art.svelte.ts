@@ -18,11 +18,14 @@ class TreeArtStore {
   private started: Promise<void> | null = null;
   private waiters: (() => void)[] = [];
   private finished: Partial<Record<"poe1" | "poe2", TreeArtStatus["state"]>> = {};
+  /** True for a few seconds after a download that fetched files finishes. */
+  justDone = $state(false);
+  private doneTimer = 0;
 
   status = $derived(this.byGame[game.current] ?? null);
   busy = $derived(this.status?.state === "checking" || this.status?.state === "downloading");
 
-  private init(): Promise<void> {
+  init(): Promise<void> {
     this.started ??= (async () => {
       await listen<TreeArtStatus>("tree-art", (e) => this.set(e.payload));
       this.set(await invoke<TreeArtStatus>("tree_art_status"));
@@ -31,8 +34,14 @@ class TreeArtStore {
   }
 
   private set(s: TreeArtStatus) {
+    const before = this.byGame[s.game]?.state;
     this.byGame[s.game] = s;
     if (s.state === "checking" || s.state === "downloading") return;
+    if (s.state === "ready" && before === "downloading" && s.total > 0 && s.game === game.current) {
+      this.justDone = true;
+      clearTimeout(this.doneTimer);
+      this.doneTimer = window.setTimeout(() => (this.justDone = false), 4000);
+    }
     if (s.state === "ready" && this.finished[s.game] === "failed") this.generation++;
     this.finished[s.game] = s.state;
     if (s.game === game.current) {

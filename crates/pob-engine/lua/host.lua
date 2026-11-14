@@ -6,9 +6,9 @@
 -- process: rendering and input are no-ops, everything else delegates to Rust
 -- through the `__native` table. Mirrors src/_SimpleGraphic.def.lua upstream.
 --
--- Rust sets `__pob_root`, `__user_dir` and `__native` before running this.
+-- Rust sets `__pob_root`, `__user_dir`, `__data_dir` (optional) and `__native` before running this.
 
-local root, userDir, native = __pob_root, __user_dir, __native
+local root, userDir, dataDir, native = __pob_root, __user_dir, __data_dir, __native
 local cache = native.cache
 
 local function isAbsolute(p)
@@ -60,6 +60,9 @@ do
 			if f then return f end
 			local cf = io_open(cachePath(abs), mode, ...)
 			if cf then return cf end
+			-- Files the app downloads instead of shipping (PoE1's timeless jewel archives).
+			local df = dataDir and io_open(dataDir .. abs:sub(#root + 1), mode, ...)
+			if df then return df end
 			return nil, openError(abs, err)
 		end
 		local f, err = io_open(abs, mode, ...)

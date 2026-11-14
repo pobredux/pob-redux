@@ -21,7 +21,7 @@ fn save_after_code_import() {
     };
     let tmp = std::env::temp_dir().join(format!("pob-engine-test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
-    let engine = Engine::boot(EngineConfig { pob_root: root, user_dir: tmp.clone(), cache_dir: None }).expect("boot");
+    let engine = Engine::boot(EngineConfig { pob_root: root, user_dir: tmp.clone(), cache_dir: None, data_dir: None }).expect("boot");
 
     // The contract is `file: string | null`; an unsaved build reports null.
     let info: Value = engine.call("get_build", &json!(null)).expect("get_build");

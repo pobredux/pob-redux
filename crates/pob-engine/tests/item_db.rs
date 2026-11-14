@@ -18,7 +18,7 @@ fn config(name: &str) -> Option<EngineConfig> {
     }
     let user_dir = std::env::temp_dir().join(format!("pob-engine-item-db-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&user_dir);
-    Some(EngineConfig { pob_root: root, user_dir, cache_dir: None })
+    Some(EngineConfig { pob_root: root, user_dir, cache_dir: None, data_dir: None })
 }
 
 fn uniques(engine: &Engine) -> u64 {

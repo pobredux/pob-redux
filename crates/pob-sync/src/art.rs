@@ -43,6 +43,11 @@ fn sha256(bytes: &[u8]) -> String {
     Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
 }
 
+pub fn file_entry(path: &Path) -> Result<ArtFile> {
+    let bytes = fs::read(path).with_context(|| format!("read {}", path.display()))?;
+    Ok(ArtFile { hash: sha256(&bytes), size: bytes.len() as u64 })
+}
+
 /// Hashes every file of a built `web/` folder into `store` and picks the copies the app ships for offline use.
 pub fn record(web: &Path, version: &str, store: &Path) -> Result<Art> {
     let manifest: serde_json::Value = serde_json::from_slice(&fs::read(web.join("manifest.json")).context("read manifest.json")?)?;
@@ -151,7 +156,7 @@ fn fetch(key: &str, hash: &str, store: &Path) -> Result<()> {
     let status = Command::new("curl").args(["-fsSL", "--retry", "3", "-o"]).arg(&part).arg(&url).status().context("run curl")?;
     if !status.success() {
         let _ = fs::remove_file(&part);
-        bail!("download {url} failed; was the tree art uploaded (bun run tree-art upload)?");
+        bail!("download {url} failed; was it uploaded (bun scripts/downloads.ts upload)?");
     }
     let bytes = fs::read(&part)?;
     if sha256(&bytes) != hash {

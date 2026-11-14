@@ -7,7 +7,7 @@
 //!
 //!   cargo run -p pob-sync -- [--game poe1|poe2] [--source <checkout>] [--dest <dir>] [--clean] [--tree-assets]
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -195,10 +195,10 @@ fn main() -> Result<()> {
     let mut wanted: HashSet<PathBuf> = HashSet::new();
     let mut stats = (0usize, 0u64);
 
-    // Program files (src/ minus exclusions). PoE1's timeless jewel archives
-    // (170 MB of .zip.part files) ship as upstream does: PoB inflates them on
-    // first use and caches the result next to them, which the host redirects
-    // to the user's cache directory.
+    // Program files (src/ minus exclusions); PoE1's timeless jewel archives go to a sibling folder the app downloads.
+    let data_dir = dest.with_file_name(format!("{}-data", dest.file_name().context("destination has no name")?.to_string_lossy()));
+    let mut downloads = BTreeMap::new();
+    let mut data_wanted: HashSet<PathBuf> = HashSet::new();
     for entry in WalkDir::new(&src).into_iter().filter_entry(|e| {
         if e.depth() == 1 && e.file_type().is_dir() {
             let name = e.file_name().to_string_lossy();
@@ -215,9 +215,19 @@ fn main() -> Result<()> {
             continue;
         }
         let rel = entry.path().strip_prefix(&src)?.to_path_buf();
+        let rel_slash = rel.to_string_lossy().replace('\\', "/");
+        if rel_slash.starts_with("Data/TimelessJewelData/") && name.contains(".zip") {
+            copy_one(entry.path(), &data_dir.join(&rel), &mut stats)?;
+            downloads.insert(rel_slash, art::file_entry(entry.path())?);
+            data_wanted.insert(rel);
+            continue;
+        }
         copy_one(entry.path(), &dest.join(&rel), &mut stats)?;
         wanted.insert(rel);
     }
+    fs::write(dest.join("downloads.json"), serde_json::to_vec(&serde_json::json!({ "files": downloads }))?)?;
+    wanted.insert(PathBuf::from("downloads.json"));
+    remove_stale(&data_dir, &data_wanted)?;
 
     // Tree data: Lua tables for the engine, JSON for the renderer. PoE1 ships
     // no tree.json, so one is generated from tree.lua per version.
@@ -345,21 +355,7 @@ fn main() -> Result<()> {
     fs::write(dest.join("SYNC.json"), serde_json::to_string_pretty(&info)?)?;
     wanted.insert(PathBuf::from("SYNC.json"));
 
-    // Remove stale files from previous syncs.
-    let mut removed = 0;
-    for entry in WalkDir::new(&dest).contents_first(true) {
-        let entry = entry?;
-        let rel = entry.path().strip_prefix(&dest)?.to_path_buf();
-        if rel.as_os_str().is_empty() {
-            continue;
-        }
-        if entry.file_type().is_file() && !wanted.contains(&rel) {
-            fs::remove_file(entry.path())?;
-            removed += 1;
-        } else if entry.file_type().is_dir() && fs::read_dir(entry.path())?.next().is_none() {
-            let _ = fs::remove_dir(entry.path());
-        }
-    }
+    let removed = remove_stale(&dest, &wanted)?;
 
     println!(
         "synced PoB {version} ({}) @ {} -> {}\n  {} files, {:.1} MB copied ({generated} tree.json generated), {} stale removed, {} patches applied, {} trees, not in PoB's list: {}",
@@ -378,6 +374,28 @@ fn main() -> Result<()> {
         None => println!("  no trees/{}/art.json: the app has no tree art (build it with --tree-assets)", game.id()),
     }
     Ok(())
+}
+
+/// Deletes files under `dir` that this sync did not write, and empty folders.
+fn remove_stale(dir: &Path, wanted: &HashSet<PathBuf>) -> Result<usize> {
+    let mut removed = 0;
+    if !dir.is_dir() {
+        return Ok(0);
+    }
+    for entry in WalkDir::new(dir).contents_first(true) {
+        let entry = entry?;
+        let rel = entry.path().strip_prefix(dir)?.to_path_buf();
+        if rel.as_os_str().is_empty() {
+            continue;
+        }
+        if entry.file_type().is_file() && !wanted.contains(&rel) {
+            fs::remove_file(entry.path())?;
+            removed += 1;
+        } else if entry.file_type().is_dir() && fs::read_dir(entry.path())?.next().is_none() {
+            let _ = fs::remove_dir(entry.path());
+        }
+    }
+    Ok(removed)
 }
 
 /// Returns 1 when tree.json was regenerated.
