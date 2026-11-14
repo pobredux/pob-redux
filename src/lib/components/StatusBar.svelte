@@ -91,7 +91,7 @@
     <Icon name="chat-text" size={15} />
   </button>
   <button
-    class="seg iconbtn"
+    class="seg iconbtn discord"
     onclick={() => openUrl(DISCORD_URL).catch(() => {})}
     title={m.status_discord_title()}
     aria-label={m.status_discord()}
@@ -150,6 +150,10 @@
   .iconbtn:hover:not(:disabled) {
     color: var(--fg-0);
     background: var(--bg-2);
+  }
+  .iconbtn.discord,
+  .iconbtn.discord:hover:not(:disabled) {
+    color: #5865f2;
   }
   .err {
     color: var(--bad);
