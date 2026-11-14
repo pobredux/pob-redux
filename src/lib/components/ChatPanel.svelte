@@ -15,6 +15,8 @@
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
   import { m } from "$lib/paraglide/messages";
 
+  let { windowed = false }: { windowed?: boolean } = $props();
+
   let scroller = $state<HTMLDivElement | undefined>();
   let box = $state<HTMLTextAreaElement | undefined>();
   let slashIndex = $state(0);
@@ -225,8 +227,8 @@
 
 <svelte:window onkeydown={onWindowKey} />
 
-<aside class="chat" style:width="{chat.width}px">
-  <div
+<aside class="chat" class:windowed style:width={windowed ? null : `${chat.width}px`}>
+  {#if !windowed}<div
     class="grip"
     class:dragging
     role="slider"
@@ -240,7 +242,7 @@
     onkeydown={gripKey}
     ondblclick={() => chat.setWidth(400, true)}
     title={m.chat_resize_title()}
-  ></div>
+  ></div>{/if}
   <div class="head">
     <span class="title">
       <span class="label">{m.chat_title()}</span>
@@ -264,9 +266,14 @@
       >
         <Icon name="gear" size={17} />
       </button>
-      <button class="icon close" onclick={() => chat.toggle()} title={m.chat_hide_title()} aria-label={m.chat_hide()}>
-        <Icon name="x-square" size={17} />
-      </button>
+      {#if !windowed}
+        <button class="icon" onclick={() => chat.popOut()} disabled={chat.busy} title={m.chat_pop_out_title()} aria-label={m.chat_pop_out()}>
+          <Icon name="arrow-square-out" size={17} />
+        </button>
+        <button class="icon close" onclick={() => chat.toggle()} title={m.chat_hide_title()} aria-label={m.chat_hide()}>
+          <Icon name="x-square" size={17} />
+        </button>
+      {/if}
     </div>
   </div>
 
@@ -497,6 +504,11 @@
     border-left: 1px solid var(--line-1);
     background: var(--bg-1);
     overflow: hidden;
+  }
+  .chat.windowed {
+    flex: 1;
+    min-height: 0;
+    border-left: 0;
   }
   /* Sits over the border, wider than it looks so it is easy to grab. */
   .grip {

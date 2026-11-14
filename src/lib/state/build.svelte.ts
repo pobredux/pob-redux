@@ -18,6 +18,7 @@ import {
 } from "$lib/engine.svelte";
 import { game } from "$lib/state/game.svelte";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
+import { emit } from "@tauri-apps/api/event";
 
 const AUTOSAVE_KEY = "pob-redux:autosave";
 
@@ -76,6 +77,8 @@ class BuildStore {
       return undefined;
     } finally {
       this.busy--;
+      // A popped-out assistant follows the count for its Undo warning, and refreshes its build summary.
+      if (opts.user !== false) emit("build:edited").catch(() => {});
     }
   }
 
@@ -159,6 +162,13 @@ class BuildStore {
       this.error = m.app_reopen_failed({ build: saved.name ? `"${saved.name}"` : m.app_recover_build_fallback(), reason });
       return false;
     }
+  }
+
+  /** The build summary only, for the popped-out assistant: no views, no autosave. */
+  async mirror() {
+    const [info, sidebar] = await Promise.all([engine.getBuild(), engine.getSidebar()]);
+    this.info = info;
+    this.sidebar = sidebar;
   }
 
   /** Re-pull everything derived from the engine's current build. */

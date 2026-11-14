@@ -1,7 +1,10 @@
 import { m } from "$lib/paraglide/messages";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { Channel, invoke } from "@tauri-apps/api/core";
+import { emit, listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isStepCount, streamText, type LanguageModel, type ModelMessage, type ToolResultPart } from "ai";
+import { IS_ASSISTANT_WINDOW } from "$lib/window";
 
 import {
   clampEffort,
@@ -33,6 +36,7 @@ import { appOptions } from "$lib/state/options.svelte";
 import { gems } from "$lib/state/gems.svelte";
 
 const KEY = "pob-redux:chat";
+const WINDOW_KEY = "pob-redux:assistant-window";
 /**
  * Tool rounds allowed per message. Assembling a skill setup honestly costs a
  * lot of them: a search per candidate gem, a socket group and an add per skill,
@@ -65,6 +69,30 @@ export interface Experiment {
   now: Record<string, number>;
   /** `build.userEdits` when the checkpoint was taken. */
   editsAt: number;
+}
+
+/** Everything a conversation needs to carry on in another window. */
+interface ChatSnapshot {
+  turns: Turn[];
+  history: ModelMessage[];
+  agent: string | null;
+  input: string;
+  error: string | null;
+  notice: string | null;
+  canContinue: boolean;
+  usage: ChatStore["usage"];
+  contextUse: ChatStore["contextUse"];
+  allowWrites: boolean;
+  allowedTools: string[];
+  experiment: Experiment | null;
+  undoWarning: string | null;
+  active: string[];
+  elided: number;
+  providers: ProviderStatus[];
+  models: ModelInfo[];
+  catalog: ChatStore["catalog"];
+  checkedAt: number | null;
+  userEdits: number;
 }
 
 /** The moved numbers a Try strip shows, biggest relative change first. */
@@ -172,6 +200,8 @@ function explainError(e: unknown, providerLabel: string): string {
 
 class ChatStore {
   open = $state(false);
+  /** Main window: the conversation lives in the assistant's own window. */
+  poppedOut = $state(false);
   turns = $state<Turn[]>([]);
   input = $state("");
   busy = $state(false);
@@ -251,6 +281,7 @@ class ChatStore {
   private agent: string | null = null;
   /** Bumped when a conversation is dropped, so a reply still streaming from it is ignored. */
   private agentRun = 0;
+  private listening = false;
 
   get current(): ProviderStatus | undefined {
     return this.providers.find((p) => p.id === this.provider);
@@ -281,7 +312,7 @@ class ChatStore {
     return clampEffort(this.efforts, this.effort);
   }
 
-  async init(openOnBoot?: string | null) {
+  private loadSettings() {
     try {
       const saved = JSON.parse(localStorage.getItem(KEY) ?? "{}");
       if (typeof saved.provider === "string") this.provider = saved.provider;
@@ -294,6 +325,15 @@ class ChatStore {
       if (typeof saved.open === "boolean") this.open = saved.open;
       if (Number.isFinite(saved.width)) this.width = clampWidth(saved.width);
     } catch {}
+  }
+
+  async init(openOnBoot?: string | null) {
+    this.loadSettings();
+    if (!this.listening) {
+      this.listening = true;
+      await listen("assistant:closed", () => void this.takeBack());
+      await listen("assistant:open-settings", () => this.openSettings());
+    }
     if (openOnBoot != null) this.open = true;
     if (openOnBoot === "settings") this.openSettings();
     await this.refreshProviders();
@@ -392,8 +432,119 @@ class ChatStore {
   }
 
   toggle() {
+    if (this.poppedOut) {
+      invoke("assistant_window_open", { bounds: null }).catch(() => {});
+      return;
+    }
     this.open = !this.open;
     this.persist();
+  }
+
+  private snapshot(): ChatSnapshot {
+    return {
+      turns: this.turns,
+      history: this.history,
+      agent: this.agent,
+      input: this.input,
+      error: this.error,
+      notice: this.notice,
+      canContinue: this.canContinue,
+      usage: this.usage,
+      contextUse: this.contextUse,
+      allowWrites: this.allowWrites,
+      allowedTools: this.allowedTools,
+      experiment: this.experiment,
+      undoWarning: this.undoWarning,
+      active: [...this.active],
+      elided: this.elided,
+      providers: this.providers,
+      models: this.models,
+      catalog: this.catalog,
+      checkedAt: this.checkedAt,
+      userEdits: build.userEdits,
+    };
+  }
+
+  private restore(s: ChatSnapshot) {
+    this.turns = s.turns;
+    this.history = s.history;
+    this.agent = s.agent;
+    this.input = s.input;
+    this.error = s.error;
+    this.notice = s.notice;
+    this.canContinue = s.canContinue;
+    this.usage = s.usage;
+    this.contextUse = s.contextUse;
+    this.allowWrites = s.allowWrites;
+    this.allowedTools = s.allowedTools;
+    this.experiment = s.experiment;
+    this.undoWarning = s.undoWarning;
+    this.active = new Set(s.active);
+    this.elided = s.elided;
+    if (s.providers.length) this.providers = s.providers;
+    if (s.models.length) this.models = s.models;
+    this.catalog = s.catalog;
+    this.checkedAt = s.checkedAt;
+    // The main window's count stays authoritative; this window follows it through `build:edited`.
+    if (IS_ASSISTANT_WINDOW) build.userEdits = s.userEdits;
+  }
+
+  /** Main window: move the conversation into the assistant's own window. */
+  async popOut() {
+    if (this.busy || this.poppedOut) return;
+    await invoke("chat_handoff_put", { state: JSON.stringify(this.snapshot()) });
+    // The agent session now belongs to the other window, so it is dropped here without closing it.
+    this.agent = null;
+    this.agentRun++;
+    this.clear();
+    this.input = "";
+    this.canContinue = false;
+    this.poppedOut = true;
+    let bounds = null;
+    try {
+      bounds = JSON.parse(localStorage.getItem(WINDOW_KEY) ?? "null");
+    } catch {}
+    try {
+      await invoke("assistant_window_open", { bounds });
+    } catch (e) {
+      await this.takeBack();
+      this.error = String(e);
+    }
+  }
+
+  /** Main window: the assistant window closed, so its conversation comes back. */
+  async takeBack() {
+    const raw = await invoke<string | null>("chat_handoff_take").catch(() => null);
+    if (raw) this.restore(JSON.parse(raw));
+    this.poppedOut = false;
+    this.open = true;
+    this.persist();
+  }
+
+  /** Assistant window: pick up the handed-over conversation and the saved settings. */
+  async initWindow() {
+    this.loadSettings();
+    const raw = await invoke<string | null>("chat_handoff_take").catch(() => null);
+    if (raw) this.restore(JSON.parse(raw));
+    if (!this.providers.length) await this.refreshProviders();
+    if (!this.models.length) await this.refreshModels();
+    this.defs = await loadToolDefs().catch(() => []);
+    this.toolNames = this.defs;
+    void gems.load();
+    void decider.init();
+    void this.warmUp();
+  }
+
+  /** Assistant window: hand the conversation back and close. A reply still running is stopped first. */
+  async dock() {
+    if (this.busy) this.stop();
+    try {
+      const w = getCurrentWindow();
+      const [pos, size, scale] = await Promise.all([w.outerPosition(), w.innerSize(), w.scaleFactor()]);
+      localStorage.setItem(WINDOW_KEY, JSON.stringify({ x: pos.x / scale, y: pos.y / scale, width: size.width / scale, height: size.height / scale }));
+    } catch {}
+    await invoke("chat_handoff_put", { state: JSON.stringify(this.snapshot()) }).catch(() => {});
+    await invoke("assistant_window_close");
   }
 
   setModel(id: string) {
@@ -523,6 +674,11 @@ class ChatStore {
   }
 
   openSettings() {
+    if (IS_ASSISTANT_WINDOW) {
+      emit("assistant:open-settings").catch(() => {});
+      invoke("main_window_focus").catch(() => {});
+      return;
+    }
     appOptions.section = "assistant";
     appOptions.open = true;
   }
@@ -621,8 +777,16 @@ class ChatStore {
   }
 
   reset() {
+    if (this.poppedOut) {
+      emit("assistant:reset").catch(() => {});
+      return;
+    }
     this.stop();
     this.closeAgent();
+    this.clear();
+  }
+
+  private clear() {
     this.turns = [];
     this.history = [];
     this.active.clear();
@@ -652,6 +816,7 @@ class ChatStore {
 
   /** A short snapshot of the open build, refreshed each turn. */
   private async context(): Promise<string> {
+    if (IS_ASSISTANT_WINDOW) await build.mirror().catch(() => {});
     if (!build.loaded) return "No build is open. Ask the user to load one, or use the tools to inspect once it is.";
     const info = build.info;
     const rows = (build.sidebar?.rows ?? [])

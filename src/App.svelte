@@ -133,7 +133,7 @@
         <ImportView {paths} />
       {/if}
     </main>
-    {#if chat.open && !appOptions.open && status?.state === "ready"}<ChatPanel />{/if}
+    {#if chat.open && !chat.poppedOut && !appOptions.open && status?.state === "ready"}<ChatPanel />{/if}
   </div>
   <StatusBar {status} {paths} />
   <DownloadToast />

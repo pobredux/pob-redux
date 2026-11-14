@@ -22,6 +22,7 @@ mod links;
 mod diagnostics;
 mod game;
 mod trade;
+mod assistant;
 mod voice;
 
 use std::sync::Arc;
@@ -1400,6 +1401,11 @@ pub fn run() {
             voice::voice_stop,
             voice::voice_cancel,
             trade::trade_window_open,
+            assistant::assistant_window_open,
+            assistant::assistant_window_close,
+            assistant::main_window_focus,
+            assistant::chat_handoff_put,
+            assistant::chat_handoff_take,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -1407,6 +1413,11 @@ pub fn run() {
             if let tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } = &event {
                 if label == "main" {
                     trade::close(app);
+                    assistant::close(app);
+                }
+                // Closed by its own button, the OS or a crash: the main window docks the conversation back.
+                if label == assistant::LABEL {
+                    let _ = app.emit_to("main", "assistant:closed", ());
                 }
             }
             if let tauri::RunEvent::Exit = event {
