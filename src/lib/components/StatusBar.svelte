@@ -158,7 +158,7 @@
   .err {
     color: var(--bad);
     border-left: 1px solid var(--line-0);
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
     max-width: 50vw;
     overflow: hidden;
     text-overflow: ellipsis;

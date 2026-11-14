@@ -1031,7 +1031,7 @@
     border: 0;
     color: var(--fg-3);
     font: inherit;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .orow button.x:hover,
   .frow button.x:hover {

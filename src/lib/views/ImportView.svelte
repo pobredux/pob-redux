@@ -1744,7 +1744,7 @@
     border-radius: var(--r-1);
     background: none;
     color: var(--fg-2);
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .ibtn:hover:not(:disabled) {
     background: var(--bg-active);
@@ -1752,7 +1752,7 @@
   }
   .ibtn:disabled {
     opacity: var(--fade-off);
-    cursor: default;
+    cursor: var(--cursor-arrow, default);
   }
   .aname {
     font-size: var(--fs-md);
@@ -1772,7 +1772,7 @@
     font-size: var(--fs-xs);
     font-weight: 600;
     letter-spacing: 0.03em;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
     text-align: left;
   }
   .ahead .ahead-toggle {
@@ -1786,7 +1786,7 @@
     color: inherit;
     font: inherit;
     letter-spacing: inherit;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
     text-align: left;
     padding: 0;
   }
@@ -1851,7 +1851,7 @@
     text-transform: inherit;
     color: inherit;
     text-align: left;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .ghtoggle:hover {
     color: var(--fg-1);
@@ -1902,7 +1902,7 @@
   }
   .bname:disabled {
     color: var(--fg-3);
-    cursor: default;
+    cursor: var(--cursor-arrow, default);
   }
   .welcome {
     display: flex;
@@ -1982,7 +1982,7 @@
     padding: 5px 12px;
     color: var(--fg-1);
     text-align: left;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
     font-size: var(--fs-sm);
   }
   .ntext {
@@ -2048,7 +2048,7 @@
     color: var(--fg-3);
     font-size: var(--fs-xs);
     font-family: var(--mono);
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
     padding: 2px 4px;
     border-radius: 3px;
   }
@@ -2245,7 +2245,7 @@
   }
   .pmode {
     align-items: flex-start;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .pmode input {
     margin: 3px 0 0;

@@ -565,7 +565,7 @@
     font-size: var(--fs-sm);
     color: var(--fg-2);
     min-height: 32px;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .opt:last-child {
     border-bottom: 0;
@@ -669,7 +669,7 @@
     padding: 3px 8px;
     font-size: var(--fs-xs);
     color: var(--c-magic);
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
     border-radius: 3px;
     white-space: normal;
   }

@@ -106,7 +106,7 @@
     border: 0;
     background: none;
     color: var(--fg-2);
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .close:hover {
     color: var(--fg-0);

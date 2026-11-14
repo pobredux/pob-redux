@@ -1,0 +1,86 @@
+[
+  {
+    "id": "default",
+    "hotspot": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": "contrast",
+    "hotspot": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": "contrastgreenarmour",
+    "hotspot": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": "contrastgreenarmourinv",
+    "hotspot": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": "contrastinvert",
+    "hotspot": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": "contrastpinkarmour",
+    "hotspot": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": "contrastpinkarmourinv",
+    "hotspot": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": "eternal",
+    "hotspot": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": "ezomyte",
+    "hotspot": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": "karui",
+    "hotspot": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": "maraketh",
+    "hotspot": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": "vaal",
+    "hotspot": [
+      0,
+      0
+    ]
+  }
+]

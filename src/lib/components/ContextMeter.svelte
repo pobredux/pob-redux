@@ -36,7 +36,7 @@
     height: 24px;
     min-width: 24px;
     color: var(--fg-2);
-    cursor: default;
+    cursor: var(--cursor-arrow, default);
   }
   svg {
     transform: rotate(-90deg);

@@ -6,6 +6,7 @@
   import { getVersion } from "@tauri-apps/api/app";
   import { appUpdate } from "$lib/state/update.svelte";
   import { ui, type Theme } from "$lib/state/ui.svelte";
+  import { CURSORS, cursorImage, cursorValue } from "$lib/cursors";
   import { save } from "@tauri-apps/plugin-dialog";
   import { exportDiagnostics, openUrl, revealLogs } from "$lib/engine.svelte";
   import { locale, LOCALES, LOCALE_LABEL, type LocalePreference } from "$lib/state/locale.svelte";
@@ -60,6 +61,31 @@
     ["delirium", m.theme_delirium()],
   ]);
   const SWATCHES = ["--bg-3", "--line-2", "--ramp-2", "--fg-0", "--focus", "--brand"];
+  const cursorOptions = $derived.by(() => {
+    const named: Record<string, string> = {
+      default: m.settings_cursor_default(),
+      contrast: m.settings_cursor_contrast(),
+      contrastinvert: m.settings_cursor_contrast_inverted(),
+      contrastgreenarmour: m.settings_cursor_green(),
+      contrastgreenarmourinv: m.settings_cursor_green_inverted(),
+      contrastpinkarmour: m.settings_cursor_pink(),
+      contrastpinkarmourinv: m.settings_cursor_pink_inverted(),
+    };
+    const rank = (id: string) => {
+      const i = Object.keys(named).indexOf(id);
+      return i < 0 ? Infinity : i;
+    };
+    const skins = [...CURSORS].sort((a, b) => Number(a.startsWith("contrast")) - Number(b.startsWith("contrast")) || rank(a) - rank(b));
+    return [
+      { id: "system", label: m.settings_cursor_system(), image: undefined, preview: undefined },
+      ...skins.map((id) => ({
+        id,
+        label: named[id] ?? id.charAt(0).toUpperCase() + id.slice(1),
+        image: cursorImage(id, "arrow", true),
+        preview: cursorValue(id, "hover", "pointer") ?? undefined,
+      })),
+    ];
+  });
   const languages = $derived<[LocalePreference, string][]>([
     ["system", m.settings_language_system({ language: LOCALE_LABEL[locale.system] })],
     ...LOCALES.map((l): [LocalePreference, string] => [l, LOCALE_LABEL[l]]),
@@ -191,6 +217,24 @@
                       {#each SWATCHES as v (v)}<i style:background={`var(${v})`}></i>{/each}
                     {/if}
                   </span>
+                </button>
+              {/each}
+            </div>
+          </div>
+          <div class="opt themeopt">
+            <span>
+              {m.settings_cursor()}
+              <span class="hint">{m.settings_cursor_hint()}</span>
+            </span>
+            <div class="cursors" role="radiogroup" aria-label={m.settings_cursor()}>
+              {#each cursorOptions as c (c.id)}
+                <button role="radio" aria-checked={ui.cursor === c.id} class="ccard" class:on={ui.cursor === c.id} title={c.label} style:cursor={c.preview} onclick={() => ui.setCursor(c.id)}>
+                  {#if c.image}
+                    <img src={c.image} alt="" />
+                  {:else}
+                    <svg viewBox="0 0 32 32" width="32" height="32" aria-hidden="true"><path d="M7 4v21l5.5-5.2 3.6 8.2 3.3-1.4-3.5-8.1H23z" fill="var(--fg-0)" stroke="var(--bg-0)" stroke-width="1.4" stroke-linejoin="round" /></svg>
+                  {/if}
+                  <span class="cname">{c.label}</span>
                 </button>
               {/each}
             </div>
@@ -842,7 +886,7 @@
     color: var(--fg-0);
     font: inherit;
     text-align: left;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .tcard:hover {
     background: var(--bg-2);
@@ -850,6 +894,44 @@
   .tcard.on {
     border-color: var(--accent);
     box-shadow: 0 0 0 1px var(--accent);
+  }
+  .cursors {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+    gap: 8px;
+  }
+  .ccard {
+    appearance: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 6px 8px;
+    border: 1px solid var(--line-1);
+    border-radius: var(--r-2);
+    background: var(--bg-1);
+    color: var(--fg-1);
+    font: inherit;
+  }
+  .ccard:hover {
+    background: var(--bg-2);
+    color: var(--fg-0);
+  }
+  .ccard.on {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+    color: var(--fg-0);
+  }
+  .ccard img,
+  .ccard svg {
+    width: 32px;
+    height: 32px;
+  }
+  .cname {
+    max-width: 100%;
+    font-size: var(--fs-xs);
+    line-height: 1.25;
+    text-align: center;
   }
   .lighthalf {
     position: absolute;
@@ -938,7 +1020,7 @@
     color: var(--focus);
     font: inherit;
     font-size: var(--fs-xs);
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .link:hover {
     text-decoration: underline;

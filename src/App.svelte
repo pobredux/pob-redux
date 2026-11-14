@@ -247,7 +247,7 @@
     border-radius: var(--r-2);
     background: var(--bg-0);
     color: var(--fg-0);
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
     text-align: left;
   }
   .pick-btn:hover:not(:disabled) {
@@ -255,7 +255,7 @@
   }
   .pick-btn:disabled {
     color: var(--fg-4);
-    cursor: default;
+    cursor: var(--cursor-arrow, default);
   }
   .pick-name {
     font-size: var(--fs-md);

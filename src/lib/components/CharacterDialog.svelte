@@ -157,7 +157,7 @@
     font: inherit;
     font-size: var(--fs-xs);
     text-align: center;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .pick:hover {
     background: var(--bg-hover);

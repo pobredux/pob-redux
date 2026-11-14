@@ -1363,7 +1363,7 @@
     padding: 0;
     font-size: var(--fs-sm);
     text-align: left;
-    cursor: default;
+    cursor: var(--cursor-arrow, default);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1388,7 +1388,7 @@
     font-size: var(--fs-2xs);
     height: 18px;
     padding: 0 6px;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
     border-radius: 3px;
   }
   .mini:hover {
@@ -1434,7 +1434,7 @@
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
     padding: 2px 6px;
     border-radius: 3px;
   }

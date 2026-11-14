@@ -74,7 +74,7 @@
     color: var(--fg-2);
     font: inherit;
     font-size: var(--fs-xs);
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
     white-space: nowrap;
   }
   .ctl:hover:not(:disabled),
@@ -84,7 +84,7 @@
   }
   .ctl:disabled {
     color: var(--fg-4);
-    cursor: default;
+    cursor: var(--cursor-arrow, default);
   }
   .caret {
     display: grid;

@@ -680,7 +680,7 @@
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
     padding: 2px 6px;
     border-radius: 3px;
   }
@@ -758,7 +758,7 @@
     font: inherit;
     font-weight: 400;
     letter-spacing: normal;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .reset:hover {
     color: var(--fg-1);
@@ -930,7 +930,7 @@
     text-overflow: ellipsis;
   }
   .stat-hero.link {
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .stat-hero.link:hover {
     border-color: var(--line-2);
@@ -1064,7 +1064,7 @@
     min-width: var(--colw);
   }
   .cell.link {
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
     border-radius: 3px;
   }
   .cell.link:hover {

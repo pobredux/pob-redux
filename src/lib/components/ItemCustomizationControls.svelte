@@ -154,7 +154,7 @@
   .select, .modtext { width: 100%; min-width: 0; font-size: var(--fs-xs); }
   .roll { color: var(--fg-2); }
   .roll input { flex: 1; min-width: 80px; accent-color: var(--fg-1); }
-  summary { cursor: pointer; padding: 6px 0; }
+  summary { cursor: var(--cursor-pointer, pointer); padding: 6px 0; }
   .modifiers { display: flex; flex-direction: column; gap: 8px; }
   .modifier { border-top: 1px solid var(--line-0); padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
   .adder { border-top: 1px solid var(--line-0); padding-top: 8px; display: flex; flex-direction: column; gap: 8px; }

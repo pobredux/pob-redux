@@ -112,14 +112,14 @@
     padding: 2px 7px;
     font-size: var(--fs-xs);
     letter-spacing: 0.04em;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .swatch:hover:not(:disabled) {
     background: var(--bg-hover);
   }
   .swatch:disabled {
     opacity: var(--fade-off);
-    cursor: default;
+    cursor: var(--cursor-arrow, default);
   }
   .preview {
     overflow: auto;

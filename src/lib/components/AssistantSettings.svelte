@@ -417,7 +417,7 @@
     color: var(--fg-1);
     font: inherit;
     text-align: left;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .icon {
     display: grid;
@@ -611,7 +611,7 @@
     color: var(--focus);
     font: inherit;
     font-size: var(--fs-xs);
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .link:hover {
     text-decoration: underline;
@@ -635,7 +635,7 @@
     border-bottom: 1px solid var(--line-0);
     font-size: var(--fs-sm);
     color: var(--fg-1);
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .mrow:last-child {
     border-bottom: 0;

@@ -564,7 +564,7 @@
     color: var(--fg-3);
     font: inherit;
     font-size: var(--fs-xs);
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .reset:hover {
     color: var(--fg-1);
@@ -608,7 +608,7 @@
     border-radius: 50%;
     background: none;
     box-shadow: 0 0 0 1px var(--line-2);
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .portrait:hover {
     box-shadow: 0 0 0 1px var(--fg-2);
@@ -626,7 +626,7 @@
     border-radius: 50%;
     background: none;
     transform: translate(-50%, -50%);
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .pin:hover,
   .pin:focus-visible {
@@ -677,7 +677,7 @@
     color: var(--c-gem);
     font: inherit;
     font-size: var(--fs-sm);
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .skillchip:hover {
     background: var(--bg-hover);
@@ -751,7 +751,7 @@
     font: inherit;
     font-size: var(--fs-sm);
     text-align: left;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .sk:first-child {
     border-top: 0;
@@ -837,7 +837,7 @@
     font: inherit;
     font-size: var(--fs-xs);
     white-space: nowrap;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .golink:hover {
     text-decoration: underline;
@@ -888,7 +888,7 @@
   [data-bd] {
     position: relative;
     border-radius: 3px;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   [data-bd]:hover {
     background: var(--bg-hover);
@@ -934,7 +934,7 @@
     border: 0;
     background: none;
     font: inherit;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .links button:hover {
     text-decoration: underline;

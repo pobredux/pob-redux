@@ -638,7 +638,7 @@
     line-height: 1;
     width: 30px;
     height: 30px;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .gmain:hover {
     color: var(--fg-1);
@@ -666,7 +666,7 @@
     text-align: left;
     padding: 6px 0;
     font-size: var(--fs-sm);
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
@@ -686,7 +686,7 @@
     font-size: 10px;
     width: 18px;
     height: 18px;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
     border-radius: 3px;
   }
   .mini:hover:not(:disabled) {
@@ -842,7 +842,7 @@
     border-bottom: 1px solid var(--line-0);
     background: transparent;
     text-align: left;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
     font-size: var(--fs-xs);
     align-items: baseline;
   }

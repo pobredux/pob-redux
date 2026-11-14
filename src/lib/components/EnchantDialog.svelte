@@ -130,7 +130,7 @@
     font-size: var(--fs-2xs);
     height: 18px;
     padding: 0 6px;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
     border-radius: 3px;
   }
   .mini:hover {
@@ -218,7 +218,7 @@
     color: var(--fg-1);
     font: inherit;
     text-align: left;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .row:hover {
     background: var(--bg-hover);

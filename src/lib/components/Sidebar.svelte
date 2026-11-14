@@ -504,7 +504,7 @@
     color: var(--fg-3);
     font: inherit;
     font-size: var(--fs-xs);
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .reset:hover {
     color: var(--fg-1);
@@ -572,7 +572,7 @@
     color: var(--focus);
   }
   .srow.hasbd {
-    cursor: default;
+    cursor: var(--cursor-arrow, default);
   }
   .srow.hasbd:hover {
     background: var(--bg-2);

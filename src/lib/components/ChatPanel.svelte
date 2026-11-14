@@ -558,7 +558,7 @@
     border: 1px solid transparent;
     border-radius: var(--r-1);
     color: var(--fg-2);
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .icon:hover:not(:disabled),
   .icon.on {
@@ -607,7 +607,7 @@
     color: var(--fg-1);
     font: inherit;
     font-size: var(--fs-xs);
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .toend:hover {
     color: var(--fg-0);
@@ -637,7 +637,7 @@
     font: inherit;
     color: inherit;
     text-align: left;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .user:hover:not(:disabled) {
     background: var(--bg-active);
@@ -647,7 +647,7 @@
     outline: none;
   }
   .user:disabled {
-    cursor: default;
+    cursor: var(--cursor-arrow, default);
   }
   .failed {
     display: flex;
@@ -692,7 +692,7 @@
     /* Faint rather than hidden: a hover-only control goes unfound. */
     opacity: 0.3;
     transition: opacity 90ms linear;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .botwrap:hover .copy,
   .copy:focus-visible,
@@ -725,7 +725,7 @@
     color: inherit;
     font: inherit;
     text-align: left;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .tline:hover .tname {
     color: var(--fg-0);
@@ -866,7 +866,7 @@
     font: inherit;
     font-size: var(--fs-xs);
     padding: 4px 7px;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .eg:hover {
     background: var(--bg-hover);
@@ -1009,7 +1009,7 @@
     border: 0;
     border-radius: 50%;
     color: var(--bg-1);
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
     transition: transform 100ms ease;
   }
   .send:hover:not(:disabled) {
@@ -1018,7 +1018,7 @@
   .send:disabled {
     background: var(--bg-3);
     color: var(--fg-4);
-    cursor: default;
+    cursor: var(--cursor-arrow, default);
   }
   .mic {
     display: grid;
@@ -1030,7 +1030,7 @@
     border: 1px solid transparent;
     border-radius: 50%;
     color: var(--fg-2);
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .mic:hover:not(:disabled) {
     color: var(--fg-0);
@@ -1043,7 +1043,7 @@
     transition: box-shadow 60ms linear;
   }
   .mic.wait {
-    cursor: default;
+    cursor: var(--cursor-arrow, default);
     animation: pulse 1.2s ease-in-out infinite;
   }
   .send.stop {
@@ -1080,7 +1080,7 @@
     padding: 4px 6px;
     color: var(--fg-1);
     font: inherit;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .srow:hover,
   .srow.sel {

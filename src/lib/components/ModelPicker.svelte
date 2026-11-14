@@ -145,7 +145,7 @@
     border: 0;
     border-radius: var(--r-1);
     color: var(--fg-2);
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .tab:hover {
     color: var(--fg-0);
@@ -211,7 +211,7 @@
     font: inherit;
     font-size: var(--fs-sm);
     text-align: left;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .opt.hot {
     background: var(--bg-hover);

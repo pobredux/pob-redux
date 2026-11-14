@@ -45,7 +45,7 @@
     font: inherit;
     font-size: var(--fs-sm);
     text-align: left;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .item:hover {
     background: var(--bg-hover);

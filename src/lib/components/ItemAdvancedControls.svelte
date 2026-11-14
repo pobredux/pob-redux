@@ -319,7 +319,7 @@
     font-size: var(--fs-2xs);
     height: 18px;
     padding: 0 6px;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
     border-radius: 3px;
   }
   .mini:hover {
@@ -359,7 +359,7 @@
     background: none;
     border: 1px solid var(--line-1);
     border-radius: var(--r-2);
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .chip.on {
     color: var(--fg-0);
@@ -403,7 +403,7 @@
     background: none;
     border: 0;
     color: var(--fg-4);
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .link.on {
     color: var(--fg-0);
@@ -436,7 +436,7 @@
     color: var(--fg-1);
     font-size: var(--fs-sm);
     text-align: left;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .arow:hover {
     background: var(--bg-2);

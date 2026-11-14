@@ -2554,7 +2554,7 @@
   }
   canvas {
     display: block;
-    cursor: default;
+    cursor: var(--cursor-arrow, default);
     touch-action: none;
   }
   canvas.panning {
@@ -2592,7 +2592,7 @@
     border-radius: var(--r-1);
     display: grid;
     place-items: center;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .dock:hover {
     color: var(--fg-0);
@@ -2642,7 +2642,7 @@
     color: var(--fg-2);
     font: inherit;
     font-size: var(--fs-xs);
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .seg button:last-child {
     border-right: 0;
@@ -2857,7 +2857,7 @@
     color: var(--fg-1);
     font-size: var(--fs-xs);
     text-align: left;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .report-row:hover {
     background: var(--bg-2);
@@ -2952,7 +2952,7 @@
     background: transparent;
     color: var(--fg-0);
     font-size: var(--fs-sm);
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
     text-align: left;
   }
   .mi:hover {
@@ -2989,7 +2989,7 @@
   }
   .mi:disabled {
     color: var(--fg-4);
-    cursor: default;
+    cursor: var(--cursor-arrow, default);
   }
   .mi.dim {
     color: var(--fg-3);

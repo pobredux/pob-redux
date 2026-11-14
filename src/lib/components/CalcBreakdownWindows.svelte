@@ -425,7 +425,7 @@
     user-select: none;
   }
   .bdpop.pinned .bdhead button {
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
     position: relative;
     z-index: 2;
   }

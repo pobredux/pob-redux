@@ -466,7 +466,7 @@ summary,
 [role="tab"],
 input[type="checkbox"],
 input[type="radio"] {
-  cursor: pointer;
+  cursor: var(--cursor-pointer, pointer);
 }
 input[type="checkbox"],
 input[type="radio"] {
@@ -476,17 +476,33 @@ button:disabled,
 select:disabled,
 input:disabled,
 [aria-disabled="true"] {
-  cursor: default;
+  cursor: var(--cursor-arrow, default);
 }
 /* Separate rule on purpose: one unsupported selector invalidates a whole
    comma-separated list, and `:has` must not be able to take the block above
    down with it on an older webview. */
 label:has(input[type="checkbox"]),
 label:has(input[type="radio"]) {
-  cursor: pointer;
+  cursor: var(--cursor-pointer, pointer);
 }
 label:has(input:disabled) {
-  cursor: default;
+  cursor: var(--cursor-arrow, default);
+}
+
+/* A Path of Exile cursor (Settings, Appearance): ui.svelte.ts sets the three --cursor-* values on the root. */
+:root.game-cursor body {
+  cursor: var(--cursor-arrow);
+}
+:root.game-cursor a[href] {
+  cursor: var(--cursor-pointer);
+}
+:root.game-cursor :active {
+  --cursor-arrow: var(--cursor-click);
+  --cursor-pointer: var(--cursor-click);
+}
+:root.game-cursor
+  :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="button"], [type="submit"], [type="reset"], [type="file"]), textarea, [contenteditable="true"]) {
+  cursor: text;
 }
 
 .btn {
@@ -502,7 +518,7 @@ label:has(input:disabled) {
   color: var(--fg-1);
   font-size: var(--fs-sm);
   letter-spacing: 0.01em;
-  cursor: pointer;
+  cursor: var(--cursor-pointer, pointer);
   white-space: nowrap;
   transition: background 80ms linear, border-color 80ms linear, color 80ms linear;
 }
@@ -515,7 +531,7 @@ label:has(input:disabled) {
 }
 .btn:disabled {
   opacity: var(--fade-off);
-  cursor: default;
+  cursor: var(--cursor-arrow, default);
 }
 .btn.primary {
   background: var(--accent);
@@ -647,7 +663,7 @@ optgroup {
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%2380808a' stroke-width='1.2'/></svg>");
   background-repeat: no-repeat;
   background-position: right 8px center;
-  cursor: pointer;
+  cursor: var(--cursor-pointer, pointer);
 }
 .textarea {
   height: auto;
@@ -741,7 +757,7 @@ kbd {
   border: 1px solid var(--line-2);
   border-radius: 999px;
   background: var(--bg-3);
-  cursor: pointer;
+  cursor: var(--cursor-pointer, pointer);
   transition:
     background 0.12s,
     border-color 0.12s;
@@ -773,5 +789,5 @@ kbd {
 }
 .switch:disabled {
   opacity: var(--fade-off);
-  cursor: default;
+  cursor: var(--cursor-arrow, default);
 }

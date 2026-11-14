@@ -1,6 +1,7 @@
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { WeaponSetMode } from "$lib/engine.svelte";
+import { CURSORS, cursorValue } from "$lib/cursors";
 
 const KEY = "pob-redux:ui";
 /** Must match the window's minimum size in tauri.conf.json. */
@@ -39,6 +40,7 @@ class UiStore {
   treeAscCentre = $state(true);
   tabIcons = $state(false);
   squirePreview = $state(false);
+  cursor = $state("system");
   paletteOpen = $state(false);
   newBuildOpen = $state(false);
   jump = $state<Jump | null>(null);
@@ -63,8 +65,10 @@ class UiStore {
       if (typeof saved.treeAscCentre === "boolean") this.treeAscCentre = saved.treeAscCentre;
       if (typeof saved.tabIcons === "boolean") this.tabIcons = saved.tabIcons;
       if (typeof saved.squirePreview === "boolean") this.squirePreview = saved.squirePreview;
+      if (typeof saved.cursor === "string" && CURSORS.includes(saved.cursor)) this.cursor = saved.cursor;
     } catch {}
     this.applyTheme();
+    this.applyCursor();
     this.systemLight.addEventListener("change", () => this.applyTheme());
     this.systemContrast.addEventListener("change", () => this.applyContrast());
     void this.applyScale();
@@ -145,6 +149,27 @@ class UiStore {
     this.setScale(this.scale + direction * SCALE_STEP);
   }
 
+  setCursor(id: string) {
+    this.cursor = id === "system" || CURSORS.includes(id) ? id : "system";
+    this.applyCursor();
+    this.save();
+  }
+
+  private applyCursor() {
+    const el = document.documentElement;
+    const values = {
+      "--cursor-arrow": cursorValue(this.cursor, "arrow", "default"),
+      "--cursor-pointer": cursorValue(this.cursor, "hover", "pointer"),
+      "--cursor-click": cursorValue(this.cursor, "click", "default"),
+    };
+    const on = Object.values(values).every(Boolean);
+    el.classList.toggle("game-cursor", on);
+    for (const [name, value] of Object.entries(values)) {
+      if (on && value) el.style.setProperty(name, value);
+      else el.style.removeProperty(name);
+    }
+  }
+
   private applyTheme() {
     const effective = this.theme === "system" ? (this.systemLight.matches ? "light" : "dark") : this.theme;
     document.documentElement.dataset.theme = effective;
@@ -199,6 +224,7 @@ class UiStore {
           treeAscCentre: this.treeAscCentre,
           tabIcons: this.tabIcons,
           squirePreview: this.squirePreview,
+          cursor: this.cursor,
         }),
       );
     } catch {}

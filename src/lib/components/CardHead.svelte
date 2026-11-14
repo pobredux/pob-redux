@@ -47,7 +47,7 @@
     color: var(--fg-1);
     font: inherit;
     text-align: left;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
     user-select: none;
     transition:
       background 120ms,

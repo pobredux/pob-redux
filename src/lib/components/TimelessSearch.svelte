@@ -469,7 +469,7 @@
     color: var(--fg-1);
     font: inherit;
     text-align: left;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .row:hover {
     background: var(--bg-hover);
@@ -499,7 +499,7 @@
     background: none;
     border: 0;
     color: var(--fg-3);
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
     font: inherit;
   }
   .want .x:hover {
@@ -554,7 +554,7 @@
     color: var(--fg-1);
     font: inherit;
     text-align: left;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .res:hover {
     background: var(--bg-hover);

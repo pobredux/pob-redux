@@ -162,7 +162,7 @@
     color: var(--fg-2);
     background: transparent;
     border: 0;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .seg button.on {
     background: var(--bg-active);
@@ -212,7 +212,7 @@
     color: var(--fg-1);
     font: inherit;
     text-align: left;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .row:hover {
     background: var(--bg-hover);

@@ -269,7 +269,7 @@
     border-radius: var(--r-1);
     display: grid;
     place-items: center;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
     -webkit-app-region: no-drag;
   }
   .sb:hover {
@@ -321,7 +321,7 @@
     background-color: var(--bg-hover);
   }
   .gsel:disabled {
-    cursor: default;
+    cursor: var(--cursor-arrow, default);
     opacity: 0.6;
   }
   .gsel option {
@@ -349,7 +349,7 @@
     color: var(--fg-2);
     font-size: var(--fs-sm);
     padding: 0 16px;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
     position: relative;
     letter-spacing: 0.01em;
   }
@@ -397,7 +397,7 @@
   }
   .tab:disabled {
     color: var(--fg-4);
-    cursor: default;
+    cursor: var(--cursor-arrow, default);
   }
   .spacer {
     display: flex;
@@ -439,7 +439,7 @@
     border: 0;
     background: transparent;
     color: var(--fg-2);
-    cursor: default;
+    cursor: var(--cursor-arrow, default);
     display: grid;
     place-items: center;
   }
@@ -455,7 +455,7 @@
     width: 40px;
     margin-right: 6px;
     border-right: 1px solid var(--line-0);
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .wc.close:hover {
     background: #c42b1c;

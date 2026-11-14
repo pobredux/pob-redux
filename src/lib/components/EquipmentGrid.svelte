@@ -137,8 +137,8 @@
   .cell { position: relative; container-type: size; min-width: 0; min-height: 0; border: 1px solid var(--line-1); border-radius: 3px; background: var(--bg-0); }
   .cell.occupied { border-color: color-mix(in srgb, var(--rarity) 40%, var(--line-0)); background: color-mix(in srgb, var(--rarity) 7%, var(--bg-0)); }
   .cell.occupied:hover, .cell:focus-within, .cell.selected { border-color: var(--rarity); box-shadow: 0 0 0 1px var(--rarity); }
-  .gear { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; padding: 3px; background: none; border: 0; color: var(--fg-2); cursor: pointer; }
-  .gear:disabled { cursor: default; }
+  .gear { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; padding: 3px; background: none; border: 0; color: var(--fg-2); cursor: var(--cursor-pointer, pointer); }
+  .gear:disabled { cursor: var(--cursor-arrow, default); }
   .gear:focus-visible, .gem:focus-visible { outline: 2px solid var(--fg-0); outline-offset: 2px; }
   .empty { font-size: 9px; line-height: 1.2; overflow-wrap: anywhere; opacity: 0.55; }
   .cell.off .gear { opacity: 0.4; filter: grayscale(1); }
@@ -159,7 +159,7 @@
   .inset-art { display: flex; align-items: center; justify-content: center; width: 60%; height: 60%; }
   .gem .inset-art { width: 120%; height: 120%; flex-shrink: 0; }
   .rune .inset-art { width: 90%; height: 90%; flex-shrink: 0; }
-  .gem { position: absolute; transform: translate(-50%, -50%); display: flex; align-items: center; justify-content: center; width: 41.6667%; aspect-ratio: 1; padding: 0; background: transparent; border: 0; border-radius: 50%; cursor: pointer; pointer-events: auto; }
+  .gem { position: absolute; transform: translate(-50%, -50%); display: flex; align-items: center; justify-content: center; width: 41.6667%; aspect-ratio: 1; padding: 0; background: transparent; border: 0; border-radius: 50%; cursor: var(--cursor-pointer, pointer); pointer-events: auto; }
   .gem.disabled { opacity: 0.45; }
   .extras { display: flex; justify-content: center; flex-wrap: wrap; gap: 5px; margin: 10px auto 0; max-width: 400px; }
   .extras .cell { width: 38px; height: 62px; }

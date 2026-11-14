@@ -175,7 +175,7 @@
     color: var(--fg-0);
     font: inherit;
     text-align: left;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
     transition: background 120ms;
   }
   .picker:hover:not(:disabled),
@@ -187,7 +187,7 @@
     outline-offset: -1px;
   }
   .picker:disabled {
-    cursor: default;
+    cursor: var(--cursor-arrow, default);
   }
   .tile {
     flex: none;
@@ -284,7 +284,7 @@
     font: inherit;
     font-size: var(--fs-sm);
     text-align: left;
-    cursor: pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
   .mi:hover,
   .mi:focus-visible {
