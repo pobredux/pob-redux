@@ -153,10 +153,16 @@ fn fetch(key: &str, hash: &str, store: &Path) -> Result<()> {
     fs::create_dir_all(store)?;
     let part = store.join(format!("{key}.part"));
     let url = format!("{ART_BASE}/{key}");
-    let status = Command::new("curl").args(["-fsSL", "--retry", "3", "-o"]).arg(&part).arg(&url).status().context("run curl")?;
+    // Cloudflare sometimes resets an HTTP/2 stream, which curl only retries with --retry-all-errors.
+    let status = Command::new("curl")
+        .args(["-fsSL", "--retry", "5", "--retry-delay", "2", "--retry-all-errors", "-o"])
+        .arg(&part)
+        .arg(&url)
+        .status()
+        .context("run curl")?;
     if !status.success() {
         let _ = fs::remove_file(&part);
-        bail!("download {url} failed; was it uploaded (bun scripts/downloads.ts upload)?");
+        bail!("download {url} failed (curl {status}): a network error, or the file is not on R2 (bun run downloads check)");
     }
     let bytes = fs::read(&part)?;
     if sha256(&bytes) != hash {
