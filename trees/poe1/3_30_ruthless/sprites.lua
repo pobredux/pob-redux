@@ -15695,6 +15695,91 @@ return {
                 }
             }
         },
+        ["tattooActiveEffect"]= {
+            ["filename"]= "tattoo-active-effect-3.webp",
+            ["w"]= 700,
+            ["h"]= 705,
+            ["coords"]= {
+                ["Art/2DArt/UIImages/InGame/AncestralTrial/PassiveTreeTattoos/NgamahuTribePassiveBG.png"]= {
+                    ["x"]= 0,
+                    ["y"]= 0,
+                    ["w"]= 140,
+                    ["h"]= 138
+                },
+                ["Art/2DArt/UIImages/InGame/AncestralTrial/PassiveTreeTattoos/KitavaTribePassiveBG.png"]= {
+                    ["x"]= 140,
+                    ["y"]= 0,
+                    ["w"]= 140,
+                    ["h"]= 138
+                },
+                ["Art/2DArt/UIImages/InGame/AncestralTrial/PassiveTreeTattoos/TukohamaTribePassiveBG.png"]= {
+                    ["x"]= 280,
+                    ["y"]= 0,
+                    ["w"]= 140,
+                    ["h"]= 138
+                },
+                ["Art/2DArt/UIImages/InGame/AncestralTrial/PassiveTreeTattoos/RongokuraiTribePassiveBG.png"]= {
+                    ["x"]= 420,
+                    ["y"]= 0,
+                    ["w"]= 140,
+                    ["h"]= 138
+                },
+                ["Art/2DArt/UIImages/InGame/AncestralTrial/PassiveTreeTattoos/TasalioTribePassiveBG.png"]= {
+                    ["x"]= 560,
+                    ["y"]= 0,
+                    ["w"]= 140,
+                    ["h"]= 138
+                },
+                ["Art/2DArt/UIImages/InGame/AncestralTrial/PassiveTreeTattoos/ArohonguiTribePassiveBG.png"]= {
+                    ["x"]= 0,
+                    ["y"]= 138,
+                    ["w"]= 140,
+                    ["h"]= 138
+                },
+                ["Art/2DArt/UIImages/InGame/AncestralTrial/PassiveTreeTattoos/RamakoTribePassiveBG.png"]= {
+                    ["x"]= 140,
+                    ["y"]= 138,
+                    ["w"]= 140,
+                    ["h"]= 138
+                },
+                ["Art/2DArt/UIImages/InGame/AncestralTrial/PassiveTreeTattoos/HinekoraTribePassiveBG.png"]= {
+                    ["x"]= 280,
+                    ["y"]= 138,
+                    ["w"]= 140,
+                    ["h"]= 138
+                },
+                ["Art/2DArt/UIImages/InGame/AncestralTrial/PassiveTreeTattoos/TawhoaTribePassiveBG.png"]= {
+                    ["x"]= 420,
+                    ["y"]= 138,
+                    ["w"]= 140,
+                    ["h"]= 138
+                },
+                ["Art/2DArt/UIImages/InGame/AncestralTrial/PassiveTreeTattoos/ValakoTribePassiveBG.png"]= {
+                    ["x"]= 560,
+                    ["y"]= 138,
+                    ["w"]= 140,
+                    ["h"]= 138
+                },
+                ["Art/2DArt/UIImages/InGame/AncestralTrial/PassiveTreeTattoos/HinekoraPassiveBG.png"]= {
+                    ["x"]= 0,
+                    ["y"]= 276,
+                    ["w"]= 288,
+                    ["h"]= 291
+                },
+                ["Art/2DArt/UIImages/InGame/AncestralTrial/PassiveTreeTattoos/KeystoneHinekoraPassiveBG.png"]= {
+                    ["x"]= 288,
+                    ["y"]= 276,
+                    ["w"]= 288,
+                    ["h"]= 291
+                },
+                ["Art/2DArt/UIImages/InGame/Village/RuneCraftingPassiveBG.png"]= {
+                    ["x"]= 0,
+                    ["y"]= 567,
+                    ["w"]= 140,
+                    ["h"]= 138
+                }
+            }
+        },
         ["ascendancy"]= {
             ["filename"]= "ascendancy-3.webp",
             ["w"]= 3347,
