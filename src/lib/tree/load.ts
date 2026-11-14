@@ -1,5 +1,6 @@
 import { readTreeJson } from "$lib/engine.svelte";
 import { build } from "$lib/state/build.svelte";
+import { treeArt } from "$lib/state/tree-art.svelte";
 import { AssetStore } from "./assets";
 import { parseTree, type TreeModel } from "./model";
 
@@ -9,12 +10,13 @@ export interface LoadedTree {
 }
 
 // The tree view unmounts on every tab switch; the last tree outlives it.
-let last: { version: string; tree: Promise<LoadedTree> } | null = null;
+let last: { key: string; tree: Promise<LoadedTree> } | null = null;
 
 export function loadTree(version: string): Promise<LoadedTree> {
-  if (last?.version !== version) {
+  const key = `${version}#${treeArt.generation}`;
+  if (last?.key !== key) {
     const tree = Promise.all([readTreeJson(version), loadArt(version)]).then(([json, assets]) => ({ model: parseTree(version, json), assets }));
-    const entry = { version, tree };
+    const entry = { key, tree };
     tree.catch(() => {
       if (last === entry) last = null;
     });
@@ -25,6 +27,7 @@ export function loadTree(version: string): Promise<LoadedTree> {
 
 // pob-sync builds sprite sheets for the newest tree only.
 async function loadArt(version: string): Promise<AssetStore | null> {
+  await treeArt.settled();
   const latest = build.meta?.latestTreeVersion;
   return (await AssetStore.load(version)) ?? (latest && latest !== version ? AssetStore.load(latest) : null);
 }

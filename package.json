@@ -15,6 +15,7 @@
     "sync:poe2": "cargo run -p pob-sync -- --tree-assets",
     "sync:poe1": "cargo run -p pob-sync -- --game poe1 --tree-assets",
     "sync:fast": "cargo run -p pob-sync -- && cargo run -p pob-sync -- --game poe1",
+    "tree-art": "bun scripts/tree-art.ts",
     "ctl": "cargo run -p pob-engine --bin pobctl --",
     "golden": "cargo run -p pob-engine --bin pobctl -- --pob-root src-tauri/resources/pob golden corpus/poe2/index.json --out target/golden-poe2.json --baseline golden/poe2.json --check",
     "golden:accept": "cargo run -p pob-engine --bin pobctl -- --pob-root src-tauri/resources/pob golden corpus/poe2/index.json --out golden/poe2.json",

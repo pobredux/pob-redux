@@ -86,6 +86,8 @@ export class AssetStore {
         img.onload = () => done(img);
         img.onerror = () => {
           slot.failed = true;
+          this.onReady();
+          for (const fn of this.listeners) fn();
         };
         img.src = url;
       };
@@ -128,18 +130,14 @@ export class AssetStore {
       return img ? [img, 1] : null;
     }
     const size = Math.max(r.w, r.h);
-    let file = r.file;
-    let scale = 1;
-    for (const l of lods) {
-      if (l.scale > scale && size / l.scale >= 2 * px) {
-        file = l.file;
-        scale = l.scale;
-      }
-    }
-    const img = this.image(file);
-    if (img) return [img, scale];
     const all = [{ file: r.file, scale: 1 }, ...lods];
-    for (const l of [...all.filter((l) => l.scale < scale).reverse(), ...all.filter((l) => l.scale > scale)]) {
+    let want = 0;
+    for (let i = 1; i < all.length; i++) if (size / all[i].scale >= 2 * px) want = i;
+    // Without the downloaded art only the offline copies exist, so a missing file falls back to a smaller one.
+    while (want < all.length - 1 && this.slots.get(all[want].file)?.failed) want++;
+    const img = this.image(all[want].file);
+    if (img) return [img, all[want].scale];
+    for (const l of [...all.slice(0, want).reverse(), ...all.slice(want + 1)]) {
       const s = this.slots.get(l.file);
       if (s?.ready && s.img) return [s.img, l.scale];
     }

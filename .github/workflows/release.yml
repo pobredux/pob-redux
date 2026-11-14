@@ -117,8 +117,11 @@ jobs:
       - name: Vendor Path of Building
         if: steps.pob.outputs.cache-hit != 'true'
         run: |
-          cargo run -p pob-sync -- --source upstream/PathOfBuilding-PoE2 --tree-assets
-          cargo run -p pob-sync -- --game poe1 --source upstream/PathOfBuilding --tree-assets
+          cargo run -p pob-sync -- --source upstream/PathOfBuilding-PoE2
+          cargo run -p pob-sync -- --game poe1 --source upstream/PathOfBuilding
+
+      - name: Check the tree art is on R2
+        run: bun scripts/tree-art.ts check
 
       # Builds, signs the updater artifacts with the minisign key, creates or
       # updates the release, and generates latest.json from the signatures.

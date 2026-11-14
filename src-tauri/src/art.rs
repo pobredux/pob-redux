@@ -47,7 +47,7 @@ async fn download(segments: &[&str], version: Option<&str>) -> Option<Vec<u8>> {
     res.bytes().await.ok().map(|b| b.to_vec())
 }
 
-fn write_atomic(path: &Path, bytes: &[u8]) -> bool {
+pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> bool {
     static NEXT: AtomicU64 = AtomicU64::new(0);
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);

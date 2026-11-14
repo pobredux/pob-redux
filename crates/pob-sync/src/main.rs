@@ -18,6 +18,7 @@ use clap::Parser;
 use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
+mod art;
 mod assets;
 mod lua_json;
 
@@ -64,8 +65,7 @@ struct Cli {
     /// Delete the destination first.
     #[arg(long)]
     clean: bool,
-    /// Build the latest tree's sprite manifest (TreeData/<ver>/web/): decoded
-    /// DDS sheets for PoE2, the shipped PNG/JPG/WebP sheets for PoE1.
+    /// Rebuild the newest tree's art into target/tree-art and record it in trees/<game>/art.json.
     #[arg(long)]
     tree_assets: bool,
     /// Proceed even if the checkout's HEAD differs from the pinned commit.
@@ -114,6 +114,7 @@ struct SyncInfo {
     files: usize,
     bytes: u64,
     tree_assets: bool,
+    tree_art: Option<String>,
     patches: Vec<String>,
     trees: Vec<String>,
     unlisted_trees: Vec<String>,
@@ -260,17 +261,17 @@ fn main() -> Result<()> {
     }
     wanted.insert(versions_rel);
 
-    let latest = latest_tree_version(&tree_root);
-    let web_rel = latest.as_ref().map(|(v, _)| Path::new("TreeData").join(v).join("web"));
+    let (latest, src_tree) = latest_tree_version(&tree_root).context("no <major>_<minor> tree folder in trees/")?;
+    let art_path = tree_root.join("art.json");
+    let store = workspace.join("target").join("tree-art").join("store");
     if cli.tree_assets {
-        let (latest, src_tree) = latest.as_ref().context("no <major>_<minor> tree folder in trees/")?;
-        let dest_tree = dest.join("TreeData").join(latest);
+        let build_tree = workspace.join("target").join("tree-art").join("build").join(game.id()).join(&latest);
         let a = if src_tree.join("sprites.lua").is_file() {
-            assets::build_sprites(src_tree, &tree_root, &dest_tree, latest)?
+            assets::build_sprites(&src_tree, &tree_root, &build_tree, &latest)?
         } else {
-            let sheets = sheet_dir(src_tree, &pob_tree_root.join(latest));
+            let sheets = sheet_dir(&src_tree, &pob_tree_root.join(&latest));
             println!("tree sheets: {}", sheets.display());
-            assets::build(src_tree, &sheets, &tree_root, &dest_tree, latest)?
+            assets::build(&src_tree, &sheets, &tree_root, &build_tree, &latest)?
         };
         println!(
             "tree assets: {} sheets, {} layers -> {} files, {:.1} MB",
@@ -282,11 +283,16 @@ fn main() -> Result<()> {
         for s in &a.skipped {
             eprintln!("  skipped {s}");
         }
+        art::save(&art::record(&build_tree.join("web"), &latest, &store)?, &art_path)?;
     }
-    let has_web = web_rel
-        .as_ref()
-        .map(|w| dest.join(w).join("manifest.json").is_file())
-        .unwrap_or(false);
+    let tree_art = art::load(&art_path)?;
+    let mut fetched = 0;
+    if let Some(a) = &tree_art {
+        if a.version != latest {
+            bail!("trees/{}/art.json is for tree {} but the newest tree is {latest}; rebuild it with --tree-assets", game.id(), a.version);
+        }
+        fetched = art::install(a, &dest, &store, &mut wanted)?;
+    }
 
     // Pure-Lua libraries from the runtime (json, xml, base64, sha1, ...).
     let rt_lua = source.join("runtime/lua");
@@ -330,7 +336,8 @@ fn main() -> Result<()> {
         synced_at_unix: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs(),
         files: stats.0,
         bytes: stats.1,
-        tree_assets: has_web,
+        tree_assets: tree_art.is_some(),
+        tree_art: tree_art.as_ref().map(|a| a.version.clone()),
         patches: patches.clone(),
         trees: trees.clone(),
         unlisted_trees: unlisted.clone(),
@@ -344,10 +351,6 @@ fn main() -> Result<()> {
         let entry = entry?;
         let rel = entry.path().strip_prefix(&dest)?.to_path_buf();
         if rel.as_os_str().is_empty() {
-            continue;
-        }
-        // Decoded tree assets are regenerated only with --tree-assets; keep them otherwise.
-        if web_rel.as_ref().map(|w| rel.starts_with(w)).unwrap_or(false) {
             continue;
         }
         if entry.file_type().is_file() && !wanted.contains(&rel) {
@@ -370,6 +373,10 @@ fn main() -> Result<()> {
         trees.len(),
         if unlisted.is_empty() { "none".to_string() } else { unlisted.join(", ") }
     );
+    match &tree_art {
+        Some(a) => println!("  tree art {}: {} files, {} shipped for offline use, {fetched} fetched from R2", a.version, a.files.len(), a.offline.len()),
+        None => println!("  no trees/{}/art.json: the app has no tree art (build it with --tree-assets)", game.id()),
+    }
     Ok(())
 }
 

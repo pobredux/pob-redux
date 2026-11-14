@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 mod art;
+mod tree_art;
 mod mcp;
 mod tools;
 mod library;
@@ -1103,6 +1104,7 @@ fn set_game(app: tauri::AppHandle, state: State<'_, AppState>, game: Game) -> Re
         let old = std::mem::replace(&mut *state.rt.write().unwrap(), fresh);
         old.pool.release();
         old.engine.shutdown();
+        tree_art::ensure(&app, game, state.pob_root());
     }
     Ok(game_status_of(&state))
 }
@@ -1168,7 +1170,13 @@ fn serve_pob_asset(
     if rel.contains("..") {
         return respond(StatusCode::FORBIDDEN, Vec::new(), "text/plain");
     }
-    let path = state.pob_root().join(&rel);
+    let pob_root = state.pob_root();
+    let mut path = pob_root.join(&rel);
+    if !path.is_file() {
+        if let Some(found) = tree_art::locate(ctx.app_handle(), &pob_root, &rel) {
+            path = found;
+        }
+    }
     let mime = match path.extension().and_then(|e| e.to_str()) {
         Some("png") => "image/png",
         Some("webp") => "image/webp",
@@ -1267,6 +1275,7 @@ pub fn run() {
             log::info!("game: {}", game.id());
             log::info!("user dir: {}", user_dir.display());
             let rt = boot_runtime(handle, game, &user_dir);
+            tree_art::ensure(handle, game, rt.pob_root.clone());
             let session = begin_session(handle);
             app.manage(AppState {
                 rt: std::sync::RwLock::new(rt),
@@ -1324,6 +1333,8 @@ pub fn run() {
             set_game,
             build_file_game,
             build_xml_game,
+            tree_art::tree_art_status,
+            tree_art::tree_art_retry,
             read_tree_json,
             list_builds,
             list_game_builds,

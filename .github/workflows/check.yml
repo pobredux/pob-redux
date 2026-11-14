@@ -99,8 +99,8 @@ jobs:
       - name: Vendor Path of Building
         if: steps.pob.outputs.cache-hit != 'true'
         run: |
-          cargo run -p pob-sync -- --source upstream/PathOfBuilding-PoE2 --tree-assets
-          cargo run -p pob-sync -- --game poe1 --source upstream/PathOfBuilding --tree-assets
+          cargo run -p pob-sync -- --source upstream/PathOfBuilding-PoE2
+          cargo run -p pob-sync -- --game poe1 --source upstream/PathOfBuilding
 
       - name: Check every PoB stat label has a message key
         run: bun run check:labels

@@ -11,6 +11,7 @@ clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 walkdir.workspace = true
+sha2 = "0.11"
 toml = "1"
 zstd = "0.14"
 image_dds = { version = "0.7", default-features = false, features = ["ddsfile", "image"] }
