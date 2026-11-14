@@ -249,6 +249,9 @@
     }
   ],
   "ov_health_ok": "Nothing to fix",
+  "ov_move": "Move {section}: drag the header, or use the arrow keys",
+  "ov_drop_here": "Drag a section here",
+  "ov_reset_layout": "Reset layout",
   "ov_defences": "Defences",
   "ov_defences_sum": "largest hit you survive",
   "ov_lowest_hit": "The smallest of your maximum hits",

@@ -1,4 +1,8 @@
 <script lang="ts">
+  import { tick } from "svelte";
+  import { flip } from "svelte/animate";
+  import { overviewLayout, type Column, type PanelId } from "$lib/state/overview-layout.svelte";
+  import { sortDrag } from "$lib/sortable";
   import { engine, type BuildSummary, type ItemInfo, type SanityCheck, type SlotInfo, type Tooltip } from "$lib/engine.svelte";
   import { build, type ViewId } from "$lib/state/build.svelte";
   import { ui, type Jump } from "$lib/state/ui.svelte";
@@ -203,6 +207,48 @@
     clearTimeout(tipTimer);
     tip = null;
   }
+
+  const heads = $derived<Record<PanelId, { title: string; sum: string; num?: boolean }>>({
+    gear: { title: m.ov_gear(), sum: m.ov_gear_sum({ count: slots.filter((s) => s.itemId > 0 && !s.nodeId && s.shown !== false && !s.inactive).length }) },
+    skills: { title: m.ov_skills(), sum: m.ov_skills_sum({ count: skillRows.length }) },
+    health: { title: m.ov_health(), sum: findings.length ? m.ov_health_sum({ count: findings.length }) : m.ov_health_ok() },
+    defences: { title: m.ov_defences(), sum: m.ov_defences_sum() },
+    passives: {
+      title: m.ov_passives(),
+      sum: info ? `${info.points.used}/${info.points.max} · ${info.points.ascUsed}/${info.points.ascMax} ${m.tree_points_asc()}` : "",
+      num: true,
+    },
+  });
+
+  let pageEl = $state<HTMLDivElement>();
+  const colEls: Partial<Record<Column, HTMLDivElement>> = {};
+  let dragging = $state<PanelId | null>(null);
+
+  function startDrag(e: PointerEvent, id: PanelId) {
+    sortDrag<Column>(e, {
+      id,
+      zones: () => [
+        { column: "left", el: colEls.left },
+        { column: "right", el: colEls.right },
+      ],
+      scroller: () => pageEl,
+      move: (column, index) => overviewLayout.move(id, column, index),
+      onstart: () => (dragging = id),
+      onend: () => {
+        dragging = null;
+        overviewLayout.save();
+      },
+    });
+  }
+
+  async function nudge(e: KeyboardEvent, id: PanelId) {
+    if (!e.key.startsWith("Arrow")) return;
+    e.preventDefault();
+    if (!overviewLayout.nudge(id, e.key)) return;
+    overviewLayout.save();
+    await tick();
+    pageEl?.querySelector<HTMLElement>(`[data-grip="${id}"]`)?.focus();
+  }
 </script>
 
 {#snippet pin(stat: string | null)}
@@ -214,8 +260,8 @@
 {/snippet}
 
 {#if info}
-  <div class="page">
-    <div class="col">
+  <div class="page" class:sorting={dragging !== null} bind:this={pageEl}>
+    <div class="col" bind:this={colEls.left}>
       <section class="panel">
         <div class="hero">
           <div class="portrait-wrap">
@@ -280,11 +326,32 @@
         </div>
       </section>
 
-      <section class="panel">
-        <div class="ph">
-          <span class="t">{m.ov_gear()}</span>
-          <span class="s">{m.ov_gear_sum({ count: slots.filter((s) => s.itemId > 0 && !s.nodeId && s.shown !== false && !s.inactive).length })}</span>
+      {@render panels("left")}
+    </div>
+    <div class="col" bind:this={colEls.right}>
+      {@render panels("right")}
+    </div>
+    {#if overviewLayout.changed}<button class="reset" onclick={() => overviewLayout.reset()}>{m.ov_reset_layout()}</button>{/if}
+  </div>
+
+  {#snippet panels(column: Column)}
+    {#each overviewLayout.columns[column] as id (id)}
+      <section class="panel" class:dragging={dragging === id} data-sort={id} animate:flip={{ duration: 160 }}>
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="ph" onpointerdown={(e) => startDrag(e, id)}>
+          <button class="grip" data-grip={id} aria-label={m.ov_move({ section: heads[id].title })} title={m.ov_move({ section: heads[id].title })} onkeydown={(e) => nudge(e, id)}>
+            <Icon name="dots-six-vertical" size={12} />
+          </button>
+          <span class="t">{heads[id].title}</span>
+          <span class="s" class:num={heads[id].num}>{heads[id].sum}</span>
         </div>
+        {#if id === "gear"}{@render gearBody()}{:else if id === "skills"}{@render skillsBody()}{:else if id === "health"}{@render healthBody()}{:else if id === "defences"}{@render defencesBody()}{:else}{@render passivesBody()}{/if}
+      </section>
+    {/each}
+    {#if !overviewLayout.columns[column].length}<div class="slot-empty">{m.ov_drop_here()}</div>{/if}
+  {/snippet}
+
+  {#snippet gearBody()}
         <EquipmentGrid
           {slots}
           {items}
@@ -297,10 +364,9 @@
           ongemhover={(e, g, i) => showTip(e, () => engine.gemTooltip(g, i))}
           onleave={hideTip}
         />
-      </section>
+  {/snippet}
 
-      <section class="panel">
-        <div class="ph"><span class="t">{m.ov_skills()}</span><span class="s">{m.ov_skills_sum({ count: skillRows.length })}</span></div>
+  {#snippet skillsBody()}
         <div class="skills">
           {#each skillRows.slice(0, SHOWN) as r, i}
             {#if r.press === "persistent" && (i === 0 || skillRows[i - 1].press !== "persistent")}
@@ -317,12 +383,9 @@
             <button class="sk more" onclick={() => go("skills")}>{m.ov_more_skills({ count: skillRows.length - SHOWN })}</button>
           {/if}
         </div>
-      </section>
-    </div>
+  {/snippet}
 
-    <div class="col">
-      <section class="panel">
-        <div class="ph"><span class="t">{m.ov_health()}</span><span class="s">{findings.length ? m.ov_health_sum({ count: findings.length }) : m.ov_health_ok()}</span></div>
+  {#snippet healthBody()}
         {#each findings as f, i (i)}
           {@const view = AREA_VIEW[f.area]}
           <div class="finding">
@@ -331,10 +394,9 @@
             {#if view}<button class="golink" onclick={() => go(view)}>{VIEW_LABEL[view]} →</button>{/if}
           </div>
         {/each}
-      </section>
+  {/snippet}
 
-      <section class="panel">
-        <div class="ph"><span class="t">{m.ov_defences()}</span><span class="s">{m.ov_defences_sum()}</span></div>
+  {#snippet defencesBody()}
         <div class="hits">
           {#each hits as h (h.key)}
             <div class="hit" class:weak={weakest?.key === h.key} style:color={h.color} title={weakest?.key === h.key ? m.ov_lowest_hit() : undefined} {...bd(h.key)}>
@@ -354,13 +416,9 @@
           {@render kv("ManaRegenRecovery", m.ov_mana_regen(), `${fmt(n("ManaRegenRecovery"), 1)}/s`)}
           {@render kv("EffectiveMovementSpeedMod", m.ov_movement(), `${n("EffectiveMovementSpeedMod") >= 1 ? "+" : ""}${fmt((n("EffectiveMovementSpeedMod") - 1) * 100, 1)}%`)}
         </div>
-      </section>
+  {/snippet}
 
-      <section class="panel">
-        <div class="ph">
-          <span class="t">{m.ov_passives()}</span>
-          <span class="s num">{info.points.used}/{info.points.max} · {info.points.ascUsed}/{info.points.ascMax} {m.tree_points_asc()}</span>
-        </div>
+  {#snippet passivesBody()}
         <div class="pass">
           {#if nodesBy.keystones.length}
             <span class="k">{m.ov_keystones()}</span>
@@ -380,9 +438,8 @@
             <span>{m.ov_jewels_sum({ count: jewels.length })}{#if jewels.some((j) => j.itemRarity === "UNIQUE")}{` · ${m.ov_jewels_unique({ count: jewels.filter((j) => j.itemRarity === "UNIQUE").length })}`}{/if}</span>
           {/if}
         </div>
-      </section>
-    </div>
-  </div>
+  {/snippet}
+
   {#if ascOpen}<CharacterDialog mode="ascendancy" onclose={() => (ascOpen = false)} />{/if}
   {#if nodeTip}
     {@const id = nodeTip.node.id}
@@ -415,8 +472,19 @@
     display: grid;
     grid-template-columns: minmax(0, 1.5fr) minmax(320px, 1fr);
     gap: 14px;
-    align-items: start;
+    align-content: start;
     background: var(--bg-0);
+    scrollbar-width: none;
+  }
+  .page::-webkit-scrollbar {
+    display: none;
+  }
+  .sorting {
+    cursor: grabbing;
+    user-select: none;
+  }
+  .sorting .panel > :not(.ph) {
+    pointer-events: none;
   }
   @media (max-width: 1100px) {
     .page {
@@ -424,6 +492,7 @@
     }
   }
   .col {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 14px;
@@ -435,6 +504,9 @@
     background: var(--bg-1);
     overflow: hidden;
   }
+  .panel.dragging {
+    border-color: var(--focus);
+  }
   .ph {
     display: flex;
     align-items: baseline;
@@ -442,6 +514,61 @@
     padding: 7px 12px;
     border-bottom: 1px solid var(--line-1);
     background: var(--bg-3);
+  }
+  [data-sort] > .ph {
+    padding-left: 6px;
+    cursor: grab;
+    user-select: none;
+  }
+  .sorting .ph {
+    cursor: grabbing;
+  }
+  .grip {
+    appearance: none;
+    align-self: center;
+    display: grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    border: 0;
+    border-radius: 3px;
+    background: none;
+    color: var(--fg-4);
+    cursor: inherit;
+  }
+  .ph:hover .grip,
+  .dragging .grip {
+    color: var(--fg-2);
+  }
+  .grip:focus-visible {
+    outline: 1px solid var(--focus);
+    color: var(--fg-1);
+  }
+  .slot-empty {
+    display: grid;
+    place-items: center;
+    min-height: 96px;
+    border: 1px dashed var(--line-2);
+    border-radius: var(--r-2);
+    color: var(--fg-3);
+    font-size: var(--fs-xs);
+  }
+  .reset {
+    grid-column: 1 / -1;
+    justify-self: end;
+    appearance: none;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--fg-3);
+    font: inherit;
+    font-size: var(--fs-xs);
+    cursor: pointer;
+  }
+  .reset:hover {
+    color: var(--fg-1);
+    text-decoration: underline;
   }
   .ph .t {
     font-size: var(--fs-xs);
