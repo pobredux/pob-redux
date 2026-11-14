@@ -707,6 +707,10 @@
     flex-direction: column;
     gap: 14px;
     padding: 14px;
+    scrollbar-width: none;
+  }
+  .cards::-webkit-scrollbar {
+    display: none;
   }
   .sectiongrid {
     position: relative;

@@ -412,6 +412,10 @@
     flex: 1;
     overflow-y: auto;
     padding: 14px;
+    scrollbar-width: none;
+  }
+  .scroll::-webkit-scrollbar {
+    display: none;
   }
   .count {
     margin-left: auto;
