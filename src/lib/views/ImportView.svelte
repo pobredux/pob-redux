@@ -1600,7 +1600,6 @@
       </div>
     {/if}
     {#if flash}<div class="flash">{flash}</div>{/if}
-    <div class="legal dim small">{m.ggg_disclaimer()}</div>
   </section>
 </div>
 
@@ -1634,10 +1633,6 @@
   }
   .side .panel-head > .label {
     color: var(--fg-1);
-  }
-  .legal {
-    margin-top: auto;
-    padding: 10px;
   }
   .toolbar {
     display: flex;
