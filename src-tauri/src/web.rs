@@ -20,9 +20,9 @@ const EXCERPT: usize = 700;
 const MAX_MATCHES: usize = 6;
 
 pub(crate) fn defs(game: Game) -> Vec<ToolDef> {
-    let (wiki, db, home) = match game {
-        Game::Poe2 => ("poe2wiki.net", "poe2db.tw", "pathofexile2.com"),
-        Game::Poe1 => ("poewiki.net", "poedb.tw", "pathofexile.com"),
+    let (wiki, db, sites) = match game {
+        Game::Poe2 => ("poe2wiki.net", "poe2db.tw", "poe2db.tw, poe2wiki.net, pathofexile2.com and pathofexile.com"),
+        Game::Poe1 => ("poewiki.net", "poedb.tw", "poedb.tw, poewiki.net and pathofexile.com"),
     };
     let notes = match game {
         Game::Poe2 => "https://www.pathofexile.com/forum/view-forum/2212",
@@ -65,7 +65,7 @@ pub(crate) fn defs(game: Game) -> Vec<ToolDef> {
         lookup(
             "read_web_page",
             format!(
-                "Read a web page as text. Only {db}, {wiki}, {home} and pathofexile.com can be read; any other address is refused. Patch notes are listed at {notes}. Long pages come in parts: pass `find` to jump to the lines you need, or `offset` from the previous part's next_offset. The user approves each lookup."
+                "Read a web page as text. Only {sites} can be read; any other address is refused. Patch notes are listed at {notes}. Long pages come in parts: pass `find` to jump to the lines you need, or `offset` from the previous part's next_offset. The user approves each lookup."
             ),
             json!({
                 "type": "object",

@@ -1597,7 +1597,7 @@ mod tests {
     #[test]
     fn poe1_registry_speaks_poe1() {
         let d = defs(Game::Poe1);
-        assert_eq!(d.len(), 80, "PoE1 tool count changed");
+        assert_eq!(d.len(), 83, "PoE1 tool count changed");
         for (name, _) in POE1_TEXT {
             assert!(d.iter().any(|t| t.name == *name), "POE1_TEXT names {name}, which is not a tool");
         }
@@ -1615,7 +1615,7 @@ mod tests {
     #[test]
     fn registry_is_stable_and_measured() {
         let d = defs(Game::Poe2);
-        assert_eq!(d.len(), 77, "tool count changed");
+        assert_eq!(d.len(), 80, "tool count changed");
 
         let mut names: Vec<&str> = d.iter().map(|t| t.name).collect();
         names.sort_unstable();
