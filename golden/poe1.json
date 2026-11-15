@@ -1,5 +1,5 @@
 {
-"pob": {"commit":"f5ca0aeeeeba62d7d2c93b1fbd0704c74d54e7ea","game":"poe1","patches":["0001-Parse-the-current-wording-of-the-trigger-on-skill-use-craft.patch","0002-Fix-Node-Power-giving-nodes-another-node-s-score.patch","0003-Include-tattoos-in-the-Node-Power-cache-key.patch"],"version":"2.67.2"},
+"pob": {"commit":"f5ca0aeeeeba62d7d2c93b1fbd0704c74d54e7ea","game":"poe1","patches":["0001-Parse-the-current-wording-of-the-trigger-on-skill-use-craft.patch","0002-Fix-Node-Power-giving-nodes-another-node-s-score.patch","0003-Include-tattoos-in-the-Node-Power-cache-key.patch","0004-Restore-the-crucible-supports-the-3.30-export-dropped.patch"],"version":"2.67.2"},
 "corpus": "39ad10d71056a19bc274f71935531c484372b1ae",
 "stats": "curated",
 "builds": {
