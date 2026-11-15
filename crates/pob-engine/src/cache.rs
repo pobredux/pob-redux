@@ -61,9 +61,24 @@ fn write_atomic(path: &Path, parts: &[&[u8]]) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
+    replace_file(path, parts, false)
+}
+
+pub(crate) fn replace_file(path: &Path, parts: &[&[u8]], durable: bool) -> std::io::Result<()> {
     let seq = TEMP_SEQ.fetch_add(1, Ordering::Relaxed);
     let tmp = path.with_extension(format!("tmp{}-{seq}", std::process::id()));
-    let written = std::fs::File::create(&tmp).and_then(|mut file| parts.iter().try_for_each(|part| file.write_all(part)));
+    let mut file = std::fs::File::create_new(&tmp)?;
+    let written = (|| {
+        #[cfg(unix)]
+        if durable {
+            if let Ok(metadata) = path.metadata() {
+                file.set_permissions(metadata.permissions())?;
+            }
+        }
+        parts.iter().try_for_each(|part| file.write_all(part))?;
+        if durable { file.sync_all() } else { Ok(()) }
+    })();
+    drop(file);
     written.and_then(|()| std::fs::rename(&tmp, path)).inspect_err(|_| {
         let _ = std::fs::remove_file(&tmp);
     })

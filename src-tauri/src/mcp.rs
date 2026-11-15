@@ -73,17 +73,54 @@ pub(crate) fn saved_token(app: &AppHandle) -> Option<String> {
 /// client configured with it keeps working across restarts.
 fn load_or_create_token(app: &AppHandle) -> Result<String, String> {
     let path = token_path(app)?;
-    if let Ok(existing) = std::fs::read_to_string(&path) {
-        let existing = existing.trim().to_string();
-        if existing.len() >= 32 {
-            return Ok(existing);
-        }
+    token_in_file(&path).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+fn token_in_file(path: &std::path::Path) -> std::io::Result<String> {
+    use std::io::{Read, Seek, Write};
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true).write(true).create(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(path)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+    }
+    let mut existing = String::new();
+    file.read_to_string(&mut existing)?;
+    let existing = existing.trim();
+    if existing.len() >= 32 {
+        return Ok(existing.to_string());
     }
     let mut bytes = [0u8; 32];
-    getrandom::fill(&mut bytes).map_err(|e| e.to_string())?;
+    getrandom::fill(&mut bytes).map_err(std::io::Error::other)?;
     let token: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
-    std::fs::write(&path, &token).map_err(|e| format!("{}: {e}", path.display()))?;
+    file.rewind()?;
+    file.set_len(0)?;
+    file.write_all(token.as_bytes())?;
     Ok(token)
+}
+
+#[cfg(all(test, unix))]
+mod token_tests {
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn token_file_is_private_when_created_and_reused() {
+        let path = std::env::temp_dir().join(format!("pob-mcp-token-test-{}", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let token = super::token_in_file(&path).unwrap();
+        assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        assert_eq!(super::token_in_file(&path).unwrap(), token);
+        assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+        std::fs::remove_file(path).unwrap();
+    }
 }
 
 #[derive(Serialize, Clone)]

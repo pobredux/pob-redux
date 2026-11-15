@@ -14,6 +14,34 @@ use tokio::sync::{mpsc, oneshot};
 
 type Pending = Arc<Mutex<HashMap<u64, oneshot::Sender<Result<Value, String>>>>>;
 
+struct PendingRequest<'a> {
+    pending: &'a Pending,
+    id: u64,
+}
+
+impl Drop for PendingRequest<'_> {
+    fn drop(&mut self) {
+        self.pending.lock().unwrap().remove(&self.id);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn abandoning_a_request_removes_only_its_entry() {
+        let pending = Pending::default();
+        let (request, _) = oneshot::channel();
+        let (other, _) = oneshot::channel();
+        pending.lock().unwrap().extend([(1, request), (2, other)]);
+        drop(PendingRequest { pending: &pending, id: 1 });
+        let waiting = pending.lock().unwrap();
+        assert!(!waiting.contains_key(&1));
+        assert!(waiting.contains_key(&2));
+    }
+}
+
 /// Answers a request from the child: `{"result": ...}` or `{"error": {...}}`.
 pub(super) type Handler = Box<dyn Fn(&str, &Value) -> Value + Send + Sync>;
 
@@ -40,12 +68,12 @@ impl Rpc {
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         let (tx, rx) = oneshot::channel();
         self.pending.lock().unwrap().insert(id, tx);
+        let _request = PendingRequest { pending: &self.pending, id };
         self.send(json!({ "id": id, "method": method, "params": params })).await?;
         let out = match timeout {
             Some(t) => tokio::time::timeout(t, rx).await.map_err(|_| format!("{} did not answer {method}", self.name))?,
             None => rx.await,
         };
-        self.pending.lock().unwrap().remove(&id);
         out.map_err(|_| format!("{} stopped before answering {method}", self.name))?
     }
 

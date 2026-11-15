@@ -759,6 +759,12 @@ M.load_build_xml = function(p)
 	-- `path` keeps the build attached to its file, for a snapshot of a saved
 	-- build restored at startup.
 	local path = type(p.path) == "string" and p.path ~= "" and p.path or false
+	if path and type(p.recoverAfter) == "number" then
+		local modified = native.file_modified_ms(path)
+		if modified and modified > p.recoverAfter then
+			return M.load_build_file({ path = path })
+		end
+	end
 	return openBuild(path, p.name or "Imported build", p.xml)
 end
 
@@ -823,17 +829,24 @@ end
 
 M.save_build_file = function(p)
 	ensureBuild()
-	if p and p.path then
-		build.dbFileName = p.path
-		build.buildName = p.path:match("([^/\\]+)%.xml$") or build.buildName
-	end
-	if not build.dbFileName then
+	local path = p and p.path or build.dbFileName
+	if not path then
 		error("build has no file name; pass params.path", 0)
 	end
-	if build:SaveDBFile() then
-		error("could not write " .. tostring(build.dbFileName), 0)
+	if type(path) ~= "string" or path == "" then
+		error("params.path must be a nonempty string", 0)
 	end
-	-- SaveDBFile resets the mod flags; `unsaved` is only recomputed in OnFrame.
+	local xml = build:SaveDB(path)
+	if not xml then
+		error("could not serialize " .. path, 0)
+	end
+	local ok, err = pcall(native.save_build_file, path, xml)
+	if not ok then error("could not write " .. path .. ": " .. tostring(err), 0) end
+	if p and p.path then
+		build.dbFileName = path
+		build.buildName = path:match("([^/\\]+)%.xml$") or build.buildName
+	end
+	build:ResetModFlags()
 	frame()
 	return { ok = true, path = build.dbFileName, unsaved = build.unsaved == true }
 end
@@ -6581,9 +6594,7 @@ M.trade_rows = function()
 end
 
 -- What the Trader offers in this game. The option values are the strings PoB's own code compares against.
-M.trade_options = function()
-	ensureBuild()
-	local gen = itemUtil.tradeGenerator()
+function itemUtil.tradeCurrencies(gen)
 	local currencies = array({})
 	local i = 1
 	while true do
@@ -6597,9 +6608,14 @@ M.trade_options = function()
 		end
 		i = i + 1
 	end
+	return currencies
+end
+
+M.trade_options = function()
+	ensureBuild()
 	local behaviours = array({ "Copy Current", "Keep", "Remove" })
 	return {
-		currencies = currencies,
+		currencies = itemUtil.tradeCurrencies(itemUtil.tradeGenerator()),
 		realms = array(IS_POE2 and { "poe2" } or { "pc", "xbox", "sony" }),
 		jewelTypes = array(IS_POE2 and { "Base", "Radius", "Any" } or { "Base", "Abyss", "Any" }),
 		sorts = array({ "StatValue", "StatValuePrice", "Price", "Weight" }),
@@ -6657,11 +6673,7 @@ function itemUtil.tradeModFilters(list)
 	return out[1] and out or nil
 end
 
-M.trade_search_start = function(p)
-	ensureBuild()
-	p = p or {}
-	local target = itemUtil.tradeTarget(p)
-	local gen = itemUtil.tradeGenerator()
+function itemUtil.tradeSearchOptions(p, target, gen)
 	local slot = target.slot
 	local name = slot and slot.slotName or ""
 	local isJewel = name:find("Jewel") ~= nil
@@ -6729,18 +6741,31 @@ M.trade_search_start = function(p)
 		if not statusIndex then error("unknown trade status " .. tostring(p.status), 0) end
 	end
 	gen.tradeTypeIndex = statusIndex
+	return options
+end
+
+local function tradeQueryJson(query)
+	if type(query) == "table" then
+		return dkjson.encode({ query = query, sort = { ["statgroup.0"] = "desc" } })
+	end
+	return query
+end
+
+M.trade_search_start = function(p)
+	ensureBuild()
+	p = p or {}
+	local target = itemUtil.tradeTarget(p)
+	local gen = itemUtil.tradeGenerator()
+	local options = itemUtil.tradeSearchOptions(p, target, gen)
 	tradeState = { done = false }
 	gen.requesterContext = nil
 	gen.requesterCallback = function(_, query, errMsg)
 		tradeState.done = true
 		-- PoE2's generator hands back the bare filter table; PoE1's still sends the full JSON body.
-		if type(query) == "table" then
-			query = dkjson.encode({ query = query, sort = { ["statgroup.0"] = "desc" } })
-		end
-		tradeState.query = query
+		tradeState.query = tradeQueryJson(query)
 		tradeState.err = errMsg and tostring(errMsg) or nil
 	end
-	gen:StartQuery(slot, options)
+	gen:StartQuery(target.slot, options)
 	if not gen.calcContext or not gen.calcContext.co then
 		-- StartQuery bailed (unsupported slot/item type)
 		if not tradeState.done then error("this slot's item type is not supported for trade search generation", 0) end
@@ -6765,6 +6790,88 @@ M.trade_search_result = function()
 	if not tradeState or not tradeState.done then error("no finished trade search", 0) end
 	if tradeState.err then error(tradeState.err, 0) end
 	return { query = tradeState.query }
+end
+
+local function tradeUrlEncode(value)
+	return (value:gsub("[^A-Za-z0-9_.~%-]", function(c) return string.format("%%%02X", c:byte()) end))
+end
+
+M.weighted_trade_link = function(p)
+	ensureBuild()
+	local slotName = itemUtil.resolveSlotName(p.slot)
+	local target = itemUtil.tradeTarget({ slotName = slotName })
+	local item = new("Item"):Item(p.item_text)
+	if not item.base then error("could not parse item text (unrecognised base type or format)", 0) end
+	if item.rarity ~= "RARE" or item.clusterJewel then error("weighted search requires a supported rare item", 0) end
+	if target.slot.inactive or not build.itemsTab:IsItemValidForSlot(item, slotName) then
+		error(item.name .. " does not fit active slot " .. slotName, 0)
+	end
+	local realm = p.realm or (IS_POE2 and "poe2" or "pc")
+	if realm ~= itemUtil.tradeRealm(realm) then error("unsupported trade realm for this game", 0) end
+	local league = p.league:match("^%s*(.-)%s*$")
+	if league == "" or league == "." or league == ".." or league:find("[%c/\\]") then error("invalid trade league", 0) end
+
+	local statWeights = p.stat_weights
+	if statWeights then
+		local known, seen = {}, {}
+		for _, stat in ipairs(data.powerStatList) do
+			if stat.stat and not stat.ignoreForItems then known[stat.stat] = true end
+		end
+		if #statWeights == 0 then error("stat_weights needs at least one stat", 0) end
+		for _, weight in ipairs(statWeights) do
+			if not known[weight.stat] or seen[weight.stat] then
+				error("unknown or duplicate build stat " .. tostring(weight.stat), 0)
+			end
+			seen[weight.stat] = true
+		end
+	end
+
+	-- The generator reads its reference from items[selItemId], while the calculator uses the live build.
+	local gen = new("TradeQueryGenerator"):TradeQueryGenerator({ itemsTab = { build = build, items = { item } } })
+	local currency = p.currency == "equivalent" and "" or p.currency
+	local validCurrency = false
+	for _, entry in ipairs(itemUtil.tradeCurrencies(gen)) do
+		if entry.id == currency then validCurrency = true break end
+	end
+	if not validCurrency then error("unsupported trade currency: " .. p.currency, 0) end
+	local options = itemUtil.tradeSearchOptions({
+		statWeights = statWeights, status = p.status, maxPrice = p.max_price, maxPriceType = currency,
+		maxLevel = p.max_level, sockets = p.sockets, links = p.links,
+		jewelType = IS_POE2 and item.baseName:find("^Time%-Lost ") and "Radius" or nil,
+	}, target, gen)
+	if p.sockets and not options.sockets then error("socket filter is unavailable for this slot", 0) end
+	if p.links and not options.links then error("link filter is unavailable for this slot or game", 0) end
+
+	local query, queryError
+	gen.requesterCallback = function(_, result, err)
+		query, queryError = tradeQueryJson(result), err
+	end
+	local ok, err = pcall(function()
+		gen:StartQuery({ slotName = slotName, selItemId = 1 }, options)
+		local co = gen.calcContext.co
+		if not co then error("this item's category is unsupported by the weighted trade generator", 0) end
+		local deadline = GetTime() + 30000
+		while coroutine.status(co) ~= "dead" do
+			if GetTime() >= deadline then error("weighted trade calculation timed out", 0) end
+			local resumed, failure = coroutine.resume(co, gen)
+			if not resumed then error(failure, 0) end
+		end
+		gen.calcContext.co = nil
+		gen:FinishQuery()
+	end)
+	if gen.calcContext.popup and main.popups[1] == gen.calcContext.popup then main:ClosePopup() end
+	if not ok then error(err, 0) end
+	if queryError then error(queryError, 0) end
+	local search = query and dkjson.decode(query)
+	local weight = search and search.query and search.query.stats and search.query.stats[1]
+	if not weight or weight.type ~= "weight" or not weight.filters[1] then
+		error("PoB found no mods to weigh for this item and build objective", 0)
+	end
+	local path = IS_POE2 and "/trade2/search/poe2/" or (realm == "pc" and "/trade/search/" or "/trade/search/" .. realm .. "/")
+	return {
+		tradeUrl = "https://www.pathofexile.com" .. path .. tradeUrlEncode(league) .. "?q=" .. tradeUrlEncode(query),
+		itemName = item.name, slot = slotName, realm = realm, league = league, maxPrice = p.max_price, currency = p.currency,
+	}
 end
 
 -- With a realm, that realm's leagues. Without one, each league once, as the links built before realms needed.

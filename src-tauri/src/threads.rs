@@ -72,8 +72,14 @@ pub fn thread_save(app: AppHandle, game: String, id: String, meta: String, data:
 pub fn thread_delete(app: AppHandle, game: String, id: String) -> Result<(), String> {
     let dir = dir(&app, &game)?;
     let id = checked(&id)?;
-    let _ = std::fs::remove_file(dir.join(format!("{id}.json")));
-    let _ = std::fs::remove_file(dir.join(format!("{id}.meta.json")));
+    for suffix in [".json", ".meta.json"] {
+        let path = dir.join(format!("{id}{suffix}"));
+        match std::fs::remove_file(&path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(format!("could not delete {}: {e}", path.display())),
+        }
+    }
     if let Ok(base) = app.path().app_local_data_dir() {
         crate::agent::remove_later(base.join("agent").join(format!("t-{id}")));
     }

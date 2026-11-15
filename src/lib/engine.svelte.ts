@@ -1787,7 +1787,8 @@ export const engine = {
       buildPath: string;
     }>("version"),
   newBuild: (name?: string) => call<BuildInfo>("new_build", { name }),
-  loadBuildXml: (xml: string, name?: string, path?: string) => call<BuildInfo>("load_build_xml", { xml, name, path }),
+  loadBuildXml: (xml: string, name?: string, path?: string, recoverAfter?: number) =>
+    call<BuildInfo>("load_build_xml", { xml, name, path, recoverAfter }),
   loadBuildCode: (code: string, name?: string) => call<BuildInfo>("load_build_code", { code, name }),
   /** Which game a share code belongs to, without loading it. */
   codeGame: (code: string) => call<{ game: "poe1" | "poe2" | null }>("code_game", { code }),
