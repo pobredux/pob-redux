@@ -1267,7 +1267,22 @@
   "tree_power_scoring": "scoring…",
   "tree_power_note_title": "Time to score every eligible node, and how many engines shared the work",
   "tree_power_counts": "{count} nodes · {seconds}s",
-  "tree_power_elapsed": "{ms} ms · {engines} engines",
+  "tree_power_elapsed": [
+    {
+      "declarations": [
+        "input ms",
+        "input engines",
+        "local enginesPlural = engines: plural"
+      ],
+      "selectors": [
+        "enginesPlural"
+      ],
+      "match": {
+        "enginesPlural=one": "{ms} ms · {engines} engine",
+        "enginesPlural=*": "{ms} ms · {engines} engines"
+      }
+    }
+  ],
   "tree_power_elapsed_one": "{ms} ms · 1 engine",
   "tree_url_placeholder": "https://www.pathofexile.com/passive-skill-tree/…",
   "tree_import": "Import",
