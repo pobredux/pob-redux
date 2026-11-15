@@ -12,4 +12,4 @@ commit = "2450f2fc6ff5d35ace9b35bcd9d31e648ae9d7f1"
 
 [poe1]
 source_path = "../PathOfBuilding"
-commit = "a69391d6daaaea1aaf8054668a094aad88dd7eaa"
+commit = "f5ca0aeeeeba62d7d2c93b1fbd0704c74d54e7ea"
