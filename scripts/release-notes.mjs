@@ -67,6 +67,14 @@ if (breaking.length) {
   out.push("");
 }
 
+// A Path of Building pin bump is a chore that changes the numbers, so it is listed.
+const pins = commits.filter((c) => c.type === "chore" && c.scope === "pob" && !c.breaking);
+if (pins.length) {
+  out.push("### Path of Building", "");
+  for (const c of pins) out.push(`- ${c.text}`);
+  out.push("");
+}
+
 for (const [type, heading] of SECTIONS) {
   const group = commits.filter((c) => c.type === type && !c.breaking);
   if (!group.length) continue;
@@ -79,14 +87,15 @@ if (!out.length) out.push("No user-facing changes.", "");
 
 // Which upstream revision this build's calculations come from. For this app
 // that is as much a part of the release as the code.
-const pinned = /^commit\s*=\s*"([^"]+)"/m.exec(readFileSync(join(root, "pob-sync.toml"), "utf8"))?.[1];
-if (pinned) {
-  out.push(
-    `Built against [Path of Building (PoE2) \`${pinned.slice(0, 10)}\`]` +
-      `(https://github.com/PathOfBuildingCommunity/PathOfBuilding-PoE2/commit/${pinned}).`,
-    "",
-  );
-}
+const syncToml = readFileSync(join(root, "pob-sync.toml"), "utf8");
+const pinOf = (game) => new RegExp(`^\\[${game}\\][^\\[]*?^commit\\s*=\\s*"([^"]+)"`, "ms").exec(syncToml)?.[1];
+const builds = [
+  ["PoE2", pinOf("poe2"), "PathOfBuilding-PoE2"],
+  ["PoE1", pinOf("poe1"), "PathOfBuilding"],
+]
+  .filter(([, pinned]) => pinned)
+  .map(([game, pinned, repo]) => `[Path of Building (${game}) \`${pinned.slice(0, 10)}\`](https://github.com/PathOfBuildingCommunity/${repo}/commit/${pinned})`);
+if (builds.length) out.push(`Built against ${builds.join(" and ")}.`, "");
 
 out.push(
   "Windows: run the `.exe` installer. Linux: `.rpm` on Fedora and openSUSE, `.deb` on Debian, Ubuntu and Chromebooks, or the `.AppImage`. The `aarch64` and `arm64` files are for ARM64 Linux. macOS: open the `.dmg`.",
