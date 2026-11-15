@@ -464,7 +464,15 @@ fn apply_patches(dir: &Path, src: &Path, dest: &Path, wanted: &mut HashSet<PathB
             }
             let from = src.join(&rel);
             if from.is_file() {
-                fs::copy(&from, dest.join(&rel)).with_context(|| format!("recopy {}", rel.display()))?;
+                // Patches are LF; a Windows checkout is CRLF, which git apply cannot match at a file's unterminated end.
+                let bytes = fs::read(&from).with_context(|| format!("read {}", rel.display()))?;
+                let lf: Vec<u8> = bytes
+                    .iter()
+                    .enumerate()
+                    .filter(|&(i, &b)| !(b == b'\r' && bytes.get(i + 1) == Some(&b'\n')))
+                    .map(|(_, &b)| b)
+                    .collect();
+                fs::write(dest.join(&rel), lf).with_context(|| format!("recopy {}", rel.display()))?;
             }
         }
     }
