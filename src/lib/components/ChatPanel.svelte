@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { chat, experimentDelta, MAX_WIDTH, MIN_WIDTH, type ToolTurn } from "$lib/state/chat.svelte";
+  import { chat, experimentDelta, lookupSite, MAX_WIDTH, MIN_WIDTH, type ToolTurn } from "$lib/state/chat.svelte";
   import Icon from "$lib/components/Icon.svelte";
   import ModelPicker from "$lib/components/ModelPicker.svelte";
   import TraitsPicker from "$lib/components/TraitsPicker.svelte";
@@ -379,7 +379,7 @@
         {:else}
           <div class="tool" class:err={turn.status === "error"} class:recovered={recovered.has(turn.id)}>
             <button class="tline" aria-expanded={!!expanded[turn.id]} onclick={() => (expanded[turn.id] = !expanded[turn.id])}>
-              <span class="ticon"><Icon name={turn.readOnly ? "eye" : "pencil"} size={11} /></span>
+              <span class="ticon"><Icon name={turn.lookup ? "globe" : turn.readOnly ? "eye" : "pencil"} size={11} /></span>
               <span class="tname">{turn.name}</span>
               <span class="targs">{summary(turn)}</span>
               <span class="tstat {turn.status}">{recovered.has(turn.id) ? m.chat_tool_recovered() : turn.status}</span>
@@ -399,7 +399,14 @@
                 {/if}
               </div>
             {/if}
-            {#if turn.status === "awaiting"}
+            {#if turn.status === "awaiting" && turn.lookup}
+              <div class="approve">
+                <span>{m.chat_web_lookup({ site: lookupSite(turn) })}</span>
+                <button class="btn sm" onclick={() => chat.resolveApproval(turn.id, true)}>{m.chat_allow()}</button>
+                <button class="btn sm ghost" onclick={() => chat.resolveApproval(turn.id, true, true)}>{m.chat_allow_site()}</button>
+                <button class="btn sm ghost" onclick={() => chat.resolveApproval(turn.id, false)}>{m.chat_skip()}</button>
+              </div>
+            {:else if turn.status === "awaiting"}
               <div class="approve">
                 <span>{m.chat_changes_build()}</span>
                 <button class="btn sm" onclick={() => chat.resolveApproval(turn.id, true)}>{m.chat_run()}</button>
@@ -888,11 +895,15 @@
   }
   .approve {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 6px;
     margin-top: 5px;
     color: var(--warn);
     font-size: var(--fs-2xs);
+  }
+  .approve > span {
+    flex: 1 0 100%;
   }
   .always {
     display: flex;

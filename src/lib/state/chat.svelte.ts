@@ -212,9 +212,24 @@ export interface ToolTurn {
   name: string;
   args: unknown;
   readOnly: boolean;
+  lookup?: boolean;
   status: "awaiting" | "running" | "done" | "error" | "skipped";
   result?: unknown;
   error?: string;
+}
+
+const WIKI: Record<Game, string> = { poe2: "poe2wiki.net", poe1: "poewiki.net" };
+const DB: Record<Game, string> = { poe2: "poe2db.tw", poe1: "poedb.tw" };
+
+/** The site a web lookup reads. Approving it for the thread covers that site. */
+export function lookupSite(turn: Pick<ToolTurn, "name" | "args">): string {
+  if (turn.name === "search_wiki") return WIKI[game.current];
+  if (turn.name === "search_poedb") return DB[game.current];
+  try {
+    return new URL(String((turn.args as { url?: unknown } | null)?.url ?? "")).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
 }
 
 export type Turn =
@@ -1049,8 +1064,9 @@ class ChatStore {
   /** Answer a pending approval chip. `always` covers that tool for the rest of the conversation. */
   resolveApproval(id: string, ok: boolean, always = false) {
     const turn = this.turns.find((t) => t.kind === "tool" && t.id === id) as ToolTurn | undefined;
-    if (ok && always && turn && !this.allowedTools.includes(turn.name)) {
-      this.allowedTools = [...this.allowedTools, turn.name];
+    const key = turn && this.approvalKey(turn);
+    if (ok && always && key && !this.allowedTools.includes(key)) {
+      this.allowedTools = [...this.allowedTools, key];
     }
     const fn = this.pending.get(id);
     if (fn) {
@@ -1059,16 +1075,22 @@ class ChatStore {
     }
   }
 
-  /** Whether a write waits for the user instead of running at once. */
-  private asks(name: string): boolean {
-    return this.askFirst && !this.allowWrites && !this.allowedTools.includes(name);
+  private approvalKey(turn: ToolTurn): string {
+    return turn.lookup ? `web:${lookupSite(turn)}` : turn.name;
+  }
+
+  /** Whether a write or a web lookup waits for the user instead of running at once. */
+  private asks(turn: ToolTurn): boolean {
+    if (turn.readOnly && !turn.lookup) return false;
+    if (this.allowedTools.includes(this.approvalKey(turn))) return false;
+    return turn.lookup || (this.askFirst && !this.allowWrites);
   }
 
   /** Every write lands inside the reply's checkpoint, so Undo covers it. */
   private async approve(turn: ToolTurn): Promise<boolean> {
-    if (turn.readOnly) return true;
-    const ok = this.asks(turn.name) ? await new Promise<boolean>((resolve) => this.pending.set(turn.id, resolve)) : true;
-    if (ok) await this.startExperiment();
+    if (turn.readOnly && !turn.lookup) return true;
+    const ok = this.asks(turn) ? await new Promise<boolean>((resolve) => this.pending.set(turn.id, resolve)) : true;
+    if (ok && !turn.readOnly) await this.startExperiment();
     return ok;
   }
 
@@ -1204,8 +1226,8 @@ class ChatStore {
             break;
           case "tool": {
             at = -1;
-            const waits = e.awaiting && this.asks(e.name);
-            const turn: ToolTurn = { kind: "tool", id: e.id, name: e.name, args: e.args, readOnly: e.readOnly, status: waits ? "awaiting" : "running" };
+            const turn: ToolTurn = { kind: "tool", id: e.id, name: e.name, args: e.args, readOnly: e.readOnly, lookup: e.readOnly && e.awaiting, status: "running" };
+            if (e.awaiting && this.asks(turn)) turn.status = "awaiting";
             this.turns = [...this.turns, turn];
             if (e.awaiting) {
               void this.approve(turn).then((ok) => {
@@ -1413,6 +1435,7 @@ class ChatStore {
     try {
       if (!this.defs.length) this.defs = await loadToolDefs();
       const readOnly = new Map(this.defs.map((d) => [d.name, d.read_only]));
+      const lookups = new Set(this.defs.filter((d) => d.read_only && d.open_world).map((d) => d.name));
       const model = this.buildModel();
       const level = this.effortLevel;
       const providerOptions = level ? { openaiCompatible: { reasoningEffort: level } } : undefined;
@@ -1500,8 +1523,10 @@ class ChatStore {
             name: call.toolName,
             args: call.input,
             readOnly: readOnly.get(call.toolName) ?? false,
-            status: readOnly.get(call.toolName) || !this.asks(call.toolName) ? "running" : "awaiting",
+            lookup: lookups.has(call.toolName),
+            status: "running",
           };
+          if (this.asks(turn)) turn.status = "awaiting";
           this.turns = [...this.turns, turn];
 
           if (call.toolName === FIND_TOOLS) {
@@ -1547,7 +1572,12 @@ class ChatStore {
               type: "tool-result",
               toolName: call.toolName,
               toolCallId: call.toolCallId,
-              output: { type: "text", value: "The user declined this change. Do not retry it; suggest an alternative or ask why." },
+              output: {
+                type: "text",
+                value: turn.lookup
+                  ? "The user declined this lookup. Do not retry it; answer from the app's own tools, and say what you could not check."
+                  : "The user declined this change. Do not retry it; suggest an alternative or ask why.",
+              },
             });
             continue;
           }

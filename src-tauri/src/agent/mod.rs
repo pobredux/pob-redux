@@ -31,6 +31,8 @@ pub(crate) use which::restore_host_env;
 
 /// Characters of one tool result the model sees; the panel still gets all of it.
 const MAX_RESULT_CHARS: usize = 6000;
+const DECLINED_CHANGE: &str = "The user declined this change. Do not retry it; suggest an alternative or ask why.";
+const DECLINED_LOOKUP: &str = "The user declined this lookup. Do not retry it; answer from the app's own tools, and say what you could not check.";
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "lowercase")]
@@ -235,7 +237,8 @@ impl Gate {
         }
 
         let id = format!("{}-{}", self.prefix, self.seq.fetch_add(1, Ordering::Relaxed) + 1);
-        let awaiting = !def.read_only;
+        let lookup = def.read_only && def.open_world;
+        let awaiting = !def.read_only || lookup;
         let rx = awaiting.then(|| {
             let (tx, rx) = oneshot::channel();
             self.pending.lock().unwrap().insert(id.clone(), tx);
@@ -245,7 +248,7 @@ impl Gate {
         if let Some(rx) = rx {
             if !rx.await.unwrap_or(false) {
                 self.emit(AgentEvent::ToolFailed { id, error: String::new(), skipped: true });
-                return Err("The user declined this change. Do not retry it; suggest an alternative or ask why.".into());
+                return Err(if lookup { DECLINED_LOOKUP } else { DECLINED_CHANGE }.into());
             }
         }
 

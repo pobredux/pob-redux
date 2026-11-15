@@ -44,6 +44,10 @@ export const ALLOWED = new Set([
   "search_timeless_seeds",
   "list_bases",
   "list_affixes",
+  // Web lookups, limited to the game's own sites. The panel asks before each one.
+  "search_poedb",
+  "search_wiki",
+  "read_web_page",
   // write, approval-gated
   "alloc_node",
   "alloc_path",

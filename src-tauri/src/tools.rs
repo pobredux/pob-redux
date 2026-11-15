@@ -261,6 +261,7 @@ pub(crate) fn defs(game: Game) -> Vec<ToolDef> {
     if game == Game::Poe1 {
         adapt_for_poe1(&mut all);
     }
+    all.extend(crate::web::defs(game));
     all
 }
 
@@ -935,6 +936,10 @@ pub(crate) async fn dispatch(
     name: String,
     mut args: JsonObject,
 ) -> Result<(Value, bool), ToolError> {
+    if let Some(out) = crate::web::run(ctx.game(), &name, &args).await {
+        ctx.calls.fetch_add(1, Ordering::Relaxed);
+        return out.map(|v| (v, false));
+    }
     if name == "load_build" {
         let url = args
             .get("source")

@@ -25,6 +25,7 @@ mod trade;
 mod assistant;
 mod threads;
 mod voice;
+mod web;
 
 use std::sync::Arc;
 
