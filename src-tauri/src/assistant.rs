@@ -29,7 +29,6 @@ pub struct Bounds {
 }
 
 // Async: building a window inside a synchronous command deadlocks on Windows.
-// Async: building a window inside a synchronous command deadlocks on Windows.
 #[tauri::command]
 pub async fn assistant_window_open(app: AppHandle, bounds: Option<Bounds>) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(LABEL) {
