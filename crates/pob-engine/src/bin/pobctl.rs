@@ -248,8 +248,12 @@ fn corpus_selection(index: &Value, per_ascendancy: Option<usize>) -> Vec<Value> 
 }
 
 /// A corpus stage as ingest measured it: its loadout, and its main skill.
-fn load_stage(engine: &pob_engine::EngineHandle, stage: &Value, xml_dir: &std::path::Path) -> Result<(), pob_engine::Error> {
-    let xml = xml_dir.join(format!("{}.xml", stage["source"].as_str().unwrap_or_default()));
+fn load_stage(engine: &pob_engine::EngineHandle, stage: &Value, corpus_dir: &std::path::Path) -> Result<(), pob_engine::Error> {
+    // A merged index names each stage's file; one snapshot's own index keeps them in xml/.
+    let xml = match stage["xml"].as_str() {
+        Some(path) => corpus_dir.join(path),
+        None => corpus_dir.join("xml").join(format!("{}.xml", stage["source"].as_str().unwrap_or_default())),
+    };
     engine.call("load_build_file", json!({ "path": xml.to_string_lossy() }))?;
     if let Some(name) = stage["loadout"].as_str() {
         engine.call("select_loadout", json!({ "name": name }))?;
@@ -278,7 +282,7 @@ fn corpus_cmd(cfg: EngineConfig, o: CorpusOpts) -> Result<Value, pob_engine::Err
     let index: Value = serde_json::from_str(&text).map_err(|e| Error::Other(format!("{}: {e}", o.index.display())))?;
     // PoB resolves a relative build path against its own folders, so hand it absolute ones.
     let index_path = std::path::absolute(&o.index).map_err(|e| Error::Other(format!("{}: {e}", o.index.display())))?;
-    let xml_dir = index_path.parent().map(|p| p.join("xml")).unwrap_or_else(|| PathBuf::from("xml"));
+    let corpus_dir = index_path.parent().map(PathBuf::from).unwrap_or_default();
     let done: std::collections::HashSet<String> = std::fs::read_to_string(&o.out)
         .unwrap_or_default()
         .lines()
@@ -314,7 +318,7 @@ fn corpus_cmd(cfg: EngineConfig, o: CorpusOpts) -> Result<Value, pob_engine::Err
             "mainSkill": stage["mainSkill"],
         });
         let mut run = || -> Result<(), Error> {
-            load_stage(&engine, stage, &xml_dir)?;
+            load_stage(&engine, stage, &corpus_dir)?;
             line["before"] = engine.call("get_stats", json!({ "fields": CORPUS_STATS }))?.result["stats"].clone();
             let sanity = engine.call("sanity_check", Value::Null)?.result;
             line["findings"] = json!(sanity["findings"].as_array().into_iter().flatten().map(|f| f["area"].clone()).collect::<Vec<_>>());
@@ -441,7 +445,6 @@ fn golden_cmd(cfg: EngineConfig, o: GoldenOpts) -> Result<Value, pob_engine::Err
     let index = read_json(&o.index)?;
     let index_path = std::path::absolute(&o.index).map_err(|e| Error::Other(format!("{}: {e}", o.index.display())))?;
     let corpus_dir = index_path.parent().map(PathBuf::from).unwrap_or_default();
-    let xml_dir = corpus_dir.join("xml");
     let corpus = corpus_commit(&corpus_dir);
     let stages = corpus_selection(&index, None);
     let code = golden_lua(o.all);
@@ -459,7 +462,7 @@ fn golden_cmd(cfg: EngineConfig, o: GoldenOpts) -> Result<Value, pob_engine::Err
                     let n = next.fetch_add(1, Ordering::Relaxed);
                     let Some(stage) = stages.get(n) else { break };
                     let mut entry = json!({ "ascendancy": stage["ascendancy"] });
-                    match load_stage(&engine, stage, &xml_dir).and_then(|_| engine.eval(&code)) {
+                    match load_stage(&engine, stage, &corpus_dir).and_then(|_| engine.eval(&code)) {
                         Ok(v) => {
                             entry["skill"] = v["skill"].clone();
                             entry["stats"] = if v["stats"].is_object() { v["stats"].clone() } else { json!({}) };
@@ -499,7 +502,11 @@ fn golden_cmd(cfg: EngineConfig, o: GoldenOpts) -> Result<Value, pob_engine::Err
     }
     if let Some(path) = &o.baseline {
         let baseline = read_json(path)?;
-        let mut diff = golden_diff(&baseline, &json!({ "builds": builds }), o.tolerance);
+        let units: std::collections::HashMap<String, String> = stages
+            .iter()
+            .filter_map(|s| Some((s["id"].as_str()?.to_string(), s["unit"].as_str()?.to_string())))
+            .collect();
+        let mut diff = golden_diff(&baseline, &json!({ "builds": builds }), o.tolerance, &units);
         if baseline["corpus"] != corpus {
             diff["corpusChanged"] = json!({ "baseline": baseline["corpus"], "now": corpus });
         }
@@ -510,13 +517,14 @@ fn golden_cmd(cfg: EngineConfig, o: GoldenOpts) -> Result<Value, pob_engine::Err
 }
 
 /// Every stat that moved by more than `tolerance` (relative, floored at 1) between two golden runs.
-fn golden_diff(base: &Value, new: &Value, tolerance: f64) -> Value {
+fn golden_diff(base: &Value, new: &Value, tolerance: f64, units: &std::collections::HashMap<String, String>) -> Value {
     let empty = serde_json::Map::new();
     let a = base["builds"].as_object().unwrap_or(&empty);
     let b = new["builds"].as_object().unwrap_or(&empty);
     let mut per_stat: std::collections::BTreeMap<String, (usize, f64)> = std::collections::BTreeMap::new();
     let mut rows: Vec<(f64, Value)> = Vec::new();
     let mut changed_builds = 0;
+    let mut changed_by_unit: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
     let mut skill_changes = Vec::new();
     for (id, before) in a {
         let Some(after) = b.get(id) else { continue };
@@ -537,10 +545,13 @@ fn golden_diff(base: &Value, new: &Value, tolerance: f64) -> Value {
             let e = per_stat.entry(k.clone()).or_insert((0, 0.0));
             e.0 += 1;
             e.1 = e.1.max(change);
-            rows.push((change, json!({ "id": id, "ascendancy": after["ascendancy"], "skill": after["skill"], "stat": k, "before": x, "after": y })));
+            rows.push((change, json!({ "id": id, "unit": units.get(id), "ascendancy": after["ascendancy"], "skill": after["skill"], "stat": k, "before": x, "after": y })));
         }
         if any {
             changed_builds += 1;
+            if let Some(unit) = units.get(id) {
+                *changed_by_unit.entry(unit.as_str()).or_default() += 1;
+            }
         }
     }
     rows.sort_by(|p, q| q.0.total_cmp(&p.0));
@@ -548,6 +559,7 @@ fn golden_diff(base: &Value, new: &Value, tolerance: f64) -> Value {
     json!({
         "compared": a.keys().filter(|id| b.contains_key(*id)).count(),
         "changedBuilds": changed_builds,
+        "changedByUnit": changed_by_unit,
         "changedValues": rows.len(),
         "perStat": per_stat.into_iter().map(|(k, (n, max))| (k, json!({ "builds": n, "maxChangePercent": percent(max) }))).collect::<serde_json::Map<_, _>>(),
         "largest": rows.iter().take(25).map(|(c, r)| { let mut r = r.clone(); r["changePercent"] = percent(*c); r }).collect::<Vec<_>>(),
