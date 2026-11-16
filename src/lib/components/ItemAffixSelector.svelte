@@ -111,8 +111,11 @@
     };
   }
 
+  const hasRange = $derived(tiers.some((tier) => tier.steps.length > 1));
+  const sliderMax = $derived(hasRange ? tiers.length * segment - 1 : Math.max(1, tiers.length));
+
   function sliderPosition(tierIndex: number, stepPosition: number): number {
-    return tierIndex * segment + stepPosition;
+    return hasRange ? tierIndex * segment + stepPosition : tierIndex + 1;
   }
 
   function makeChoice(tierIndex: number, step: AffixRollStep): Choice {
@@ -122,6 +125,12 @@
 
   function nearest(position: number): Choice | null {
     if (!tiers.length) return null;
+    if (!hasRange) {
+      const clamped = Math.max(1, Math.min(tiers.length, Math.round(position)));
+      const tierIndex = clamped - 1;
+      const tier = tiers[tierIndex];
+      return makeChoice(tierIndex, tier.steps[0]);
+    }
     const tierIndex = Math.min(tiers.length - 1, Math.max(0, Math.floor(position / segment)));
     const tier = tiers[tierIndex];
     const inTier = Math.min(100, Math.max(0, position - tierIndex * segment));
@@ -148,7 +157,9 @@
 
   async function changeFamily(seriesId: string) {
     if (changing || seriesId === selectedSeries || !onbegin()) return;
-    const fraction = shownChoice && tiers.length ? shownChoice.position / (tiers.length * segment - 1) : (slot.range ?? 0.5);
+    const fraction = shownChoice && sliderMax > 0
+      ? (hasRange ? shownChoice.position / sliderMax : (shownChoice.position - 1) / Math.max(1, sliderMax - 1))
+      : (slot.range ?? 0.5);
     changing = true;
     error = null;
     try {
@@ -257,7 +268,7 @@
     </div>
     {#if choices.length > 1 && shownChoice}
       <div class="slider-wrap">
-        <input use:restoreFocusAfterBusy type="range" min="0" max={tiers.length * segment - 1} step="1" value={shownChoice.position} disabled={changing}
+        <input use:restoreFocusAfterBusy type="range" min="0" max={sliderMax} step="1" value={shownChoice.position} disabled={changing}
           aria-label={m.items_affix_roll()}
           aria-valuetext={`${valueText}, ${shownChoice.affix ?? ""}, ${m.items_affix_tier({ tier: shownChoice.tier })}`}
           oninput={(e) => choose(Number(e.currentTarget.value), e.currentTarget)}
