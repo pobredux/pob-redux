@@ -131,9 +131,10 @@ jobs:
           persist-credentials: false
           path: corpus
 
+      # Core stages cover every gem, unique, item mod and tree feature the corpus holds; run the full set before a pin bump.
       - name: Compare calculated stats with golden/poe2.json
         if: env.HAS_CORPUS == 'true'
-        run: bun run golden
+        run: bun run golden -- --core
 
       # Each game's baseline names its own corpus commit, since the two games refresh separately.
       - name: Read the PoE1 baseline's corpus commit
@@ -153,4 +154,4 @@ jobs:
 
       - name: Compare calculated stats with golden/poe1.json
         if: env.HAS_CORPUS == 'true'
-        run: cargo run -p pob-engine --bin pobctl -- --pob-root src-tauri/resources/pob1 golden corpus-poe1/poe1/index.json --out target/golden-poe1.json --baseline golden/poe1.json --check
+        run: cargo run -p pob-engine --bin pobctl -- --pob-root src-tauri/resources/pob1 golden corpus-poe1/poe1/index.json --out target/golden-poe1.json --baseline golden/poe1.json --check --core

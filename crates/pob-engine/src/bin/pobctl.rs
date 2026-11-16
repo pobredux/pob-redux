@@ -132,6 +132,9 @@ enum Cmd {
         /// Exit with status 1 when the baseline differs.
         #[arg(long)]
         check: bool,
+        /// Only the stages the corpus marks as core, which between them cover every gem, unique, item mod and tree feature.
+        #[arg(long, requires = "baseline")]
+        core: bool,
     },
     /// Unique jewel suggestions: one engine vs the worker pool, with an equality check.
     Jewels {
@@ -437,6 +440,7 @@ struct GoldenOpts {
     tolerance: f64,
     all: bool,
     jobs: usize,
+    core: bool,
 }
 
 fn golden_cmd(cfg: EngineConfig, o: GoldenOpts) -> Result<Value, pob_engine::Error> {
@@ -446,7 +450,13 @@ fn golden_cmd(cfg: EngineConfig, o: GoldenOpts) -> Result<Value, pob_engine::Err
     let index_path = std::path::absolute(&o.index).map_err(|e| Error::Other(format!("{}: {e}", o.index.display())))?;
     let corpus_dir = index_path.parent().map(PathBuf::from).unwrap_or_default();
     let corpus = corpus_commit(&corpus_dir);
-    let stages = corpus_selection(&index, None);
+    let mut stages = corpus_selection(&index, None);
+    if o.core {
+        stages.retain(|s| s["core"] == true);
+        if stages.is_empty() {
+            return Err(Error::Other(format!("{} marks no core stages; run bun run merge in the corpus", o.index.display())));
+        }
+    }
     let code = golden_lua(o.all);
     let started = Instant::now();
     let next = AtomicUsize::new(0);
@@ -501,7 +511,12 @@ fn golden_cmd(cfg: EngineConfig, o: GoldenOpts) -> Result<Value, pob_engine::Err
         summary["warning"] = json!("the corpus has uncommitted changes, so CI cannot check out the commit this run used");
     }
     if let Some(path) = &o.baseline {
-        let baseline = read_json(path)?;
+        let mut baseline = read_json(path)?;
+        if o.core {
+            if let Some(all) = baseline["builds"].as_object_mut() {
+                all.retain(|id, _| builds.contains_key(id));
+            }
+        }
         let units: std::collections::HashMap<String, String> = stages
             .iter()
             .filter_map(|s| Some((s["id"].as_str()?.to_string(), s["unit"].as_str()?.to_string())))
@@ -839,9 +854,9 @@ fn main() {
             };
             Some(corpus_cmd(cfg, opts))
         }
-        Cmd::Golden { index, out, baseline, tolerance, all, jobs, .. } => {
+        Cmd::Golden { index, out, baseline, tolerance, all, jobs, core, .. } => {
             let cfg = EngineConfig { pob_root: cli.pob_root.clone(), user_dir: user_dir.clone(), cache_dir: cli.cache_dir.clone(), data_dir: None };
-            let opts = GoldenOpts { index: index.clone(), out: out.clone(), baseline: baseline.clone(), tolerance: *tolerance, all: *all, jobs: *jobs };
+            let opts = GoldenOpts { index: index.clone(), out: out.clone(), baseline: baseline.clone(), tolerance: *tolerance, all: *all, jobs: *jobs, core: *core };
             Some(golden_cmd(cfg, opts))
         }
         _ => None,
