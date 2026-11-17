@@ -1241,7 +1241,7 @@
   "tree_class_title": "Center on class start (h)",
   "tree_ascendancy": "Ascendancy",
   "tree_ascendancy_title": "Center on the ascendancy ring, where its 8 points are spent (a)",
-  "tree_ascendancy_none": "Pick an ascendancy in the sidebar first",
+  "tree_ascendancy_none": "Pick an ascendancy first: click the class portrait on the Overview tab",
   "tree_fit": "Fit",
   "tree_fit_title": "Fit whole tree",
   "tree_undo": "Undo",
