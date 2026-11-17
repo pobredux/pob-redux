@@ -72,7 +72,7 @@ pub fn thread_save(app: AppHandle, game: String, id: String, meta: String, data:
 pub fn thread_delete(app: AppHandle, game: String, id: String) -> Result<(), String> {
     let dir = dir(&app, &game)?;
     let id = checked(&id)?;
-    for suffix in [".json", ".meta.json"] {
+    for suffix in [".meta.json", ".json"] {
         let path = dir.join(format!("{id}{suffix}"));
         match std::fs::remove_file(&path) {
             Ok(()) => {}

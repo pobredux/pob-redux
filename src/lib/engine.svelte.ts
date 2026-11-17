@@ -407,6 +407,29 @@ export interface TradeQueryOptions extends TradeTarget {
   blockedMods?: TradeModFilter[];
 }
 
+export interface WeightedTradeLinkOptions {
+  item_text: string;
+  slot: string;
+  league: string;
+  max_price: number;
+  currency: string;
+  realm?: "pc" | "xbox" | "sony" | "poe2";
+  stat_weights?: TradeWeight[];
+  status?: string;
+  max_level?: number;
+  sockets?: number;
+  links?: number;
+}
+
+export interface SavedBuildFile {
+  ok: boolean;
+  path: string;
+  unsaved: boolean;
+  generation: number;
+  rev: number;
+  snapshot: { xml: string; fileModified: number | null; unsaved: boolean };
+}
+
 export interface NinjaCharacter {
   name: string;
   className: string | null;
@@ -1787,15 +1810,15 @@ export const engine = {
       buildPath: string;
     }>("version"),
   newBuild: (name?: string) => call<BuildInfo>("new_build", { name }),
-  loadBuildXml: (xml: string, name?: string, path?: string, recoverAfter?: number) =>
-    call<BuildInfo>("load_build_xml", { xml, name, path, recoverAfter }),
+  loadBuildXml: (xml: string, name?: string, path?: string, snapshot?: { fileModified?: number | null; unsaved?: boolean }) =>
+    call<BuildInfo>("load_build_xml", { xml, name, path, ...snapshot }),
   loadBuildCode: (code: string, name?: string) => call<BuildInfo>("load_build_code", { code, name }),
   /** Which game a share code belongs to, without loading it. */
   codeGame: (code: string) => call<{ game: "poe1" | "poe2" | null }>("code_game", { code }),
   loadBuildFile: (path: string) => call<BuildInfo>("load_build_file", { path }),
-  saveBuildXml: () => call<{ xml: string }>("save_build_xml"),
+  saveBuildXml: () => call<{ xml: string; fileModified: number | null; unsaved: boolean }>("save_build_xml"),
   saveBuildCode: () => call<{ code: string }>("save_build_code"),
-  saveBuildFile: (path?: string) => call<{ ok: boolean; path: string; unsaved: boolean }>("save_build_file", path ? { path } : undefined),
+  saveBuildFile: (path?: string) => call<SavedBuildFile>("save_build_file", { path, snapshot: true }),
   /** Rename the open build; a saved build's file moves with it. */
   setBuildName: (name: string) => call<BuildInfo>("set_build_name", { name }),
   getBuild: () => call<BuildInfo>("get_build"),
@@ -1958,6 +1981,8 @@ export const engine = {
   removeSharedItem: (index: number) => call<{ items: SharedItem[] }>("remove_shared_item", { index }),
   equipSharedItem: (index: number, slotName?: string) => call<unknown>("equip_shared_item", { index, slotName }),
   tradeSearchStart: (p: TradeQueryOptions) => call<{ started: boolean }>("trade_search_start", p),
+  weightedTradeLink: (p: WeightedTradeLinkOptions) =>
+    call<{ tradeUrl: string; itemName: string; slot: string; realm: string; league: string; maxPrice: number; currency: string }>("weighted_trade_link", p),
   tradeSearchStep: (steps?: number) => call<{ done: boolean }>("trade_search_step", { steps }),
   tradeSearchResult: () => call<{ query: string }>("trade_search_result"),
   /** `query` runs a generated search; `url` prices a pasted trade link. */

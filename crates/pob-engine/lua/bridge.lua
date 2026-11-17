@@ -741,6 +741,7 @@ local function openBuild(path, name, xml)
 		end
 		error(message:gsub("%s*\n%s*", " "), 0)
 	end
+	build.__reduxFileModified = path and native.file_modified_ms(path) or nil
 	itemUtil.squireState()
 	local changed = calcsSelection.startOnMainSkill()
 	if calcsSelection.sync() then changed = true end
@@ -759,13 +760,19 @@ M.load_build_xml = function(p)
 	-- `path` keeps the build attached to its file, for a snapshot of a saved
 	-- build restored at startup.
 	local path = type(p.path) == "string" and p.path ~= "" and p.path or false
-	if path and type(p.recoverAfter) == "number" then
+	-- Unsaved edits win; a clean snapshot gives way to a file changed since the snapshot's stamp of it.
+	if path and type(p.fileModified) == "number" and p.unsaved ~= true then
 		local modified = native.file_modified_ms(path)
-		if modified and modified > p.recoverAfter then
-			return M.load_build_file({ path = path })
+		if modified and modified ~= p.fileModified then
+			local ok, info = pcall(M.load_build_file, { path = path })
+			if ok then return info end
 		end
 	end
-	return openBuild(path, p.name or "Imported build", p.xml)
+	local info = openBuild(path, p.name or "Imported build", p.xml)
+	if type(p.unsaved) ~= "boolean" then return info end
+	if p.unsaved then build.modFlag = true else build:ResetModFlags() end
+	frame()
+	return M.get_build()
 end
 
 M.load_build_code = function(p)
@@ -798,7 +805,7 @@ end
 
 M.save_build_xml = function()
 	ensureBuild()
-	return { xml = build:SaveDB("code") }
+	return { xml = build:SaveDB("code"), fileModified = build.__reduxFileModified or null, unsaved = build.unsaved == true }
 end
 
 -- Replace the passive trees from a `<Tree>` section of build XML, leaving
@@ -833,8 +840,8 @@ M.save_build_file = function(p)
 	if not path then
 		error("build has no file name; pass params.path", 0)
 	end
-	if type(path) ~= "string" or path == "" then
-		error("params.path must be a nonempty string", 0)
+	if type(path) ~= "string" or not (path:match("^[/\\]") or path:match("^%a:[/\\]")) then
+		error("the build file path must be absolute: " .. tostring(path), 0)
 	end
 	local xml = build:SaveDB(path)
 	if not xml then
@@ -846,9 +853,16 @@ M.save_build_file = function(p)
 		build.dbFileName = path
 		build.buildName = path:match("([^/\\]+)%.xml$") or build.buildName
 	end
+	build.__reduxFileModified = native.file_modified_ms(path)
 	build:ResetModFlags()
 	frame()
-	return { ok = true, path = build.dbFileName, unsaved = build.unsaved == true }
+	local result = { ok = true, path = build.dbFileName, unsaved = build.unsaved == true }
+	if p and p.snapshot == true then
+		result.snapshot = { xml = xml, fileModified = build.__reduxFileModified or null, unsaved = result.unsaved }
+		result.generation = main.__reduxBuildGeneration
+		result.rev = build.outputRevision
+	end
+	return result
 end
 
 -- Rename the open build. PoB ties the name to the file, so a saved build's
@@ -6744,7 +6758,7 @@ function itemUtil.tradeSearchOptions(p, target, gen)
 	return options
 end
 
-local function tradeQueryJson(query)
+function itemUtil.tradeQueryJson(query)
 	if type(query) == "table" then
 		return dkjson.encode({ query = query, sort = { ["statgroup.0"] = "desc" } })
 	end
@@ -6761,8 +6775,7 @@ M.trade_search_start = function(p)
 	gen.requesterContext = nil
 	gen.requesterCallback = function(_, query, errMsg)
 		tradeState.done = true
-		-- PoE2's generator hands back the bare filter table; PoE1's still sends the full JSON body.
-		tradeState.query = tradeQueryJson(query)
+		tradeState.query = itemUtil.tradeQueryJson(query)
 		tradeState.err = errMsg and tostring(errMsg) or nil
 	end
 	gen:StartQuery(target.slot, options)
@@ -6790,10 +6803,6 @@ M.trade_search_result = function()
 	if not tradeState or not tradeState.done then error("no finished trade search", 0) end
 	if tradeState.err then error(tradeState.err, 0) end
 	return { query = tradeState.query }
-end
-
-local function tradeUrlEncode(value)
-	return (value:gsub("[^A-Za-z0-9_.~%-]", function(c) return string.format("%%%02X", c:byte()) end))
 end
 
 M.weighted_trade_link = function(p)
@@ -6826,8 +6835,11 @@ M.weighted_trade_link = function(p)
 		end
 	end
 
-	-- The generator reads its reference from items[selItemId], while the calculator uses the live build.
-	local gen = new("TradeQueryGenerator"):TradeQueryGenerator({ itemsTab = { build = build, items = { item } } })
+	-- Keep the chat generator separate from the stepped Trader search.
+	if not itemUtil.weightedTradeGen then
+		itemUtil.weightedTradeGen = new("TradeQueryGenerator"):TradeQueryGenerator({})
+	end
+	local gen = itemUtil.weightedTradeGen
 	local currency = p.currency == "equivalent" and "" or p.currency
 	local validCurrency = false
 	for _, entry in ipairs(itemUtil.tradeCurrencies(gen)) do
@@ -6837,15 +6849,17 @@ M.weighted_trade_link = function(p)
 	local options = itemUtil.tradeSearchOptions({
 		statWeights = statWeights, status = p.status, maxPrice = p.max_price, maxPriceType = currency,
 		maxLevel = p.max_level, sockets = p.sockets, links = p.links,
-		jewelType = IS_POE2 and item.baseName:find("^Time%-Lost ") and "Radius" or nil,
+		jewelType = item.base.subType == (IS_POE2 and "Radius" or "Abyss") and item.base.subType or nil,
 	}, target, gen)
 	if p.sockets and not options.sockets then error("socket filter is unavailable for this slot", 0) end
 	if p.links and not options.links then error("link filter is unavailable for this slot or game", 0) end
 
 	local query, queryError
 	gen.requesterCallback = function(_, result, err)
-		query, queryError = tradeQueryJson(result), err
+		query, queryError = itemUtil.tradeQueryJson(result), err
 	end
+	-- The generator looks up the reference in its item table and calculates against the live build.
+	gen.itemsTab = { build = build, items = { item } }
 	local ok, err = pcall(function()
 		gen:StartQuery({ slotName = slotName, selItemId = 1 }, options)
 		local co = gen.calcContext.co
@@ -6860,6 +6874,7 @@ M.weighted_trade_link = function(p)
 		gen:FinishQuery()
 	end)
 	if gen.calcContext.popup and main.popups[1] == gen.calcContext.popup then main:ClosePopup() end
+	gen.itemsTab, gen.requesterCallback, gen.calcContext = nil, nil, {}
 	if not ok then error(err, 0) end
 	if queryError then error(queryError, 0) end
 	local search = query and dkjson.decode(query)
@@ -6869,7 +6884,7 @@ M.weighted_trade_link = function(p)
 	end
 	local path = IS_POE2 and "/trade2/search/poe2/" or (realm == "pc" and "/trade/search/" or "/trade/search/" .. realm .. "/")
 	return {
-		tradeUrl = "https://www.pathofexile.com" .. path .. tradeUrlEncode(league) .. "?q=" .. tradeUrlEncode(query),
+		tradeUrl = "https://www.pathofexile.com" .. path .. urlEncode(league) .. "?q=" .. urlEncode(query),
 		itemName = item.name, slot = slotName, realm = realm, league = league, maxPrice = p.max_price, currency = p.currency,
 	}
 end

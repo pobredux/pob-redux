@@ -54,14 +54,19 @@ fn check_save(env: &str, resource: &str) {
     // The Save button's target: write to a path.
     let out = tmp.join("saved.xml");
     let r: Value = engine
-        .call("save_build_file", &json!({ "path": out.to_string_lossy() }))
+        .call("save_build_file", &json!({ "path": out.to_string_lossy(), "snapshot": true }))
         .expect("save_build_file");
     assert_eq!(r["ok"], json!(true), "save_build_file failed: {r}");
     let written = std::fs::read_to_string(&out).expect("saved build file on disk");
+    assert_eq!(r["snapshot"]["xml"], written);
+    assert_eq!(r["snapshot"]["unsaved"], false);
+    assert!(r["snapshot"]["fileModified"].is_number());
 
     assert!(written.contains("<PathOfBuilding"), "not a PoB document: {written}");
 
     let before = engine.call("get_build", &Value::Null).unwrap();
+    assert_eq!(r["generation"], before["generation"]);
+    assert_eq!(r["rev"], before["rev"]);
     let failed_path = tmp.join("missing").join("failed.xml");
     assert!(engine.call("save_build_file", &json!({ "path": failed_path })).is_err());
     let after = engine.call("get_build", &Value::Null).unwrap();
@@ -72,15 +77,27 @@ fn check_save(env: &str, resource: &str) {
     engine.call("set_level", &json!({ "level": 42 })).unwrap();
     let expected = engine.call("get_build", &Value::Null).unwrap();
     assert_ne!(expected["level"], before["level"]);
-    engine.call("save_build_file", &Value::Null).unwrap();
-    let recovered = engine.call("load_build_xml", &json!({
-        "xml": written, "path": out, "recoverAfter": 0
-    })).unwrap();
-    assert_eq!(recovered["level"], expected["level"]);
-    let recovered = engine.call("load_build_xml", &json!({
-        "xml": written, "path": out, "recoverAfter": 4_102_444_800_000_i64
-    })).unwrap();
-    assert_eq!(recovered["level"], before["level"]);
+    let saved = engine.call("save_build_file", &Value::Null).unwrap();
+    assert!(saved.get("snapshot").is_none(), "ordinary saves keep the small response");
+    let stamp = engine.call("save_build_xml", &Value::Null).unwrap()["fileModified"].clone();
+    assert!(stamp.is_number(), "a saved build reports its file stamp, got {stamp}");
+    let restore = |file_modified: &Value, unsaved: bool| {
+        engine.call("load_build_xml", &json!({
+            "xml": written, "path": out, "fileModified": file_modified, "unsaved": unsaved
+        })).unwrap()
+    };
+    assert_eq!(restore(&json!(0), false)["level"], expected["level"], "a clean snapshot gives way to a changed file");
+    let kept = restore(&stamp, false);
+    assert_eq!(kept["level"], before["level"], "an unchanged file keeps the snapshot");
+    assert_eq!(kept["unsaved"], json!(false), "a clean snapshot restores as saved");
+    let next = engine.call("save_build_xml", &Value::Null).unwrap();
+    assert_eq!((&next["unsaved"], &next["fileModified"]), (&json!(false), &stamp), "the next snapshot stays clean");
+    let kept = restore(&json!(0), true);
+    assert_eq!(kept["level"], before["level"], "unsaved edits win over a changed file");
+    assert_eq!(kept["unsaved"], json!(true), "restored edits stay unsaved");
+    std::fs::write(&out, "not a build").unwrap();
+    assert_eq!(restore(&json!(0), false)["level"], before["level"], "a broken file falls back to the snapshot");
+    assert!(engine.call("save_build_file", &json!({ "path": "relative.xml" })).is_err(), "relative paths are refused");
 
     let _ = std::fs::remove_dir_all(&tmp);
 }

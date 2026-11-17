@@ -1157,10 +1157,12 @@ class ChatStore {
 
   async send() {
     const text = this.input.trim();
-    if (!text || this.busy) return;
+    const threadId = this.thread.id;
+    if (!text || this.busy || this.deletingThreads.has(threadId)) return;
     // A send during warm-up waits for it; the composer button is disabled
     // meanwhile, but a boot-time message must not be lost.
     if (this.warming) await this.warming;
+    if (this.thread.id !== threadId || this.busy || this.deletingThreads.has(threadId)) return;
     // A new message keeps whatever the last reply changed.
     this.experiment = null;
     this.undoWarning = null;
@@ -1372,7 +1374,7 @@ class ChatStore {
    * work so far, so this resumes rather than starting the task again.
    */
   async continueRun() {
-    if (this.busy || !this.history.length) return;
+    if (this.busy || !this.history.length || this.deletingThreads.has(this.thread.id)) return;
     this.notice = null;
     this.canContinue = false;
     await this.run();

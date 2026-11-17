@@ -9,6 +9,7 @@ import {
   appPaths,
   type BuildInfo,
   type ClassInfo,
+  type SavedBuildFile,
   type Sidebar,
   type Skills,
   type SpecInfo,
@@ -26,6 +27,8 @@ const AUTOSAVE_KEY = "pob-redux:autosave";
 export function autosaveKey() {
   return game.isPoe2 ? AUTOSAVE_KEY : `${AUTOSAVE_KEY}:${game.current}`;
 }
+
+type Snapshot = { xml: string; name: string; file: string | null; fileModified: number | null; unsaved: boolean };
 
 export type ViewId = "overview" | "tree" | "skills" | "items" | "calcs" | "config" | "notes" | "party" | "optimise" | "compare" | "import";
 
@@ -83,7 +86,7 @@ class BuildStore {
   }
 
   private autosaveTimer: ReturnType<typeof setTimeout> | undefined;
-  private lastAutosave: { xml: string; name: string; file: string | null } | null = null;
+  private lastAutosave: Snapshot | null = null;
   private presyncTimer: ReturnType<typeof setTimeout> | undefined;
   private trimTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -121,23 +124,24 @@ class BuildStore {
     this.blankAt = blank && this.info ? { generation: this.info.generation, rev: this.info.rev } : null;
   }
 
-  private async autosave(force = false) {
+  private async autosave(saved?: SavedBuildFile) {
     const info = this.info;
     if (!info || this.busy > 0) {
       this.scheduleAutosave();
       return;
     }
-    if (!force && this.blankAt && info.generation === this.blankAt.generation && info.rev === this.blankAt.rev) return;
+    if (saved && (info.generation !== saved.generation || info.rev !== saved.rev || info.file !== saved.path)) return;
+    if (!saved && this.blankAt && info.generation === this.blankAt.generation && info.rev === this.blankAt.rev) return;
     const key = autosaveKey();
-    const at = Date.now();
     try {
-      const { xml } = await engine.saveBuildXml();
+      const { xml, fileModified, unsaved } = saved?.snapshot ?? await engine.saveBuildXml();
       if (info !== this.info || key !== autosaveKey() || this.busy > 0) return;
-      const snapshot = { xml, name: info.name, file: info.file ?? null };
+      const snapshot: Snapshot = { xml, name: info.name, file: info.file ?? null, fileModified, unsaved };
       const last = this.lastAutosave;
-      if (!force && last?.xml === xml && last.name === snapshot.name && last.file === snapshot.file) return;
-      localStorage.setItem(key, JSON.stringify({ ...snapshot, at }));
+      if (!saved && last && (Object.keys(snapshot) as (keyof Snapshot)[]).every((k) => last[k] === snapshot[k])) return;
+      localStorage.setItem(key, JSON.stringify({ ...snapshot, at: Date.now() }));
       this.lastAutosave = snapshot;
+      if (saved) clearTimeout(this.autosaveTimer);
     } catch {
       // engine busy or storage full; the next change retries
     }
@@ -149,13 +153,16 @@ class BuildStore {
    * is nothing to reopen or the snapshot no longer loads.
    */
   async reopenLast(): Promise<boolean> {
-    let saved: { name?: string; file?: string | null; xml?: string; at?: number } | null = null;
+    let saved: Partial<Snapshot> | null = null;
     try {
       saved = JSON.parse(localStorage.getItem(autosaveKey()) ?? "null");
     } catch {}
     if (!saved?.xml) return false;
     try {
-      await engine.loadBuildXml(saved.xml, saved.name, saved.file ?? undefined, saved.at);
+      await engine.loadBuildXml(saved.xml, saved.name, saved.file ?? undefined, {
+        fileModified: saved.fileModified,
+        unsaved: saved.unsaved,
+      });
       await this.sync();
       return true;
     } catch (e) {
@@ -223,8 +230,9 @@ class BuildStore {
     this.savedHooks.push(fn);
   }
 
-  private async saved(path: string) {
-    await this.autosave(true);
+  private async saved(result: SavedBuildFile) {
+    await this.autosave(result);
+    const { path } = result;
     this.newBuildFolder = null;
     this.say(m.build_saved({ path }));
     for (const fn of this.savedHooks) void fn(path);
@@ -234,7 +242,7 @@ class BuildStore {
     if (!this.info) return undefined;
     if (!this.info.file) return this.saveAs();
     const r = await this.run(() => engine.saveBuildFile(), { user: false });
-    if (r) await this.saved(r.path);
+    if (r) await this.saved(r);
     return r;
   }
 
@@ -255,7 +263,7 @@ class BuildStore {
     if (!picked) return undefined;
     const path = /\.xml$/i.test(picked) ? picked : `${picked}.xml`;
     const r = await this.run(() => engine.saveBuildFile(path), { user: false });
-    if (r) await this.saved(r.path);
+    if (r) await this.saved(r);
     return r;
   }
 

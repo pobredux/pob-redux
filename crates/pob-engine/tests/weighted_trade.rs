@@ -11,6 +11,8 @@ const QUERY_MODS: &str = r##"return {
     Explicit = {
         life = {
             Boots = { min = 20, max = 60 },
+            AbyssJewel = { min = 20, max = 60 },
+            BaseJewel = { min = 20, max = 60 },
             specialCaseData = {},
             tradeMod = { id = "explicit.stat_3299347043", text = "+# to maximum Life" },
         },
@@ -156,6 +158,43 @@ fn check_trade(game: &str, root_env: &str, resource: &str, expected_path: &str) 
         );
     }
     assert_eq!(snapshot(&engine), before);
+
+    if game == "poe1" {
+        let sockets = engine
+            .call(
+                "search_tree",
+                &json!({ "type": "Socket", "ascendancyName": false }),
+            )
+            .unwrap();
+        let id = &sockets["nodes"][0]["id"];
+        engine.call("alloc_node", &json!({ "id": id })).unwrap();
+        let rows = engine.call("trade_rows", &Value::Null).unwrap();
+        let slot = rows["sockets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|socket| &socket["nodeId"] == id)
+            .expect("allocated jewel socket")["slot"]
+            .clone();
+        params["slot"] = slot;
+        params["stat_weights"][0]["stat"] = json!("Life");
+        for (base, category) in [
+            ("Ghastly Eye Jewel", "jewel.abyss"),
+            ("Cobalt Jewel", "jewel.base"),
+        ] {
+            params["item_text"] = json!(format!(
+                "Rarity: Rare\nTrade Reference\n{base}\nImplicits: 0\n+35 to maximum Life"
+            ));
+            let search = parse_link(
+                engine.call("weighted_trade_link", &params).unwrap(),
+                expected_path,
+            );
+            assert_eq!(
+                search["query"]["filters"]["type_filters"]["filters"]["category"]["option"],
+                category
+            );
+        }
+    }
 }
 
 #[test]

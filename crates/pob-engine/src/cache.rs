@@ -67,7 +67,14 @@ fn write_atomic(path: &Path, parts: &[&[u8]]) -> std::io::Result<()> {
 pub(crate) fn replace_file(path: &Path, parts: &[&[u8]], durable: bool) -> std::io::Result<()> {
     let seq = TEMP_SEQ.fetch_add(1, Ordering::Relaxed);
     let tmp = path.with_extension(format!("tmp{}-{seq}", std::process::id()));
-    let mut file = std::fs::File::create_new(&tmp)?;
+    let mut file = match std::fs::File::create_new(&tmp) {
+        // A process that died mid-write under a reused PID leaves this name behind.
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            std::fs::remove_file(&tmp)?;
+            std::fs::File::create_new(&tmp)?
+        }
+        file => file?,
+    };
     let written = (|| {
         #[cfg(unix)]
         if durable {

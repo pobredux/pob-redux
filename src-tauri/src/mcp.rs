@@ -77,9 +77,21 @@ fn load_or_create_token(app: &AppHandle) -> Result<String, String> {
 }
 
 fn token_in_file(path: &std::path::Path) -> std::io::Result<String> {
-    use std::io::{Read, Seek, Write};
+    use std::io::Write;
+    let existing = std::fs::read(path).ok().and_then(|bytes| String::from_utf8(bytes).ok());
+    if let Some(existing) = existing.as_deref().map(str::trim).filter(|t| t.len() >= 32) {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+        }
+        return Ok(existing.to_string());
+    }
+    let mut bytes = [0u8; 32];
+    getrandom::fill(&mut bytes).map_err(std::io::Error::other)?;
+    let token: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
     let mut options = std::fs::OpenOptions::new();
-    options.read(true).write(true).create(true);
+    options.write(true).create(true).truncate(true);
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
@@ -91,32 +103,31 @@ fn token_in_file(path: &std::path::Path) -> std::io::Result<String> {
         use std::os::unix::fs::PermissionsExt;
         file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
     }
-    let mut existing = String::new();
-    file.read_to_string(&mut existing)?;
-    let existing = existing.trim();
-    if existing.len() >= 32 {
-        return Ok(existing.to_string());
-    }
-    let mut bytes = [0u8; 32];
-    getrandom::fill(&mut bytes).map_err(std::io::Error::other)?;
-    let token: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
-    file.rewind()?;
-    file.set_len(0)?;
     file.write_all(token.as_bytes())?;
     Ok(token)
 }
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 mod token_tests {
-    use std::os::unix::fs::PermissionsExt;
+    #[test]
+    fn invalid_utf8_is_replaced_with_a_reusable_token() {
+        let path = std::env::temp_dir().join(format!("pob-mcp-invalid-token-{}", std::process::id()));
+        std::fs::write(&path, [0xff]).unwrap();
+        let token = super::token_in_file(&path).unwrap();
+        assert_eq!(token.len(), 64);
+        assert_eq!(super::token_in_file(&path).unwrap(), token);
+        std::fs::remove_file(path).unwrap();
+    }
 
+    #[cfg(unix)]
     #[test]
     fn token_file_is_private_when_created_and_reused() {
+        use std::os::unix::fs::PermissionsExt;
         let path = std::env::temp_dir().join(format!("pob-mcp-token-test-{}", std::process::id()));
         let _ = std::fs::remove_file(&path);
         let token = super::token_in_file(&path).unwrap();
         assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o444)).unwrap();
         assert_eq!(super::token_in_file(&path).unwrap(), token);
         assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
         std::fs::remove_file(path).unwrap();

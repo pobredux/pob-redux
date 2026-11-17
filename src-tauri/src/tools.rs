@@ -42,8 +42,7 @@ scores every one PoB knows in every allocated socket, variants included, and ran
 equip_from_item_db and its `variants`. For one specific item, list_bases \
 then list_affixes for the mod pool, then craft_rare, which builds it from PoB's own affix tables. For shopping, \
 pass the rare's raw text and slot to weighted_trade_link. Ask for the league and price cap with currency per slot if unclear. \
-If given a total budget for multiple items, ask for the per-slot caps. Give one search per item with its cap. The chat renders \
-the links from the tool results, so do not copy the long URL into chat. Before a \
+If given a total budget for multiple items, ask for the per-slot caps. Give one search per item with its cap. Before a \
 run of changes call checkpoint; every write returns `stats` and a `delta` \
 against the previous state, and rollback restores a checkpoint if the result is worse. Manage alternate \
 trees and gear sets with the list/select/create/copy/rename/delete _spec and _item_set tools. Use \
@@ -75,8 +74,7 @@ notable set in the empty cluster sockets and ranks them by gain per point; apply
 For one specific item, list_bases \
 then list_affixes for the mod pool, then craft_rare, which builds it from PoB's own affix tables. For shopping, \
 pass the rare's raw text and slot to weighted_trade_link. Ask for the league and price cap with currency per slot if unclear. \
-If given a total budget for multiple items, ask for the per-slot caps. Give one search per item with its cap. The chat renders \
-the links from the tool results, so do not copy the long URL into chat. Before a \
+If given a total budget for multiple items, ask for the per-slot caps. Give one search per item with its cap. Before a \
 run of changes call checkpoint; every write returns `stats` and a `delta` \
 against the previous state, and rollback restores a checkpoint if the result is worse. Manage alternate \
 trees and gear sets with the list/select/create/copy/rename/delete _spec and _item_set tools. Use \
@@ -939,20 +937,27 @@ fn req_i64(args: &JsonObject, key: &str) -> Result<i64, ToolError> {
 }
 
 fn weighted_trade_params(args: &JsonObject) -> Result<Value, ToolError> {
-    let positive = |v: &Value| v.as_f64().is_some_and(|n| n.is_finite() && n > 0.0);
+    let positive = |v: &Value| {
+        match v {
+            Value::Number(n) => n.as_f64(),
+            Value::String(s) => s.trim().parse::<f64>().ok(),
+            _ => None,
+        }
+        .filter(|n| n.is_finite() && *n > 0.0)
+    };
     let mut params = Map::new();
     for key in ["item_text", "slot", "league", "currency"] {
         params.insert(key.into(), json!(req_str(args, key)?));
     }
-    let price = args.get("max_price").filter(|v| positive(v))
+    let price = args.get("max_price").and_then(positive)
         .ok_or_else(|| ToolError::Invalid("max_price must be a positive number".into()))?;
-    params.insert("max_price".into(), price.clone());
+    params.insert("max_price".into(), json!(price));
     for key in ["max_level", "sockets", "links"] {
         if let Some(v) = args.get(key).filter(|v| !v.is_null()) {
-            if !v.as_u64().is_some_and(|n| n > 0 && u32::try_from(n).is_ok()) {
-                return Err(ToolError::Invalid(format!("{key} must be a positive integer")));
-            }
-            params.insert(key.into(), v.clone());
+            let n = positive(v)
+                .filter(|n| n.fract() == 0.0 && *n <= f64::from(u32::MAX))
+                .ok_or_else(|| ToolError::Invalid(format!("{key} must be a positive integer")))?;
+            params.insert(key.into(), json!(n as u32));
         }
     }
     for key in ["realm", "status"] {
@@ -961,13 +966,16 @@ fn weighted_trade_params(args: &JsonObject) -> Result<Value, ToolError> {
         }
     }
     if let Some(v) = args.get("stat_weights").filter(|v| !v.is_null()) {
-        let valid = v.as_array().is_some_and(|weights| !weights.is_empty() && weights.iter().all(|w| {
-            w["stat"].as_str().is_some_and(|stat| !stat.trim().is_empty()) && positive(&w["weightMult"])
-        }));
-        if !valid {
-            return Err(ToolError::Invalid("stat_weights must contain stat keys with positive weightMult values".into()));
-        }
-        params.insert("stat_weights".into(), v.clone());
+        let weights: Option<Vec<Value>> = v.as_array().filter(|w| !w.is_empty()).and_then(|weights| {
+            weights.iter().map(|w| {
+                let stat = w["stat"].as_str().map(str::trim).filter(|s| !s.is_empty())?;
+                Some(json!({ "stat": stat, "weightMult": positive(&w["weightMult"])? }))
+            }).collect()
+        });
+        let weights = weights.ok_or_else(|| {
+            ToolError::Invalid("stat_weights must contain stat keys with positive weightMult values".into())
+        })?;
+        params.insert("stat_weights".into(), Value::Array(weights));
     }
     Ok(Value::Object(params))
 }
@@ -1660,8 +1668,25 @@ pub(crate) fn run_tool(ctx: &ToolContext, name: &str, args: &JsonObject) -> Resu
 
 #[cfg(test)]
 mod tests {
-    use super::{defs, instructions, POE1_TEXT};
+    use super::{defs, instructions, weighted_trade_params, POE1_TEXT};
     use crate::game::Game;
+    use serde_json::json;
+
+    #[test]
+    fn trade_params_accept_numeric_strings_and_whole_numbers() {
+        let mut input = json!({
+            "item_text": "Test item", "slot": "Boots", "league": "Standard",
+            "currency": "divine", "max_price": "2.5", "sockets": "2", "max_level": 80.0,
+            "stat_weights": [{ "stat": "Life", "weightMult": "0.5" }]
+        });
+        let params = weighted_trade_params(input.as_object().unwrap()).ok().expect("valid trade inputs");
+        assert_eq!(params["max_price"], json!(2.5));
+        assert_eq!(params["max_level"], json!(80));
+        assert_eq!(params["sockets"], json!(2));
+        assert_eq!(params["stat_weights"][0]["weightMult"], json!(0.5));
+        input["max_level"] = json!(80.5);
+        assert!(weighted_trade_params(input.as_object().unwrap()).is_err());
+    }
 
     #[test]
     fn poe1_registry_speaks_poe1() {
