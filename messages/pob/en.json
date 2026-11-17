@@ -1221,6 +1221,7 @@
   "pob_config_minion_on_profane_ground": "Minion on Profane Ground?",
   "pob_config_minion_rage": "Minion ^xFF9922Rage",
   "pob_config_minor_god": "Minor God",
+  "pob_config_missing_unreserved_life_pct_override": "Missing unreserved Life % (override)",
   "pob_config_missing_unreserved_mana_pct": "Missing Unreserved ^x7070FFMana^7 %",
   "pob_config_misty_reflection": "Misty Reflection",
   "pob_config_molten_shell": "Molten Shell",
