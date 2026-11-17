@@ -1133,6 +1133,8 @@ export interface GearOptResult {
   ms: number;
 }
 
+export type ItemDbName = "unique" | "rare" | "viscera";
+
 export interface SlotInfo {
   slot: string;
   label: string | null;
@@ -1141,6 +1143,7 @@ export interface SlotInfo {
   itemRarity: string | null;
   nodeId: number | null;
   weaponSet: number | null;
+  group?: "wickerman" | null;
   shown: boolean;
   inactive: boolean;
   /** Flask and charm slots only: PoB applies the item's effect only while this is true. */
@@ -1920,10 +1923,10 @@ export const engine = {
   equipItem: (slot: string, itemId: number) => call<SlotsResponse>("equip_item", { slot, itemId }),
   setSlotActive: (slot: string, active: boolean) => call<SlotsResponse>("set_slot_active", { slot, active }),
   deleteItem: (itemId: number) => call<{ items: ItemInfo[] }>("delete_item", { itemId }),
-  itemDbList: (opts: { db: "unique" | "rare"; query?: string; type?: string; limit?: number; offset?: number }) =>
+  itemDbList: (opts: { db: ItemDbName; query?: string; type?: string; limit?: number; offset?: number }) =>
     call<{ items: ItemDbRow[]; total: number; offset: number; types: { type: string; count: number }[] }>("item_db_list", opts),
   statDifferences: (show?: boolean) => call<{ show: boolean }>("stat_differences", show === undefined ? undefined : { show }),
-  itemTooltip: (opts: { itemId?: number; db?: "unique" | "rare"; name?: string; raw?: string; slotName?: string | false }) =>
+  itemTooltip: (opts: { itemId?: number; db?: ItemDbName; name?: string; raw?: string; slotName?: string | false }) =>
     call<Tooltip & { rarity: string | null }>("item_tooltip", opts),
   prepareItemPreview: (raw: string, generation: number, normalise: boolean) =>
     call<{ raw?: string }>("item_prepare_preview", { raw, generation, normalise }),
@@ -1934,7 +1937,7 @@ export const engine = {
   itemModifierOptions: (target: ItemTarget, source: string, query: string, implicit = false) =>
     call<{ options: { id: string; label: string; level: number | null }[]; total: number }>("item_modifier_options", { ...target, source, query, implicit }),
   /** `variants`: one entry per pick, a variant's name, a substring of it, or its index. */
-  itemDbEquip: (db: "unique" | "rare", name: string, slotName?: string, variants?: (string | number)[]) =>
+  itemDbEquip: (db: ItemDbName, name: string, slotName?: string, variants?: (string | number)[]) =>
     call<{ ok: boolean; itemId: number; slot: string; itemName: string; variants: string[]; mods: string[] }>("item_db_equip", { db, name, slotName, variants }),
   itemRaw: (itemId: number) => call<{ raw: string }>("item_raw", { itemId }),
   itemEdit: (text: string, itemId?: number, generation?: number) => call<{ ok: boolean; itemId: number; name: string }>("item_edit", { text, itemId, generation }),

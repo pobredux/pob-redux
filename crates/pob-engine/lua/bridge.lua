@@ -3094,6 +3094,7 @@ M.list_slots = function()
 		if slot.Populate then pcall(slot.Populate, slot) end
 	end
 	local slots = array({})
+	local wickerman = build.itemsTab.controls.wickermanHeader
 	for _, slot in ipairs(build.itemsTab.orderedSlots) do
 		local item = slot.selItemId and slot.selItemId ~= 0 and build.itemsTab.items[slot.selItemId] or nil
 		local shown = true
@@ -3111,6 +3112,8 @@ M.list_slots = function()
 			itemRarity = item and opt(item.rarity) or null,
 			nodeId = opt(slot.nodeId),
 			weaponSet = opt(slot.weaponSet),
+			-- PoB gives each Wickerman slot its header's visibility function; their names have changed before.
+			group = wickerman and slot.shown == wickerman.shown and "wickerman" or null,
 			shown = shown,
 			inactive = slot.inactive == true,
 			active = active,
@@ -4587,15 +4590,19 @@ end
 function itemUtil.stepItemDb()
 	if not itemUtil.holdItemDb() then return false end
 	local ok, err = pcall(itemUtil.loader)
-	if ok and (main.uniqueDB.loading or main.rareDB.loading) then return true end
+	if ok and itemUtil.itemDbLoading() then return true end
 	itemUtil.loader = nil
 	if not ok then native.log("warn", "item database: " .. tostring(err)) end
 	return false
 end
 
+function itemUtil.itemDbLoading()
+	return main.uniqueDB.loading or main.rareDB.loading or (main.visceraDB and main.visceraDB.loading)
+end
+
 function itemUtil.ensureItemDb()
 	while itemUtil.stepItemDb() do end
-	if main.uniqueDB.loading or main.rareDB.loading then
+	if itemUtil.itemDbLoading() then
 		error("item databases are still loading", 0)
 	end
 end
@@ -4642,6 +4649,7 @@ end
 
 function itemUtil.dbFor(name)
 	if name == "rare" then return main.rareDB end
+	if name == "viscera" and main.visceraDB then return main.visceraDB end
 	return main.uniqueDB
 end
 
@@ -6584,7 +6592,8 @@ end
 M.trade_rows = function()
 	local rows = array({})
 	for _, s in ipairs(M.list_slots().slots) do
-		if s.shown and not s.inactive then
+		-- PoB's trade generator has no search category for Wickerman parts.
+		if s.shown and not s.inactive and s.group ~= "wickerman" then
 			rows[#rows + 1] = {
 				key = s.slot, slot = s.slot, label = s.label ~= null and s.label or s.slot,
 				itemName = s.itemName, itemRarity = s.itemRarity, special = null, needs = null,

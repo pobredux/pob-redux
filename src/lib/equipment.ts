@@ -14,6 +14,10 @@ export const EQUIPMENT_LAYOUT: Record<string, string> = {
   Belt: "6 / 4 / 7 / 6",
 };
 
+export const WICKERMAN_AREAS = ["1 / 4 / 3 / 6", "3 / 4 / 5 / 6", "3 / 2 / 5 / 4", "5 / 4 / 7 / 6"];
+
+export const isWickermanSlot = (slot: SlotInfo) => slot.group === "wickerman";
+
 export function equipmentArea(slot: string): string | undefined {
   return EQUIPMENT_LAYOUT[slot.replace(/ Swap$/, "")];
 }

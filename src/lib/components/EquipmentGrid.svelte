@@ -6,19 +6,20 @@
   import { socketArtUrls } from "$lib/item-art";
   import ItemIcon from "./ItemIcon.svelte";
 
-  let { slots, items, game, groups = [], selectedItem, onselect, onactive, onitemhover, ongemhover, onleave, legend = true }:
-    { slots: SlotInfo[]; items: ItemInfo[]; game: "poe1" | "poe2"; groups?: SocketGroup[]; selectedItem: number | null;
+  let { slots, items, game, groups = [], areas, selectedItem, onselect, onactive, onitemhover, ongemhover, onleave, legend = true }:
+    { slots: SlotInfo[]; items: ItemInfo[]; game: "poe1" | "poe2"; groups?: SocketGroup[]; areas?: Record<string, string>; selectedItem: number | null;
       onselect: (id: number) => void; onactive?: (slot: string, active: boolean) => void;
       onitemhover: (event: MouseEvent | FocusEvent, itemId: number) => void;
       ongemhover: (event: MouseEvent | FocusEvent, group: number, gem: number) => void; onleave: () => void;
       legend?: boolean } = $props();
   let keyboardSlot = $state<string | null>(null);
   const visible = $derived(visibleEquipment(slots));
-  const body = $derived(visible.filter((slot) => equipmentArea(slot.slot)));
+  const areaOf = (slot: SlotInfo) => areas?.[slot.slot] ?? equipmentArea(slot.slot);
+  const body = $derived(visible.filter((slot) => areaOf(slot)));
   const isLimb = (slot: SlotInfo) => /^(Arm|Leg) [12]$/.test(slot.slot);
   const limbs = $derived(visible.filter((slot) => isLimb(slot) && byId.has(slot.itemId)));
   const extras = $derived.by(() => {
-    const other = visible.filter((slot) => !equipmentArea(slot.slot) && !isLimb(slot));
+    const other = visible.filter((slot) => !areaOf(slot) && !isLimb(slot));
     if (game !== "poe2") return other;
     const order = ["Flask 1", "Charm 1", "Charm 2", "Charm 3", "Flask 2"];
     return other.sort((a, b) => {
@@ -48,7 +49,7 @@
   <div class="cell" class:occupied={!!item} class:off={!!item && slot.active === false} class:selected={!!item && selectedItem === item.id} class:keyboard={keyboardSlot === slot.slot}
     onfocusin={(event) => { if ((event.target as HTMLElement).matches(":focus-visible")) keyboardSlot = slot.slot; }}
     onfocusout={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) keyboardSlot = null; }}
-    style:grid-area={equipmentArea(slot.slot)} style:--rarity={rarity[item?.rarity ?? ""] ?? "var(--line-1)"}>
+    style:grid-area={areaOf(slot)} style:--rarity={rarity[item?.rarity ?? ""] ?? "var(--line-1)"}>
     <button class="gear" disabled={!item} aria-label={`${slotLabel(slot.label ?? slot.slot)}: ${item?.name ?? m.items_empty_slot()}`}
       aria-pressed={!!item && selectedItem === item.id}
       onmouseenter={(event) => item && onitemhover(event, item.id)} onmouseleave={onleave}

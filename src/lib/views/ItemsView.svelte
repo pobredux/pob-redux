@@ -6,6 +6,7 @@
     type CraftBase,
     type ItemCustomization,
     type ItemCustomizationEdit,
+    type ItemDbName,
     type ItemDbRow,
     type ItemInfo,
     type ItemSetInfo,
@@ -22,6 +23,7 @@
   import Kbd from "$lib/components/Kbd.svelte";
   import { game } from "$lib/state/game.svelte";
   import EquipmentGrid from "$lib/components/EquipmentGrid.svelte";
+  import { isWickermanSlot, WICKERMAN_AREAS } from "$lib/equipment";
   import PobText from "$lib/components/PobText.svelte";
   import { stripPobText } from "$lib/pobtext";
   import { slotLabel } from "$lib/pob-labels";
@@ -41,7 +43,7 @@
   let itemSets = $state<ItemSetInfo[]>([]);
   let selectedItem = $state<number | null>(null);
   let squire = $state<SquireState | null>(null);
-  let doll = $state<"character" | "squire">("character");
+  let doll = $state<"character" | "squire" | "wickerman">("character");
   const squireOffered = $derived(game.current === "poe2" && (ui.squirePreview || !!squire?.present));
   const squireOpen = $derived(squireOffered && doll === "squire");
   const squireLabels = $derived<Record<string, string>>({
@@ -56,7 +58,7 @@
   const squireHeld = $derived(new Set(squireSlots.filter((s) => s.itemId !== 0).map((s) => s.itemId)));
   let buySimilarFor = $state<number | null>(null);
 
-  let dbTab = $state<"unique" | "rare">("unique");
+  let dbTab = $state<ItemDbName>("unique");
   let dbQuery = $state("");
   let dbType = $state("");
   let dbRows = $state<ItemDbRow[]>([]);
@@ -440,8 +442,15 @@
     { label: m.set_delete(), danger: true, disabled: itemSets.length <= 1, onclick: () => activeSet && build.run(() => engine.deleteItemSet(activeSet.id)) },
   ]);
   const shownSlots = $derived((slotsResp?.slots ?? []).filter((s) => s.shown && !s.inactive));
-  const gearSlots = $derived(shownSlots.filter((s) => s.nodeId == null));
+  const gearSlots = $derived(shownSlots.filter((s) => s.nodeId == null && !isWickermanSlot(s)));
   const socketSlots = $derived(shownSlots.filter((s) => s.nodeId != null));
+  const characterSlots = $derived((slotsResp?.slots ?? []).filter((s) => !isWickermanSlot(s)));
+  const wickermanLabels = $derived([m.wickerman_slot_head(), m.wickerman_slot_torso(), m.wickerman_slot_upper_limb(), m.wickerman_slot_lower_limb()]);
+  const wickermanSlots = $derived(shownSlots.filter(isWickermanSlot).map((s, i) => ({ ...s, label: wickermanLabels[i] ?? s.label })));
+  const wickermanAreas = $derived(Object.fromEntries(wickermanSlots.map((s, i) => [s.slot, WICKERMAN_AREAS[i]])));
+  const wickermanOpen = $derived(wickermanSlots.length > 0 && doll === "wickerman");
+  const dbShown = $derived<ItemDbName>(dbTab === "viscera" && !wickermanSlots.length ? "unique" : dbTab);
+  const wickermanEmpty = $derived(!items.some((it) => wickermanSlots.some((s) => it.compatibleSlots.includes(s.slot))));
   const selectedEquippedSlot = $derived(selectedItem == null ? null : (items.find((i) => i.id === selectedItem)?.equippedSlot ?? null));
 
   $effect(() => {
@@ -462,7 +471,7 @@
   $effect(() => {
     const q = dbQuery;
     const t = dbType;
-    const tab = dbTab;
+    const tab = dbShown;
     untrack(() => {
       if (dbBusy) return;
       dbBusy = true;
@@ -849,16 +858,35 @@
     <section class="col slots" bind:this={slotsCol}>
       {@render grip("slots")}
       <div class="panel-head">
-        {#if squireOffered}
+        {#if squireOffered || wickermanSlots.length}
+          {@const characterOpen = !squireOpen && !wickermanOpen}
           <span class="tabs2" role="tablist" aria-label={m.items_equipment()}>
-            <button class="t2" role="tab" aria-selected={!squireOpen} class:on={!squireOpen} onclick={() => (doll = "character")}>{m.squire_character()}</button>
-            <button class="t2" role="tab" aria-selected={squireOpen} class:on={squireOpen} onclick={() => (doll = "squire")}>{m.squire_title()}</button>
+            <button class="t2" role="tab" aria-selected={characterOpen} class:on={characterOpen} onclick={() => (doll = "character")}>{m.squire_character()}</button>
+            {#if squireOffered}
+              <button class="t2" role="tab" aria-selected={squireOpen} class:on={squireOpen} onclick={() => (doll = "squire")}>{m.squire_title()}</button>
+            {/if}
+            {#if wickermanSlots.length}
+              <button class="t2" role="tab" aria-selected={wickermanOpen} class:on={wickermanOpen} onclick={() => (doll = "wickerman")}>{m.wickerman_title()}</button>
+            {/if}
           </span>
         {:else}
           <span class="label">{m.items_equipment()}</span>
         {/if}
       </div>
-      {#if squireOpen}
+      {#if wickermanOpen}
+      <div class="scroll">
+        <EquipmentGrid slots={wickermanSlots} areas={wickermanAreas} {items} game={game.current} {selectedItem} legend={false}
+          onselect={selectItem}
+          onitemhover={(event, id) => itemTip(event, id)}
+          ongemhover={() => {}}
+          onleave={hideTip} />
+        {#each wickermanSlots as s (s.slot)}
+          {@render slotRow(s)}
+        {/each}
+        <p class="sqnote">{m.wickerman_hint()}</p>
+        {#if wickermanEmpty}<p class="sqnote">{m.wickerman_no_items()}</p>{/if}
+      </div>
+      {:else if squireOpen}
       <div class="scroll">
         <div class="squirehead">
           <span class="sqname">{m.squire_title()}</span>
@@ -885,7 +913,7 @@
       </div>
       {:else}
       <div class="scroll">
-        <EquipmentGrid slots={slotsResp?.slots ?? []} {items} game={game.current} groups={build.skills?.socketGroups ?? []} {selectedItem}
+        <EquipmentGrid slots={characterSlots} {items} game={game.current} groups={build.skills?.socketGroups ?? []} {selectedItem}
           onselect={selectItem}
           onactive={setSlotActive}
           onitemhover={(event, id) => showTip(event, `i${id}`, () => engine.itemTooltip({ itemId: id }))}
@@ -1044,10 +1072,13 @@
           </div>
         </div>
       {:else}
-      <div class="panel-head">
+      <div class="panel-head dbhead">
         <span class="tabs2">
-          <button class="t2" class:on={dbTab === "unique"} onclick={() => { dbTab = "unique"; dbType = ""; }}>{m.items_db_uniques()}</button>
-          <button class="t2" class:on={dbTab === "rare"} onclick={() => { dbTab = "rare"; dbType = ""; }}>{m.items_db_rares()}</button>
+          <button class="t2" class:on={dbShown === "unique"} onclick={() => { dbTab = "unique"; dbType = ""; }}>{m.items_db_uniques()}</button>
+          <button class="t2" class:on={dbShown === "rare"} onclick={() => { dbTab = "rare"; dbType = ""; }}>{m.items_db_rares()}</button>
+          {#if wickermanSlots.length}
+            <button class="t2" class:on={dbShown === "viscera"} onclick={() => { dbTab = "viscera"; dbType = ""; }}>{m.items_db_viscera()}</button>
+          {/if}
         </span>
         <span class="dim num">{dbTotal}</span>
       </div>
@@ -1067,17 +1098,17 @@
         {#if dbLoading}
           <div class="dim small pad">{m.items_db_parsing()}</div>
         {/if}
-        {#each dbRows as row (dbTab + row.name)}
+        {#each dbRows as row (dbShown + row.name)}
           <div
             class="item"
             role="note"
-            onmouseenter={(e) => showTip(e, `d${dbTab}:${row.name}:${build.rev}`, () => engine.itemTooltip({ db: dbTab, name: row.name }))}
+            onmouseenter={(e) => showTip(e, `d${dbShown}:${row.name}:${build.rev}`, () => engine.itemTooltip({ db: dbShown, name: row.name }))}
             onmouseleave={hideTip}
           >
             <span class="iname" style:color={rarityColor[row.rarity ?? ""] ?? "var(--fg-1)"}>{row.name}</span>
             <span class="itag dim">{row.baseName ?? row.type}</span>
             <span class="iops">
-              <button class="mini w" title={m.items_db_equip_title()} onclick={() => build.run(() => engine.itemDbEquip(dbTab, row.name))}>{m.items_equip()}</button>
+              <button class="mini w" title={m.items_db_equip_title()} onclick={() => build.run(() => engine.itemDbEquip(dbShown, row.name))}>{m.items_equip()}</button>
             </span>
           </div>
         {/each}
@@ -1423,7 +1454,14 @@
   }
   .tabs2 {
     display: inline-flex;
+    flex-wrap: wrap;
     gap: 2px;
+    min-width: 0;
+  }
+  .panel-head.dbhead {
+    height: auto;
+    min-height: 30px;
+    padding-block: 4px;
   }
   .t2 {
     appearance: none;
@@ -1434,6 +1472,8 @@
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
+    white-space: nowrap;
+    flex-shrink: 0;
     cursor: var(--cursor-pointer, pointer);
     padding: 2px 6px;
     border-radius: 3px;
