@@ -9,6 +9,7 @@
 export const ALLOWED = new Set([
   // read
   "get_character",
+  "list_classes",
   "get_stats",
   "get_sidebar",
   "list_stat_keys",
@@ -56,6 +57,8 @@ export const ALLOWED = new Set([
   "dealloc_node",
   "tree_undo",
   "set_level",
+  // Changing class unallocates passives it cannot reach; the approval gate and checkpoint cover the missing undo.
+  "select_class",
   "set_config",
   "set_main_skill",
   "add_socket_group",
