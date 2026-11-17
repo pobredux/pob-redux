@@ -57,7 +57,6 @@ export const ALLOWED = new Set([
   "dealloc_node",
   "tree_undo",
   "set_level",
-  // Changing class unallocates passives it cannot reach; the approval gate and checkpoint cover the missing undo.
   "select_class",
   "set_config",
   "set_main_skill",
