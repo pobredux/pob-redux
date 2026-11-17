@@ -16,6 +16,31 @@ pub fn build_table(lua: &Lua, epoch: Instant) -> LuaResult<Table> {
     t.set("null", lua.null())?;
 
     t.set(
+        "save_build_file",
+        lua.create_function(|_, (path, xml): (String, LuaString)| {
+            let path = Path::new(&path);
+            let target;
+            let path = if path.is_symlink() {
+                target = path.canonicalize().map_err(mlua::Error::external)?;
+                &target
+            } else {
+                path
+            };
+            crate::cache::replace_file(path, &[&xml.as_bytes()], true).map_err(mlua::Error::external)
+        })?,
+    )?;
+
+    t.set(
+        "file_modified_ms",
+        lua.create_function(|_, path: String| {
+            Ok(std::fs::metadata(path).ok()
+                .and_then(|metadata| metadata.modified().ok())
+                .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
+                .map(|elapsed| elapsed.as_secs_f64() * 1_000.0))
+        })?,
+    )?;
+
+    t.set(
         "array",
         lua.create_function(|lua, tbl: Table| {
             tbl.set_metatable(Some(lua.array_metatable()))?;

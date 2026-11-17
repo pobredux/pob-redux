@@ -45,6 +45,7 @@ const intents: [string, string][] = [
   ["list the gems I could socket", "list_gems"],
   ["what supports work with this skill", "list_valid_supports"],
   ["craft a rare ring", "craft_rare"],
+  ["weighted trade link for a rare under budget", "weighted_trade_link"],
   ["equip this unique item text", "equip_item_raw"],
   ["add a gem to the group", "add_gem"],
   ["find an item in the database", "search_item_db"],

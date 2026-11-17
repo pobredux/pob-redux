@@ -683,9 +683,11 @@ class ChatStore {
 
   /** Save the open thread once it has a message; `touched` (new messages) moves it up the list. */
   async saveThread(touched = false) {
-    if (this.poppedOut || !this.turns.length) return;
+    const threadId = this.thread.id;
+    if (this.poppedOut || !this.turns.length || this.deletingThreads.has(threadId)) return;
     if (this.agent) {
       const id = await invoke<string | null>("agent_resume_id", { session: this.agent }).catch(() => null);
+      if (this.thread.id !== threadId || this.deletingThreads.has(threadId)) return;
       if (id) {
         this.resume = id;
         this.resumeProvider = this.provider;
@@ -762,6 +764,7 @@ class ChatStore {
   }
 
   private async patchThread(id: string, patch: Partial<ThreadMeta>) {
+    if (this.deletingThreads.has(id)) return;
     const meta = id === this.thread.id ? this.thread : this.threads.find((t) => t.id === id);
     if (!meta) return;
     const next = { ...meta, ...patch };
@@ -771,15 +774,26 @@ class ChatStore {
     await invoke("thread_save", { game: next.game, id, meta: JSON.stringify(next), data: null }).catch(() => {});
   }
 
+  private deletingThreads = new Set<string>();
+
   async deleteThread(id: string) {
+    if (this.deletingThreads.has(id)) return;
     const open = id === this.thread.id;
     if (open && this.busy) return;
     const meta = this.threads.find((t) => t.id === id) ?? (open ? this.thread : null);
     if (!meta) return;
-    if (open) this.closeAgent();
-    await invoke("thread_delete", { game: meta.game, id }).catch(() => {});
+    this.deletingThreads.add(id);
+    try {
+      await invoke("thread_delete", { game: meta.game, id });
+    } catch (e) {
+      this.error = String(e);
+      return;
+    } finally {
+      this.deletingThreads.delete(id);
+    }
     this.threads = this.threads.filter((t) => t.id !== id);
-    if (!open) return;
+    if (this.thread.id !== id) return;
+    this.closeAgent();
     this.clear();
     this.input = "";
     this.thread = newThread();
@@ -1143,10 +1157,12 @@ class ChatStore {
 
   async send() {
     const text = this.input.trim();
-    if (!text || this.busy) return;
+    const threadId = this.thread.id;
+    if (!text || this.busy || this.deletingThreads.has(threadId)) return;
     // A send during warm-up waits for it; the composer button is disabled
     // meanwhile, but a boot-time message must not be lost.
     if (this.warming) await this.warming;
+    if (this.thread.id !== threadId || this.busy || this.deletingThreads.has(threadId)) return;
     // A new message keeps whatever the last reply changed.
     this.experiment = null;
     this.undoWarning = null;
@@ -1358,7 +1374,7 @@ class ChatStore {
    * work so far, so this resumes rather than starting the task again.
    */
   async continueRun() {
-    if (this.busy || !this.history.length) return;
+    if (this.busy || !this.history.length || this.deletingThreads.has(this.thread.id)) return;
     this.notice = null;
     this.canContinue = false;
     await this.run();

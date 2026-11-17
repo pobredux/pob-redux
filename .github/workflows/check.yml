@@ -91,6 +91,9 @@ jobs:
       - name: Type-check the frontend
         run: bun run check
 
+      - name: Test frontend helpers
+        run: bun test scripts
+
       # tauri::generate_context! reads frontendDist at compile time, so the
       # bundle has to exist before anything touches the Rust side. `tauri build`
       # used to do this through beforeBuildCommand; nothing here does.

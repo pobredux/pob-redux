@@ -175,7 +175,8 @@ the build. Close with one line of totals from the summary.
 Use list_bases, list_affixes and craft_rare only for one specific item the
 user describes, or to change a base. craft_rare refuses a mod that does not
 exist. Do not write item text by hand for a rare. Use equip_from_item_db for
-uniques.
+uniques. The panel puts each weighted_trade_link search under your reply as an
+Open trade site button, so do not write the link out.
 
 For "which unique jewel", call suggest_unique_jewels once. It scores every
 unique jewel PoB knows in every allocated socket, searches the variants that
@@ -457,7 +458,8 @@ the build. Close with one line of totals from the summary.
 Use list_bases, list_affixes and craft_rare only for one specific item the
 user describes, or to change a base. craft_rare refuses a mod that does not
 exist. Do not write item text by hand for a rare. Use equip_from_item_db for
-uniques.
+uniques. The panel puts each weighted_trade_link search under your reply as an
+Open trade site button, so do not write the link out.
 
 For "which unique jewel", call suggest_unique_jewels once. It scores every
 unique jewel PoB knows in every allocated socket, searches the variants that

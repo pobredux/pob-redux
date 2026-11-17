@@ -218,20 +218,23 @@
 
   // The model mangles long trade addresses when it copies them, so the button takes the tool's own.
   const tradeLinks = $derived.by(() => {
-    const out = new Map<number, string>();
-    let url: string | null = null;
+    const out = new Map<number, Map<string, string>>();
+    let links = new Map<string, string>();
     let lastBot = -1;
     const close = () => {
-      if (url && lastBot >= 0) out.set(lastBot, url);
-      url = null;
+      if (links.size && lastBot >= 0) out.set(lastBot, links);
+      links = new Map();
       lastBot = -1;
     };
     chat.turns.forEach((t, i) => {
       if (t.kind === "user") close();
       else if (t.kind === "assistant") lastBot = i;
-      else if (t.kind === "tool") {
-        const u = (t.result as { tradeUrl?: unknown } | undefined)?.tradeUrl;
-        if (typeof u === "string" && u.startsWith("https://www.pathofexile.com/trade")) url = u;
+      else if (t.kind === "tool" && t.status === "done") {
+        const result = t.result as { tradeUrl?: unknown; slot?: unknown } | undefined;
+        const url = result?.tradeUrl;
+        if (typeof url === "string" && url.startsWith("https://www.pathofexile.com/trade")) {
+          links.set(url, typeof result?.slot === "string" ? result.slot : "");
+        }
       }
     });
     if (!chat.busy) close();
@@ -361,11 +364,11 @@
         {:else if turn.kind === "assistant"}
           <div class="botwrap">
             <div class="turn bot"><Markdown text={turn.text} /></div>
-            {#if tradeLinks.has(i)}
-              <button class="btn sm trade" onclick={() => tradeWindow.open(tradeLinks.get(i)!)} title={tradeLinks.get(i)}>
-                <Icon name="magnifying-glass" size={12} />{m.chat_open_trade()}
+            {#each tradeLinks.get(i) ?? [] as [url, slot] (url)}
+              <button class="btn sm trade" onclick={() => tradeWindow.open(url)} title={url}>
+                <Icon name="magnifying-glass" size={12} />{m.chat_open_trade()}{slot ? ` · ${slot}` : ""}
               </button>
-            {/if}
+            {/each}
             <button
               class="copy"
               class:done={copied === i}
