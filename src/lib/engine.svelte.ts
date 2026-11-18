@@ -1927,7 +1927,7 @@ export const engine = {
   equipItem: (slot: string, itemId: number) => call<SlotsResponse>("equip_item", { slot, itemId }),
   setSlotActive: (slot: string, active: boolean) => call<SlotsResponse>("set_slot_active", { slot, active }),
   deleteItem: (itemId: number) => call<{ items: ItemInfo[] }>("delete_item", { itemId }),
-  itemDbList: (opts: { db: ItemDbName; query?: string; type?: string; limit?: number; offset?: number }) =>
+  itemDbList: (opts: { db: ItemDbName; query?: string; type?: string; slot?: string; limit?: number; offset?: number }) =>
     call<{ items: ItemDbRow[]; total: number; offset: number; types: { type: string; count: number }[] }>("item_db_list", opts),
   statDifferences: (show?: boolean) => call<{ show: boolean }>("stat_differences", show === undefined ? undefined : { show }),
   itemTooltip: (opts: { itemId?: number; db?: ItemDbName; name?: string; raw?: string; slotName?: string | false }) =>
@@ -1946,8 +1946,9 @@ export const engine = {
   itemRaw: (itemId: number) => call<{ raw: string }>("item_raw", { itemId }),
   itemEdit: (text: string, itemId?: number, generation?: number) => call<{ ok: boolean; itemId: number; name: string }>("item_edit", { text, itemId, generation }),
   setWeaponSet: (set: 1 | 2) => call<SlotsResponse>("set_weapon_set", { set }),
-  craftBases: () => call<{ types: string[]; bases: Record<string, CraftBase[]> }>("craft_bases"),
-  craftItem: (opts: { type: string; baseName: string; rarity?: string; title?: string; equip?: boolean }) =>
+  /** With `slot`, only bases that fit it; `noRare` lists types PoB crafts as Magic at most (flasks, charms). */
+  craftBases: (slot?: string) => call<{ types: string[]; bases: Record<string, CraftBase[]>; noRare: string[] }>("craft_bases", slot ? { slot } : undefined),
+  craftItem: (opts: { type: string; baseName: string; rarity?: string; title?: string; equip?: boolean; slotName?: string }) =>
     call<{ ok: boolean; itemId: number; name: string; crafted: boolean }>("craft_item", opts),
   itemAffixes: (itemId: number) => call<ItemAffixes>("item_affixes", { itemId }),
   itemAffixRolls: (target: ItemTarget, table: "prefixes" | "suffixes", index: number, seriesId: string) =>

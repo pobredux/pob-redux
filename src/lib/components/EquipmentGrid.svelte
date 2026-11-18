@@ -1,14 +1,16 @@
 <script lang="ts">
   import type { ItemInfo, SlotInfo, SocketGroup } from "$lib/engine.svelte";
-  import { socketedGems, equipmentArea, socketPosition, visibleEquipment } from "$lib/equipment";
+  import { socketedGems, equipmentArea, slotArtBase, socketPosition, visibleEquipment } from "$lib/equipment";
   import { m } from "$lib/paraglide/messages";
   import { slotLabel } from "$lib/pob-labels";
   import { socketArtUrls } from "$lib/item-art";
   import ItemIcon from "./ItemIcon.svelte";
+  import Icon from "./Icon.svelte";
 
-  let { slots, items, game, groups = [], areas, selectedItem, onselect, onactive, onitemhover, ongemhover, onleave, legend = true }:
-    { slots: SlotInfo[]; items: ItemInfo[]; game: "poe1" | "poe2"; groups?: SocketGroup[]; areas?: Record<string, string>; selectedItem: number | null;
-      onselect: (id: number) => void; onactive?: (slot: string, active: boolean) => void;
+  let { slots, items, game, groups = [], areas, selectedItem, targetSlot = null, onselect, onempty, onslotmenu, onactive, onitemhover, ongemhover, onleave, legend = true }:
+    { slots: SlotInfo[]; items: ItemInfo[]; game: "poe1" | "poe2"; groups?: SocketGroup[]; areas?: Record<string, string>; selectedItem: number | null; targetSlot?: string | null;
+      onselect: (id: number) => void; onempty?: (slot: string) => void; onslotmenu?: (event: MouseEvent, slot: string) => void;
+      onactive?: (slot: string, active: boolean) => void;
       onitemhover: (event: MouseEvent | FocusEvent, itemId: number) => void;
       ongemhover: (event: MouseEvent | FocusEvent, group: number, gem: number) => void; onleave: () => void;
       legend?: boolean } = $props();
@@ -46,19 +48,31 @@
   {@const item = byId.get(slot.itemId)}
   {@const sockets = item?.sockets ?? []}
   {@const gems = game === "poe1" ? socketedGems(slot.slot, sockets, groups) : []}
-  <div class="cell" class:occupied={!!item} class:off={!!item && slot.active === false} class:selected={!!item && selectedItem === item.id} class:keyboard={keyboardSlot === slot.slot}
+  <div class="cell" class:occupied={!!item} class:off={!!item && slot.active === false} class:selected={!!item && selectedItem === item.id} class:targeted={!item && targetSlot === slot.slot} class:keyboard={keyboardSlot === slot.slot}
     onfocusin={(event) => { if ((event.target as HTMLElement).matches(":focus-visible")) keyboardSlot = slot.slot; }}
     onfocusout={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) keyboardSlot = null; }}
     style:grid-area={areaOf(slot)} style:--rarity={rarity[item?.rarity ?? ""] ?? "var(--line-1)"}>
-    <button class="gear" disabled={!item} aria-label={`${slotLabel(slot.label ?? slot.slot)}: ${item?.name ?? m.items_empty_slot()}`}
-      aria-pressed={!!item && selectedItem === item.id}
+    <button class="gear" disabled={!item && !onempty} aria-label={`${slotLabel(slot.label ?? slot.slot)}: ${item?.name ?? m.items_empty_slot()}`}
+      title={item || !onempty ? undefined : m.items_slot_add({ slot: slotLabel(slot.label ?? slot.slot) })}
+      aria-pressed={item ? selectedItem === item.id : undefined}
       onmouseenter={(event) => item && onitemhover(event, item.id)} onmouseleave={onleave}
       onfocus={(event) => item && onitemhover(event, item.id)} onblur={onleave}
-      onclick={() => item && onselect(item.id)}>
+      onclick={() => (item ? onselect(item.id) : onempty?.(slot.slot))}
+      oncontextmenu={(event) => {
+        if (!onslotmenu) return;
+        event.preventDefault();
+        onslotmenu(event, slot.slot);
+      }}>
       {#if item}
         <ItemIcon item={{ game, name: item.title ?? item.name, baseName: item.baseName, rarity: item.rarity }} fallback={item.name} />
       {:else}
-        <span class="empty">{slotLabel(slot.label ?? slot.slot)}</span>
+        {@const ghost = slotArtBase(game, slot.slot)}
+        {#if ghost}
+          <span class="ghost"><ItemIcon item={{ game, name: ghost, baseName: ghost, rarity: null }} fallback={slotLabel(slot.label ?? slot.slot)} /></span>
+        {:else}
+          <span class="empty">{slotLabel(slot.label ?? slot.slot)}</span>
+        {/if}
+        {#if onempty}<span class="plus" aria-hidden="true"><Icon name="plus" size={12} /></span>{/if}
       {/if}
     </button>
     {#if item && slot.active != null && onactive}
@@ -129,7 +143,7 @@
   {#if limbs.length}
     <div class="extras">{#each limbs as slot (slot.slot)}{@render cell(slot)}{/each}</div>
   {/if}
-  {#if legend}<div class="legend"><span>{m.items_equipment_hint()}</span></div>{/if}
+  {#if legend}<div class="legend"><span>{onslotmenu ? m.items_equipment_hint_add() : m.items_equipment_hint()}</span></div>{/if}
 </div>
 
 <style>
@@ -140,8 +154,17 @@
   .cell.occupied:hover, .cell:focus-within, .cell.selected { border-color: var(--rarity); box-shadow: 0 0 0 1px var(--rarity); }
   .gear { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; padding: 3px; background: none; border: 0; color: var(--fg-2); cursor: var(--cursor-pointer, pointer); }
   .gear:disabled { cursor: var(--cursor-arrow, default); }
+  .cell:not(.occupied):has(.gear:enabled):hover { border-color: var(--line-2); background: var(--bg-1); }
+  .cell:not(.occupied):hover .gear:enabled .empty { opacity: 0.9; }
+  .cell.targeted { border-color: var(--focus); box-shadow: 0 0 0 1px var(--focus); }
   .gear:focus-visible, .gem:focus-visible { outline: 2px solid var(--fg-0); outline-offset: 2px; }
   .empty { font-size: 9px; line-height: 1.2; overflow-wrap: anywhere; opacity: 0.55; }
+  .ghost { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; padding: 6%; pointer-events: none; }
+  .ghost :global(img) { opacity: 0.14; filter: grayscale(1); transition: opacity 120ms; }
+  .ghost :global(.fallback) { font-size: 9px; opacity: 0.55; }
+  .cell:hover .ghost :global(img), .cell.targeted .ghost :global(img) { opacity: 0.3; }
+  .plus { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: grid; place-items: center; width: 18px; height: 18px; border: 1px solid var(--line-2); border-radius: 4px; background: color-mix(in oklab, var(--bg-1) 85%, transparent); color: var(--fg-2); pointer-events: none; }
+  .cell:hover .plus, .cell.targeted .plus { color: var(--fg-0); border-color: var(--fg-2); }
   .cell.off .gear { opacity: 0.4; filter: grayscale(1); }
   .act { position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%); width: 12px; height: 12px; padding: 0; border: 1px solid var(--line-2); border-radius: 2px; background: var(--bg-0); }
   .act.on { border-color: var(--ok); background: var(--ok); box-shadow: inset 0 0 0 2px var(--bg-0); }

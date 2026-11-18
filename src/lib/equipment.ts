@@ -22,6 +22,44 @@ export function equipmentArea(slot: string): string | undefined {
   return EQUIPMENT_LAYOUT[slot.replace(/ Swap$/, "")];
 }
 
+// Plain bases with art in poe-art's maps for each game, drawn faintly in empty slots.
+const SLOT_ART: Record<"poe1" | "poe2", Record<string, string>> = {
+  poe1: {
+    "Weapon 1": "Copper Sword",
+    "Weapon 2": "Plank Kite Shield",
+    Helmet: "Iron Hat",
+    "Body Armour": "Plate Vest",
+    Gloves: "Iron Gauntlets",
+    Boots: "Iron Greaves",
+    Belt: "Leather Belt",
+    Amulet: "Jade Amulet",
+    Ring: "Iron Ring",
+    "Flask 1": "Small Life Flask",
+    "Flask 2": "Small Mana Flask",
+    Flask: "Quicksilver Flask",
+  },
+  poe2: {
+    "Weapon 1": "Broadsword",
+    "Weapon 2": "Splintered Tower Shield",
+    Helmet: "Rusted Greathelm",
+    "Body Armour": "Rusted Cuirass",
+    Gloves: "Stocky Mitts",
+    Boots: "Iron Greaves",
+    Belt: "Heavy Belt",
+    Amulet: "Jade Amulet",
+    Ring: "Iron Ring",
+    "Flask 1": "Lesser Life Flask",
+    "Flask 2": "Lesser Mana Flask",
+    Charm: "Thawing Charm",
+  },
+};
+
+export function slotArtBase(game: "poe1" | "poe2", slot: string): string | null {
+  const table = SLOT_ART[game];
+  const key = slot.replace(/ Swap$/, "");
+  return table[key] ?? table[key.replace(/ \d+$/, "")] ?? null;
+}
+
 export function visibleEquipment(slots: SlotInfo[]): SlotInfo[] {
   return slots.filter((slot) => slot.shown && !slot.inactive && slot.nodeId == null);
 }

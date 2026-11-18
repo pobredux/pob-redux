@@ -3227,7 +3227,7 @@ M.equip_item_raw = function(p)
 		error("no compatible slot found for this item; pass params.slot", 0)
 	end
 	build.itemsTab:AddItem(item, true)
-	build.itemsTab.slots[slotName]:SetSelItemId(item.id)
+	itemUtil.fillSlot(build.itemsTab.slots[slotName], item.id)
 	build.itemsTab:AddUndoState()
 	refresh()
 	return { ok = true, itemId = item.id, slot = slotName, itemName = item.name }
@@ -3242,7 +3242,7 @@ M.equip_item = function(p)
 	if id ~= 0 and not build.itemsTab:IsItemValidForSlot(build.itemsTab.items[id], slot.slotName) then
 		error(build.itemsTab.items[id].name .. " does not fit " .. slot.slotName, 0)
 	end
-	slot:SetSelItemId(id)
+	itemUtil.fillSlot(slot, id)
 	build.itemsTab:AddUndoState()
 	refresh()
 	return M.list_slots()
@@ -4733,12 +4733,15 @@ M.item_db_list = function(p)
 	local db = itemUtil.dbFor(p.db)
 	local q = (p.query or ""):lower()
 	local wantType = p.type
+	local wantSlot = p.slot
+	if wantSlot and not build.itemsTab.slots[wantSlot] then error("unknown slot " .. tostring(wantSlot), 0) end
 	local rows = {}
 	local types = {}
 	for name, item in pairs(db.list) do
 		local itype = item.type or "?"
-		types[itype] = (types[itype] or 0) + 1
-		local match = (q == "" or name:lower():find(q, 1, true) ~= nil or (item.baseName or ""):lower():find(q, 1, true) ~= nil)
+		local fits = not wantSlot or (item.base and build.itemsTab:IsItemValidForSlot(item, wantSlot))
+		if fits then types[itype] = (types[itype] or 0) + 1 end
+		local match = fits and (q == "" or name:lower():find(q, 1, true) ~= nil or (item.baseName or ""):lower():find(q, 1, true) ~= nil)
 			and (not wantType or itype == wantType)
 		if match then
 			local implicits = array({})
@@ -4951,21 +4954,33 @@ end
 -- Crafting: bases, affixes, runes (ItemsTab:CraftItem / UpdateAffixControl)
 -- ---------------------------------------------------------------------------
 
-M.craft_bases = function()
-	local types = strArray(data.itemBaseTypeList)
+M.craft_bases = function(p)
+	local slot = p and p.slot
+	if slot then
+		ensureBuild()
+		if not build.itemsTab.slots[slot] then error("unknown slot " .. tostring(slot), 0) end
+	end
+	local types, noRare = array({}), array({})
 	local bases = {}
 	for _, t in ipairs(data.itemBaseTypeList) do
 		local list = array({})
 		for _, e in ipairs(data.itemBaseLists[t] or {}) do
-			list[#list + 1] = {
-				name = e.name,
-				label = opt(e.label),
-				subType = e.base and opt(e.base.subType) or null,
-			}
+			-- IsItemValidForSlot reads only these fields, so no full Item is built per base.
+			if not slot or build.itemsTab:IsItemValidForSlot({ type = e.base.type, base = e.base, baseName = e.name, rarity = "NORMAL" }, slot) then
+				list[#list + 1] = {
+					name = e.name,
+					label = opt(e.label),
+					subType = e.base and opt(e.base.subType) or null,
+				}
+			end
 		end
-		bases[t] = list
+		if #list > 0 then
+			types[#types + 1] = t
+			bases[t] = list
+			if itemUtil.magicAtMost(data.itemBaseLists[t][1].base) then noRare[#noRare + 1] = t end
+		end
 	end
-	return { types = types, bases = bases }
+	return { types = types, bases = bases, noRare = noRare }
 end
 
 -- `itemType` may be a typed list ("Boots: Armour") or its family ("Boots"),
@@ -4984,6 +4999,11 @@ function itemUtil.findBase(itemType, baseName)
 	end
 	if not known then error("unknown item type " .. tostring(itemType) .. "; see list_bases", 0) end
 	error("unknown base " .. tostring(baseName) .. " in type " .. tostring(itemType) .. "; see list_bases", 0)
+end
+
+-- CraftItem's makeItem turns a Rare pick into Magic for these bases.
+function itemUtil.magicAtMost(base)
+	return base.flask or base.type == "Charm" or base.type == "Tincture" or (base.type == "Jewel" and base.subType == "Charm") or false
 end
 
 -- Same construction as CraftItem's makeItem. The item is not added to the
@@ -5016,7 +5036,7 @@ function itemUtil.makeCraftedItem(base, rarity, title, range)
 		end
 		item.itemSocketCount = #item.sockets
 	end
-	if (base.base.flask or (base.base.type == "Jewel" and base.base.subType == "Charm") or base.base.type == "Charm") and rarity == "RARE" then
+	if itemUtil.magicAtMost(base.base) and rarity == "RARE" then
 		rarity = "MAGIC"
 	end
 	if base.base.type == "Transcendent Limb" then
@@ -5125,6 +5145,17 @@ function itemUtil.clusterSummary(item)
 	}
 end
 
+-- For user equips only: PoB leaves a filled flask or charm slot off, the app switches an empty one on.
+function itemUtil.fillSlot(slot, itemId)
+	local wasEmpty = (slot.selItemId or 0) == 0
+	slot:SetSelItemId(itemId)
+	if wasEmpty and itemId ~= 0 and slot.controls and slot.controls.activate then
+		slot.active = true
+		slot.controls.activate.state = true
+		build.itemsTab.activeItemSet[slot.slotName].active = true
+	end
+end
+
 function itemUtil.equipFirstValid(item, slotName)
 	slotName = itemUtil.resolveSlotName(slotName)
 	if slotName then
@@ -5133,12 +5164,12 @@ function itemUtil.equipFirstValid(item, slotName)
 		if not build.itemsTab:IsItemValidForSlot(item, slotName) then
 			error(item.baseName .. " does not fit slot " .. slotName, 0)
 		end
-		slot:SetSelItemId(item.id)
+		itemUtil.fillSlot(slot, item.id)
 		return slotName
 	end
 	for _, slot in ipairs(build.itemsTab.orderedSlots) do
 		if not slot.inactive and build.itemsTab:IsItemValidForSlot(item, slot.slotName) then
-			slot:SetSelItemId(item.id)
+			itemUtil.fillSlot(slot, item.id)
 			return slot.slotName
 		end
 	end
@@ -5152,7 +5183,7 @@ M.craft_item = function(p)
 	local item = itemUtil.makeCraftedItem(entry, p.rarity, p.title)
 	if item.clusterJewel then itemUtil.craftClusterJewel(item) end
 	build.itemsTab:AddItem(item, true)
-	if p.equip then itemUtil.equipFirstValid(item) end
+	if p.equip or p.slotName then itemUtil.equipFirstValid(item, p.slotName) end
 	build.itemsTab:PopulateSlots()
 	build.itemsTab:AddUndoState()
 	refresh()
@@ -9572,7 +9603,7 @@ M.compare_copy_item = function(p)
 	if not build.itemsTab:IsItemValidForSlot(item, slotName) then
 		error(item.name .. " does not fit " .. slotName, 0)
 	end
-	build.itemsTab.slots[slotName]:SetSelItemId(item.id)
+	itemUtil.fillSlot(build.itemsTab.slots[slotName], item.id)
 	build.itemsTab:AddUndoState()
 	refresh()
 	return { ok = true, slot = slotName, itemName = item.name }

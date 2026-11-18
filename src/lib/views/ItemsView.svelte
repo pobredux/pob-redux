@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { scrollHint } from "$lib/scroll-hint";
   import { onDestroy, tick, untrack } from "svelte";
   import { readText } from "@tauri-apps/plugin-clipboard-manager";
   import {
@@ -23,6 +24,7 @@
   import Kbd from "$lib/components/Kbd.svelte";
   import { game } from "$lib/state/game.svelte";
   import EquipmentGrid from "$lib/components/EquipmentGrid.svelte";
+  import ContextMenu from "$lib/components/ContextMenu.svelte";
   import { isWickermanSlot, WICKERMAN_AREAS } from "$lib/equipment";
   import PobText from "$lib/components/PobText.svelte";
   import { stripPobText } from "$lib/pobtext";
@@ -59,6 +61,8 @@
   let buySimilarFor = $state<number | null>(null);
 
   let dbTab = $state<ItemDbName>("unique");
+  let sharedTab = $state(false);
+  let dbSlot = $state<string | null>(null);
   let dbQuery = $state("");
   let dbType = $state("");
   let dbRows = $state<ItemDbRow[]>([]);
@@ -199,7 +203,8 @@
       const restoreScroll = holdDetailScroll(pane);
       preview = { ...result, text, customization };
       restoreScroll();
-      if (!result.slots.some((s) => s.slot === previewSlot)) previewSlot = result.slots[0]?.slot ?? "";
+      if (dbSlot && result.slots.some((s) => s.slot === dbSlot)) previewSlot = dbSlot;
+      else if (!result.slots.some((s) => s.slot === previewSlot)) previewSlot = result.slots[0]?.slot ?? "";
       hideTip();
       return true;
     } catch (e) {
@@ -285,7 +290,7 @@
     }, { sync: false });
     if (result && alive) {
       discardPreview();
-      selectedItem = result.itemId;
+      selectedItem = null;
     }
     if (result) await build.run(() => build.sync(), { sync: false, user: false });
     previewCommitting = false;
@@ -299,13 +304,20 @@
     });
   });
 
+  type CraftData = { types: string[]; bases: Record<string, CraftBase[]>; noRare: string[] };
   let craftOpen = $state(false);
-  let craftData = $state<{ types: string[]; bases: Record<string, CraftBase[]> } | null>(null);
+  let craftAll: CraftData | null = null;
+  let craftData = $state<CraftData | null>(null);
+  let craftSlot = $state<string | null>(null);
   let craftType = $state("");
   let craftBase = $state("");
   let craftRarity = $state("RARE");
   let craftTitle = $state("New Item");
   let craftEquip = $state(true);
+  const craftNoRare = $derived(!!craftData?.noRare.includes(craftType));
+  $effect(() => {
+    if (craftNoRare && craftRarity === "RARE") craftRarity = "MAGIC";
+  });
 
   let detail = $state<{ itemId: number; tt: Tooltip; customization: ItemCustomization } | null>(null);
   let pendingDetail: { itemId: number; customization: ItemCustomization } | null = null;
@@ -361,6 +373,10 @@
   // shared items (main.sharedItemList; app-added ones persisted locally)
   const SHARED_KEY = "pob-redux:shared-items";
   let shared = $state<SharedItem[]>([]);
+  const sharedRows = $derived.by(() => {
+    const q = dbQuery.trim().toLowerCase();
+    return q ? shared.filter((it) => `${it.name} ${it.baseName ?? ""}`.toLowerCase().includes(q)) : shared;
+  });
   $effect(() => {
     build.rev;
     engine.getSharedItems().then((r) => (shared = r.items)).catch(() => (shared = []));
@@ -381,8 +397,15 @@
     if (r) {
       shared = r.items;
       persistShared(r.items[r.items.length - 1].raw, true);
+      templateSaved = itemId;
     }
   }
+  let templateSaved = $state<number | null>(null);
+  $effect(() => {
+    selectedItem;
+    build.rev;
+    templateSaved = null;
+  });
   async function removeShared(it: SharedItem) {
     const r = await engine.removeSharedItem(it.index).catch(() => null);
     if (r) {
@@ -399,19 +422,22 @@
     traderOpen = true;
   }
 
-  async function openCraft() {
+  async function openCraft(slot: string | null = null, equip = slot != null || craftEquip) {
+    craftSlot = slot;
+    craftEquip = equip;
     craftOpen = true;
-    if (!craftData) {
-      craftData = await engine.craftBases().catch(() => null);
-      if (craftData) {
-        craftType = craftData.types[0] ?? "";
-        craftBase = craftData.bases[craftType]?.[0]?.name ?? "";
-      }
+    const loaded = slot ? await engine.craftBases(slot).catch(() => null) : (craftAll ??= await engine.craftBases().catch(() => null));
+    if (craftSlot !== slot) return;
+    craftData = loaded;
+    if (craftData && !craftData.bases[craftType]?.some((b) => b.name === craftBase)) {
+      if (!craftData.types.includes(craftType)) craftType = craftData.types[0] ?? "";
+      craftBase = craftData.bases[craftType]?.[0]?.name ?? "";
     }
   }
   async function doCraft() {
     if (itemBusy) return;
-    const r = await build.run(() => engine.craftItem({ type: craftType, baseName: craftBase, rarity: craftRarity, title: craftTitle, equip: craftEquip }));
+    const slotName = craftEquip && craftSlot ? craftSlot : undefined;
+    const r = await build.run(() => engine.craftItem({ type: craftType, baseName: craftBase, rarity: craftRarity, title: craftTitle, equip: craftEquip, slotName }));
     if (r) {
       craftOpen = false;
       selectedItem = r.itemId;
@@ -468,31 +494,97 @@
     return () => { live = false; };
   });
 
+  const dbSlotInfo = $derived(dbSlot ? characterSlots.find((s) => s.slot === dbSlot) : undefined);
   $effect(() => {
-    const q = dbQuery;
-    const t = dbType;
-    const tab = dbShown;
-    untrack(() => {
-      if (dbBusy) return;
-      dbBusy = true;
-      const stamp = ++dbStamp;
-      dbLoading = !dbLoaded;
-      engine
-        .itemDbList({ db: tab, query: q, type: t || undefined, limit: 80 })
-        .then((r) => {
-          if (stamp === dbStamp) {
-            dbRows = r.items;
-            dbTypes = r.types;
-            dbTotal = r.total;
-            dbLoaded = true;
-          }
-        })
-        .catch(() => {})
-        .finally(() => {
-          dbBusy = false;
-          dbLoading = false;
-        });
-    });
+    if (dbSlot && (!dbSlotInfo || items.some((it) => it.id === dbSlotInfo.itemId))) dbSlot = null;
+  });
+
+  function findForSlot(slot: string, tab?: ItemDbName) {
+    hideTip();
+    if (preview && !tab) {
+      if (preview.slots.some((s) => s.slot === slot)) previewSlot = slot;
+      return;
+    }
+    if (!tab && dbSlot === slot && selectedItem == null) {
+      dbSlot = null;
+      return;
+    }
+    if (preview) discardPreview();
+    selectedItem = null;
+    sharedTab = false;
+    if (tab) dbTab = tab;
+    dbType = "";
+    dbSlot = slot;
+  }
+
+  let slotMenu = $state<{ x: number; y: number; slot: string; unique?: number; rare?: number } | null>(null);
+  function openSlotMenu(e: MouseEvent, slot: string) {
+    hideTip();
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const fromKeyboard = e.clientX === 0 && e.clientY === 0;
+    const menu = { x: fromKeyboard ? r.left + 8 : e.clientX, y: fromKeyboard ? r.bottom : e.clientY, slot };
+    slotMenu = menu;
+    Promise.all([engine.itemDbList({ db: "unique", slot, limit: 0 }), engine.itemDbList({ db: "rare", slot, limit: 0 })])
+      .then(([unique, rare]) => {
+        if (slotMenu?.slot === slot) slotMenu = { ...slotMenu, unique: unique.total, rare: rare.total };
+      })
+      .catch(() => {});
+  }
+  const slotMenuItems = $derived.by<MenuItem[]>(() => {
+    const menu = slotMenu;
+    if (!menu) return [];
+    const none = m.items_slot_none_fit();
+    const equipped = characterSlots.find((s) => s.slot === menu.slot && s.itemId !== 0 && items.some((it) => it.id === s.itemId));
+    const list: MenuItem[] = [
+      { label: m.items_add_unique(), disabled: menu.unique === 0, title: menu.unique === 0 ? none : undefined, onclick: () => findForSlot(menu.slot, "unique") },
+      { label: m.items_add_rare(), disabled: menu.rare === 0, title: menu.rare === 0 ? none : undefined, onclick: () => findForSlot(menu.slot, "rare") },
+      { label: m.items_craft(), separator: true, onclick: () => void openCraft(menu.slot) },
+    ];
+    if (equipped) {
+      list.push({
+        label: m.items_slot_remove(),
+        title: m.items_slot_remove_title(),
+        danger: true,
+        separator: true,
+        onclick: () => build.run(() => engine.equipItem(menu.slot, 0)),
+      });
+    }
+    return list;
+  });
+
+  let dbPending = false;
+  function loadDb() {
+    if (dbBusy) {
+      dbPending = true;
+      return;
+    }
+    dbBusy = true;
+    dbPending = false;
+    const stamp = ++dbStamp;
+    dbLoading = !dbLoaded;
+    engine
+      .itemDbList({ db: dbShown, query: dbQuery, type: dbType || undefined, slot: dbSlot ?? undefined, limit: 80 })
+      .then((r) => {
+        if (stamp === dbStamp) {
+          dbRows = r.items;
+          dbTypes = r.types;
+          dbTotal = r.total;
+          dbLoaded = true;
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        dbBusy = false;
+        dbLoading = false;
+        if (dbPending) loadDb();
+      });
+  }
+  $effect(() => {
+    dbQuery;
+    dbType;
+    dbShown;
+    dbSlot;
+    untrack(loadDb);
   });
 
   function equipSlot(slot: string, id: number) {
@@ -834,7 +926,7 @@
       <button class="btn sm" class:on={slotsResp?.useSecondWeaponSet} onclick={() => build.run(() => engine.setWeaponSet(2))}><span class="set2">II</span></button>
     </div>
     <span class="vr"></span>
-    <button class="btn sm" onclick={openCraft}>{m.items_craft()}</button>
+    <button class="btn sm" onclick={() => openCraft()}>{m.items_craft()}</button>
     <button class="btn sm" onclick={() => openEdit(null)} disabled={previewCommitting}>{m.items_new_from_text()}</button>
     <button class="btn sm" onclick={pasteItem} disabled={previewCommitting} title={m.items_paste_hint()}>{m.items_paste()}</button>
     <button class="btn sm ghost" title={m.items_trader_title()} onclick={() => openTrader(null)}>{m.items_trader()}</button>
@@ -874,7 +966,7 @@
         {/if}
       </div>
       {#if wickermanOpen}
-      <div class="scroll">
+      <div class="scroll scroll-hint" {@attach scrollHint}>
         <EquipmentGrid slots={wickermanSlots} areas={wickermanAreas} {items} game={game.current} {selectedItem} legend={false}
           onselect={selectItem}
           onitemhover={(event, id) => itemTip(event, id)}
@@ -887,7 +979,7 @@
         {#if wickermanEmpty}<p class="sqnote">{m.wickerman_no_items()}</p>{/if}
       </div>
       {:else if squireOpen}
-      <div class="scroll">
+      <div class="scroll scroll-hint" {@attach scrollHint}>
         <div class="squirehead">
           <span class="sqname">{m.squire_title()}</span>
           {#if squire?.level != null}<span class="dim num small">{m.squire_level({ level: squire.level })}</span>{/if}
@@ -912,9 +1004,12 @@
         <p class="sqnote">{m.squire_note()}</p>
       </div>
       {:else}
-      <div class="scroll">
+      <div class="scroll scroll-hint" {@attach scrollHint}>
         <EquipmentGrid slots={characterSlots} {items} game={game.current} groups={build.skills?.socketGroups ?? []} {selectedItem}
-          onselect={selectItem}
+          targetSlot={preview ? previewSlot : selectedItem == null ? dbSlot : null}
+          onselect={(id) => selectItem(selectedItem === id ? null : id)}
+          onempty={(slot) => findForSlot(slot)}
+          onslotmenu={openSlotMenu}
           onactive={setSlotActive}
           onitemhover={(event, id) => showTip(event, `i${id}`, () => engine.itemTooltip({ itemId: id }))}
           ongemhover={(event, group, gem) => showTip(event, `g${group}:${gem}`, () => engine.gemTooltip(group, gem))}
@@ -938,7 +1033,7 @@
     <section class="col" bind:this={listCol}>
       {@render grip("list")}
       <div class="panel-head"><span class="label">{m.items_in_build()}</span><span class="dim num">{items.length}</span></div>
-      <div class="scroll">
+      <div class="scroll scroll-hint" {@attach scrollHint}>
         {#each items as it (it.id)}
           <div
             class="item"
@@ -964,25 +1059,6 @@
           <div class="dim small pad">{m.items_none()}</div>
         {/if}
       </div>
-      <div class="panel-head">
-        <span class="label">{m.items_shared()}</span>
-        <span class="dim num">{shared.length}</span>
-      </div>
-      <div class="scroll sharedlist" title={m.items_shared_title()}>
-        {#each shared as it (it.index)}
-          <div class="item">
-            <span class="iname" style:color={rarityColor[it.rarity ?? ""] ?? "var(--fg-1)"}>{it.name}</span>
-            <span class="itag dim">{it.baseName ?? ""}</span>
-            <span class="iops">
-              <button class="mini w" title={m.items_shared_equip_title()} onclick={() => build.run(() => engine.equipSharedItem(it.index))}>{m.items_equip()}</button>
-              <button class="mini x" title={m.items_shared_remove_title()} onclick={() => removeShared(it)}>✕</button>
-            </span>
-          </div>
-        {/each}
-        {#if shared.length === 0}
-          <div class="dim small pad">{m.items_shared_none()}</div>
-        {/if}
-      </div>
     </section>
 
     <section class="col db">
@@ -991,7 +1067,7 @@
           <span class="label">{m.items_preview_title()}</span>
           <button class="btn sm ghost" onclick={discardPreview} disabled={itemTransitionBusy}>{m.items_preview_discard()}</button>
         </div>
-        <div class="scroll detailpane" bind:this={detailPane} onscroll={followDetailScroll}>
+        <div class="scroll detailpane scroll-hint" {@attach scrollHint} bind:this={detailPane} onscroll={followDetailScroll}>
           <div class="detailcontent">
             <p class="dim small">{m.items_preview_note()}</p>
             {#if preview.tooltip.header}
@@ -1031,10 +1107,13 @@
       {:else if selectedItem != null && detail?.itemId === selectedItem}
         <div class="panel-head">
           <span class="label">{m.items_item()}</span>
+          <button class="btn sm ghost" title={m.items_shared_title()} disabled={itemBusy || templateSaved === selectedItem} onclick={() => selectedItem != null && addShared(selectedItem)}>
+            {#if templateSaved === selectedItem}<Icon name="check" size={12} />{m.items_template_saved()}{:else}{m.items_add_to_shared()}{/if}
+          </button>
           <button class="btn sm ghost" onclick={() => (buySimilarFor = selectedItem)} title={m.items_buy_similar_title()}>{m.items_buy_similar()}</button>
           <button class="btn sm ghost" onclick={() => selectItem(null)} disabled={itemTransitionBusy}>{m.items_back_to_database()}</button>
         </div>
-        <div class="scroll detailpane" bind:this={detailPane} onscroll={followDetailScroll}>
+        <div class="scroll detailpane scroll-hint" {@attach scrollHint} bind:this={detailPane} onscroll={followDetailScroll}>
           <div class="detailcontent">
             {#if detail.tt.header}
               <div class="ttbox">
@@ -1060,41 +1139,71 @@
               onpendingchange={setAffixPending}
             />
 
-            <div class="craftsec">
-              <div class="label">{m.items_modify()}</div>
-              <div class="modrow">
-                <button class="btn sm ghost" onclick={() => selectedItem != null && addShared(selectedItem)} disabled={itemBusy}>{m.items_add_to_shared()}</button>
-                {#if selectedEquippedSlot}
+            {#if selectedEquippedSlot}
+              <div class="craftsec">
+                <div class="label">{m.items_modify()}</div>
+                <div class="modrow">
                   <button class="btn sm ghost" title={m.items_find_upgrades_title()} onclick={() => openTrader(selectedEquippedSlot!)}>{m.items_find_upgrades()}</button>
-                {/if}
+                </div>
               </div>
-            </div>
+            {/if}
           </div>
         </div>
       {:else}
       <div class="panel-head dbhead">
         <span class="tabs2">
-          <button class="t2" class:on={dbShown === "unique"} onclick={() => { dbTab = "unique"; dbType = ""; }}>{m.items_db_uniques()}</button>
-          <button class="t2" class:on={dbShown === "rare"} onclick={() => { dbTab = "rare"; dbType = ""; }}>{m.items_db_rares()}</button>
+          <button class="t2" class:on={!sharedTab && dbShown === "unique"} onclick={() => { dbTab = "unique"; sharedTab = false; dbType = ""; }}>{m.items_db_uniques()}</button>
+          <button class="t2" class:on={!sharedTab && dbShown === "rare"} onclick={() => { dbTab = "rare"; sharedTab = false; dbType = ""; }}>{m.items_db_rares()}</button>
           {#if wickermanSlots.length}
-            <button class="t2" class:on={dbShown === "viscera"} onclick={() => { dbTab = "viscera"; dbType = ""; }}>{m.items_db_viscera()}</button>
+            <button class="t2" class:on={!sharedTab && dbShown === "viscera"} onclick={() => { dbTab = "viscera"; sharedTab = false; dbType = ""; }}>{m.items_db_viscera()}</button>
           {/if}
+          <button class="t2" class:on={sharedTab} title={m.items_shared_title()} onclick={() => (sharedTab = true)}>{m.items_shared()}</button>
         </span>
-        <span class="dim num">{dbTotal}</span>
+        <span class="dim num">{sharedTab ? sharedRows.length : dbTotal}</span>
       </div>
       <div class="dbbar">
         <span class="hinted">
           <input class="input" placeholder={m.common_search()} bind:value={dbQuery} bind:this={dbSearchEl} />
           {#if !dbQuery}<Kbd keys="Mod+F" hint />{/if}
         </span>
-        <select class="select typesel" bind:value={dbType}>
-          <option value="">{m.common_all_types()}</option>
-          {#each dbTypes as t}
-            <option value={t.type}>{t.type} ({t.count})</option>
-          {/each}
-        </select>
+        {#if sharedTab}
+          <button class="btn sm" onclick={() => openCraft(null, false)}>{m.items_craft()}</button>
+        {:else}
+          <select class="select typesel" bind:value={dbType}>
+            <option value="">{m.common_all_types()}</option>
+            {#each dbTypes as t}
+              <option value={t.type}>{t.type} ({t.count})</option>
+            {/each}
+          </select>
+        {/if}
       </div>
-      <div class="scroll">
+      {#if dbSlot}
+        <div class="slotbar">
+          <span>{m.items_db_for_slot({ slot: slotLabel(dbSlotInfo?.label ?? dbSlot) })}</span>
+          <button class="mini x" title={m.items_db_clear_slot()} aria-label={m.items_db_clear_slot()} onclick={() => (dbSlot = null)}>✕</button>
+        </div>
+      {/if}
+      <div class="scroll scroll-hint" {@attach scrollHint}>
+        {#if sharedTab}
+          {#each sharedRows as it (it.index)}
+            <div
+              class="item"
+              role="note"
+              onmouseenter={(e) => showTip(e, `h${it.raw}`, () => engine.itemTooltip({ raw: it.raw }))}
+              onmouseleave={hideTip}
+            >
+              <span class="iname" style:color={rarityColor[it.rarity ?? ""] ?? "var(--fg-1)"}>{it.name}</span>
+              <span class="itag dim">{it.baseName ?? ""}</span>
+              <span class="iops">
+                <button class="mini w" title={m.items_shared_equip_title()} onclick={() => build.run(() => engine.equipSharedItem(it.index, dbSlot ?? undefined))}>{m.items_equip()}</button>
+                <button class="mini x" title={m.items_shared_remove_title()} onclick={() => removeShared(it)}>✕</button>
+              </span>
+            </div>
+          {/each}
+          {#if sharedRows.length === 0}
+            <div class="dim small pad">{shared.length ? m.items_db_none() : m.items_shared_none()}</div>
+          {/if}
+        {:else}
         {#if dbLoading}
           <div class="dim small pad">{m.items_db_parsing()}</div>
         {/if}
@@ -1108,12 +1217,13 @@
             <span class="iname" style:color={rarityColor[row.rarity ?? ""] ?? "var(--fg-1)"}>{row.name}</span>
             <span class="itag dim">{row.baseName ?? row.type}</span>
             <span class="iops">
-              <button class="mini w" title={m.items_db_equip_title()} onclick={() => build.run(() => engine.itemDbEquip(dbShown, row.name))}>{m.items_equip()}</button>
+              <button class="mini w" title={m.items_db_equip_title()} onclick={() => build.run(() => engine.itemDbEquip(dbShown, row.name, dbSlot ?? undefined))}>{m.items_equip()}</button>
             </span>
           </div>
         {/each}
         {#if !dbLoading && dbRows.length === 0}
           <div class="dim small pad">{m.items_db_none()}</div>
+        {/if}
         {/if}
       </div>
       {/if}
@@ -1124,12 +1234,15 @@
     <div class="modal">
       <div class="panel dialog craftdlg">
         <div class="label">{m.items_craft_title()}</div>
+        {#if craftSlot}
+          <div class="dim small">{m.items_db_for_slot({ slot: slotLabel(characterSlots.find((s) => s.slot === craftSlot)?.label ?? craftSlot) })}</div>
+        {/if}
         <div class="crow">
           <span class="clabel">{m.items_rarity()}</span>
           <select class="select" bind:value={craftRarity}>
             <option value="NORMAL">{m.items_rarity_normal()}</option>
             <option value="MAGIC">{m.items_rarity_magic()}</option>
-            <option value="RARE">{m.items_rarity_rare()}</option>
+            {#if !craftNoRare}<option value="RARE">{m.items_rarity_rare()}</option>{/if}
             <option value="UNIQUE">{m.items_rarity_unique()}</option>
           </select>
         </div>
@@ -1186,6 +1299,10 @@
         </div>
       </div>
     </div>
+  {/if}
+
+  {#if slotMenu}
+    <ContextMenu x={slotMenu.x} y={slotMenu.y} label={m.items_slot_menu()} items={slotMenuItems} onclose={() => (slotMenu = null)} />
   {/if}
 
   {#if traderOpen}
@@ -1257,10 +1374,6 @@
     letter-spacing: 0.05em;
     text-transform: uppercase;
     color: var(--fg-3);
-  }
-  .sharedlist {
-    flex: 0 0 auto;
-    max-height: 200px;
   }
   .modrow {
     display: flex;
@@ -1500,6 +1613,16 @@
   .typesel {
     flex: 0 1 170px;
     min-width: 0;
+    font-size: var(--fs-xs);
+  }
+  .slotbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 6px 4px 12px;
+    border-bottom: 1px solid var(--line-0);
+    background: color-mix(in oklab, var(--focus) 8%, transparent);
+    color: var(--focus);
     font-size: var(--fs-xs);
   }
   .modal {
