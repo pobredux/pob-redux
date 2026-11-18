@@ -546,6 +546,14 @@ function gemUtil.corruptible(gem)
 	return false
 end
 
+-- PoB leaves the "{0}" in "Spectre: {0}" and "Companion: {0}" until the library has a minion to name.
+function gemUtil.skillDisplayName(activeSkill)
+	local ok, name = pcall(build.calcsTab.calcs.getActiveSkillDisplayName, activeSkill)
+	local ge = activeSkill.activeEffect and activeSkill.activeEffect.grantedEffect
+	name = (ok and name) or (ge and ge.name)
+	return name and name:gsub("%s*:?%s*{0}", ""):match("^%s*(.-)%s*$") or nil
+end
+
 -- Where an item-granted socket group comes from. Such a group cannot be
 -- removed or re-socketed; it leaves with the item.
 function gemUtil.grantedBy(group)
@@ -1275,8 +1283,7 @@ M.calc_skill = function(p)
 			if explodeName then
 				label = "From " .. (colorCodes[explodeSource.rarity or "NORMAL"] or "") .. explodeName
 			else
-				local ok, name = pcall(build.calcsTab.calcs.getActiveSkillDisplayName, skill)
-				label = (ok and name) or (ae and ae.grantedEffect and ae.grantedEffect.name) or ("Skill " .. i)
+				label = gemUtil.skillDisplayName(skill) or ("Skill " .. i)
 			end
 			skills[#skills + 1] = { index = i, label = label }
 		end
@@ -3521,8 +3528,7 @@ local function groupSkills(group)
 		local ae = activeSkill.activeEffect
 		local ge = ae and ae.grantedEffect
 		local entry = { index = i }
-		local ok, nm = pcall(build.calcsTab.calcs.getActiveSkillDisplayName, activeSkill)
-		entry.name = (ok and nm) or (ge and ge.name) or "?"
+		entry.name = gemUtil.skillDisplayName(activeSkill) or "?"
 		if i == (group.mainActiveSkill or 1) and ge and ae.srcInstance then
 			local src = ae.srcInstance
 			if ge.parts and #ge.parts > 1 then

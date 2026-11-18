@@ -33,7 +33,8 @@
     label,
     sections,
     disabled = false,
-  }: { title: string; detail: string; art?: string; label: string; sections: SwitcherSection[]; disabled?: boolean } = $props();
+    onactivate,
+  }: { title: string; detail: string; art?: string; label: string; sections: SwitcherSection[]; disabled?: boolean; onactivate?: () => void } = $props();
 
   const initials = (name: string) =>
     name
@@ -108,7 +109,7 @@
   aria-expanded={open}
   title={label}
   {disabled}
-  onclick={() => (open ? hide() : show())}
+  onclick={() => (onactivate ? onactivate() : open ? hide() : show())}
   onkeydown={(e) => {
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     e.preventDefault();

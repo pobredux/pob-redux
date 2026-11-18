@@ -175,8 +175,18 @@
     }
     return out;
   });
-  const minionTitle = $derived(minionSkill ?? minion?.name ?? minionSet?.title ?? m.sidebar_minion());
-  const minionDetail = $derived([minion?.name, minion ? minionSet?.title : null].filter((x): x is string => !!x && x !== minionTitle).join(" · ") || m.sidebar_minion());
+  const emptyLibrary = $derived(!!mainSkill?.minionLibrary && !mainSkill.minions?.length);
+  const beastLibrary = $derived(mainSkill?.minionLibrary === "beast");
+  const minionTitle = $derived(
+    emptyLibrary
+      ? beastLibrary ? m.sidebar_no_beasts() : m.sidebar_no_spectres()
+      : (minionSkill ?? minion?.name ?? minionSet?.title ?? m.sidebar_minion()),
+  );
+  const minionDetail = $derived(
+    emptyLibrary
+      ? beastLibrary ? m.sidebar_manage_beasts() : m.sidebar_manage_spectres()
+      : [minion?.name, minion ? minionSet?.title : null].filter((x): x is string => !!x && x !== minionTitle).join(" · ") || m.sidebar_minion(),
+  );
 
   let libraryOpen = $state(false);
 </script>
@@ -191,7 +201,14 @@
     disabled={groups.length === 0}
   />
   {#if hasMinion}
-    <Switcher title={minionTitle} detail={minionDetail} art={artFor([minionSkill, minion?.name])} label={m.sidebar_minion_title()} sections={minionSections} />
+    <Switcher
+      title={minionTitle}
+      detail={minionDetail}
+      art={artFor([minionSkill, minion?.name])}
+      label={emptyLibrary ? (beastLibrary ? m.sidebar_manage_beasts_title() : m.sidebar_manage_spectres_title()) : m.sidebar_minion_title()}
+      sections={minionSections}
+      onactivate={emptyLibrary ? () => (libraryOpen = true) : undefined}
+    />
   {/if}
 </div>
 
