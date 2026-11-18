@@ -7,6 +7,7 @@ import { chat } from "$lib/state/chat.svelte";
 import { appUpdate } from "$lib/state/update.svelte";
 import { game, type Game } from "$lib/state/game.svelte";
 import { links } from "$lib/state/links.svelte";
+import { SHARED_ITEMS_KEY } from "$lib/shared-items";
 import { m } from "$lib/paraglide/messages";
 
 /**
@@ -64,7 +65,7 @@ class AppStore {
     // shared items added in this app are ours to restore (PoB's own
     // settings file, which also holds shared items, is never written)
     try {
-      const raws: string[] = JSON.parse(localStorage.getItem("pob-redux:shared-items") ?? "[]");
+      const raws: string[] = JSON.parse(localStorage.getItem(SHARED_ITEMS_KEY) ?? "[]");
       for (const raw of raws) await engine.addSharedItem({ raw }).catch(() => {});
     } catch {}
     const session = first ? await sessionInfo().catch(() => null) : null;

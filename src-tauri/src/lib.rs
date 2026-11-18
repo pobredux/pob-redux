@@ -23,6 +23,7 @@ mod diagnostics;
 mod game;
 mod trade;
 mod assistant;
+mod item_window;
 mod threads;
 mod voice;
 mod web;
@@ -1410,6 +1411,9 @@ pub fn run() {
             assistant::main_window_focus,
             assistant::chat_handoff_put,
             assistant::chat_handoff_take,
+            item_window::item_window_open,
+            item_window::item_window_close,
+            item_window::item_window_current,
             threads::threads_list,
             threads::thread_load,
             threads::thread_save,
@@ -1422,10 +1426,14 @@ pub fn run() {
                 if label == "main" {
                     trade::close(app);
                     assistant::close(app);
+                    item_window::close(app);
                 }
                 // Closed by its own button, the OS or a crash: the main window docks the conversation back.
                 if label == assistant::LABEL {
                     let _ = app.emit_to("main", "assistant:closed", ());
+                }
+                if label == item_window::LABEL {
+                    let _ = app.emit_to("main", "item-window:closed", ());
                 }
             }
             if let tauri::RunEvent::Exit = event {

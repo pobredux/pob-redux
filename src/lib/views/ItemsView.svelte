@@ -1,6 +1,7 @@
 <script lang="ts">
   import { scrollHint } from "$lib/scroll-hint";
-  import { onDestroy, tick, untrack } from "svelte";
+  import { onDestroy, onMount, tick, untrack } from "svelte";
+  import { listen } from "@tauri-apps/api/event";
   import { readText } from "@tauri-apps/plugin-clipboard-manager";
   import {
     engine,
@@ -16,22 +17,25 @@
     type SquireSlot,
     type SquireState,
     type Tooltip,
-    type TooltipLine,
   } from "$lib/engine.svelte";
   import { build } from "$lib/state/build.svelte";
   import { ui } from "$lib/state/ui.svelte";
+  import { itemWindow } from "$lib/state/item-window.svelte";
+  import { createScrollHold } from "$lib/scroll-hold";
+  import { removeTemplate, saveTemplate, SHARED_ITEMS_CHANGED } from "$lib/shared-items";
   import { modKey } from "$lib/keys";
   import Kbd from "$lib/components/Kbd.svelte";
   import { game } from "$lib/state/game.svelte";
   import EquipmentGrid from "$lib/components/EquipmentGrid.svelte";
   import ContextMenu from "$lib/components/ContextMenu.svelte";
   import { isWickermanSlot, WICKERMAN_AREAS } from "$lib/equipment";
-  import PobText from "$lib/components/PobText.svelte";
   import { stripPobText } from "$lib/pobtext";
   import { slotLabel } from "$lib/pob-labels";
   import ItemCustomizationControls from "$lib/components/ItemCustomizationControls.svelte";
+  import ItemDetailHead from "$lib/components/ItemDetailHead.svelte";
+  import ItemDetailPane from "$lib/components/ItemDetailPane.svelte";
+  import ItemTooltipBox from "$lib/components/ItemTooltipBox.svelte";
   import SearchSelect from "$lib/components/SearchSelect.svelte";
-  import ItemFrame from "$lib/components/ItemFrame.svelte";
   import PobTooltip from "$lib/components/PobTooltip.svelte";
   import TraderWindow from "$lib/components/TraderWindow.svelte";
   import BuySimilarDialog from "$lib/components/BuySimilarDialog.svelte";
@@ -86,21 +90,16 @@
   let previewLoading = $state(false);
   let previewCommitting = $state(false);
   let affixPending = $state(false);
-  let detailLoading = $state(false);
+  let detailTransition = $state(false);
   let previewSlot = $state("");
   let detailPane = $state<HTMLDivElement | undefined>();
-  type ScrollHold = {
-    pane: HTMLDivElement;
-    content: HTMLDivElement;
-    top: number;
-  };
-  let scrollHold: ScrollHold | null = null;
+  const scrollHold = createScrollHold();
   let pendingPaste = $state<{ text: string; stamp: number } | null>(null);
   let previewStamp = 0;
   let alive = true;
   const generation = untrack(() => build.info!.generation);
   const previewStale = $derived(preview?.rev !== build.rev);
-  const itemTransitionBusy = $derived(affixPending || previewLoading || previewCommitting || detailLoading);
+  const itemTransitionBusy = $derived(affixPending || previewLoading || previewCommitting || detailTransition);
   const itemBusy = $derived(itemTransitionBusy || build.busy > 0);
 
   onDestroy(() => {
@@ -117,56 +116,21 @@
     previewLoading = false;
   }
 
-  function captureDetailScroll(pane = detailPane) {
-    if (!pane) return null;
-    if (scrollHold?.pane !== pane) {
-      scrollHold = { pane, content: pane.querySelector<HTMLDivElement>(".detailcontent")!, top: 0 };
-    }
-    scrollHold.top = pane.scrollTop;
-    scrollHold.content.style.minHeight = `calc(100% + ${Math.ceil(scrollHold.top)}px)`;
-    return scrollHold;
-  }
-
   function setAffixPending(pending: boolean) {
-    if (pending) captureDetailScroll();
+    if (pending) scrollHold.capture(detailPane);
     affixPending = pending;
-  }
-
-  function followDetailScroll(event: Event) {
-    const hold = scrollHold;
-    if (!hold || hold.pane !== event.currentTarget) return;
-    hold.top = hold.pane.scrollTop;
-    hold.content.style.minHeight = `calc(100% + ${Math.ceil(hold.top)}px)`;
-  }
-
-  function holdDetailScroll(pane: HTMLDivElement | undefined) {
-    const hold = captureDetailScroll(pane);
-    if (!hold) return () => {};
-    return () => {
-      void tick().then(() => {
-        if (!alive || !pane?.isConnected || pane !== detailPane || scrollHold !== hold) return;
-        pane.scrollTop = hold.top;
-      });
-    };
-  }
-
-  function releaseDetailScroll(pane = scrollHold?.pane) {
-    const hold = scrollHold;
-    if (!hold || hold.pane !== pane) return;
-    hold.content.style.minHeight = "";
-    scrollHold = null;
   }
 
   $effect(() => {
     const pane = detailPane;
-    return () => releaseDetailScroll(pane);
+    return () => scrollHold.release(pane);
   });
 
   // The floor only has to outlast the edit; left in place, it keeps blank space below content that shrank.
   $effect(() => {
     if (itemBusy) return;
     void tick().then(() => {
-      if (!itemBusy) releaseDetailScroll();
+      if (!itemBusy) scrollHold.release();
     });
   });
 
@@ -200,7 +164,7 @@
         break;
       }
       const pane = updated && preview ? detailPane : undefined;
-      const restoreScroll = holdDetailScroll(pane);
+      const restoreScroll = scrollHold.keep(pane, () => alive && pane === detailPane);
       preview = { ...result, text, customization };
       restoreScroll();
       if (dbSlot && result.slots.some((s) => s.slot === dbSlot)) previewSlot = dbSlot;
@@ -217,7 +181,7 @@
 
   async function customizePreview(edit: ItemCustomizationEdit) {
     if (!preview || previewLoading || previewCommitting) return false;
-    captureDetailScroll();
+    scrollHold.capture(detailPane);
     const stamp = ++previewStamp;
     previewLoading = true;
     previewError = null;
@@ -319,84 +283,26 @@
     if (craftNoRare && craftRarity === "RARE") craftRarity = "MAGIC";
   });
 
-  let detail = $state<{ itemId: number; tt: Tooltip; customization: ItemCustomization } | null>(null);
-  let pendingDetail: { itemId: number; customization: ItemCustomization } | null = null;
-  $effect(() => {
-    const id = selectedItem;
-    build.rev;
-    let active = true;
-    untrack(() => {
-      if (id == null) {
-        detail = null;
-        detailLoading = false;
-        pendingDetail = null;
-        return;
-      }
-      detailLoading = true;
-      const customization = pendingDetail?.itemId === id ? pendingDetail.customization : null;
-      pendingDetail = null;
-      Promise.all([engine.itemTooltip({ itemId: id }), customization ?? engine.itemCustomization({ itemId: id, generation })])
-        .then(([tt, customization]) => {
-          if (active) {
-            const pane = detail?.itemId === id ? detailPane : undefined;
-            const restoreScroll = holdDetailScroll(pane);
-            detail = { itemId: id, tt, customization };
-            restoreScroll();
-          }
-        })
-        .catch(() => {
-          if (active) {
-            detail = null;
-            selectedItem = null;
-          }
-        })
-        .finally(() => { if (active) detailLoading = false; });
-    });
-    return () => { active = false; };
-  });
-
-  async function customizeSavedItem(edit: ItemCustomizationEdit) {
-    const itemId = selectedItem;
-    if (itemId == null) return;
-    captureDetailScroll();
-    const result = await build.run(async () => {
-      const customization = await engine.customizeItem({ itemId, generation }, edit);
-      pendingDetail = { itemId, customization };
-      return customization;
-    });
-    if (!result) {
-      if (pendingDetail?.itemId === itemId) pendingDetail = null;
-    }
-    return result;
-  }
-
   // shared items (main.sharedItemList; app-added ones persisted locally)
-  const SHARED_KEY = "pob-redux:shared-items";
   let shared = $state<SharedItem[]>([]);
+  let sharedRefresh = $state(0);
   const sharedRows = $derived.by(() => {
     const q = dbQuery.trim().toLowerCase();
     return q ? shared.filter((it) => `${it.name} ${it.baseName ?? ""}`.toLowerCase().includes(q)) : shared;
   });
   $effect(() => {
     build.rev;
+    sharedRefresh;
     engine.getSharedItems().then((r) => (shared = r.items)).catch(() => (shared = []));
   });
-  function persistShared(raw: string, add: boolean) {
-    try {
-      let raws: string[] = JSON.parse(localStorage.getItem(SHARED_KEY) ?? "[]");
-      if (add) raws.push(raw);
-      else {
-        const i = raws.indexOf(raw);
-        if (i >= 0) raws.splice(i, 1);
-      }
-      localStorage.setItem(SHARED_KEY, JSON.stringify(raws));
-    } catch {}
-  }
+  onMount(() => {
+    const off = listen(SHARED_ITEMS_CHANGED, () => sharedRefresh++);
+    return () => void off.then((unlisten) => unlisten());
+  });
   async function addShared(itemId: number) {
-    const r = await engine.addSharedItem({ itemId }).catch(() => null);
-    if (r) {
-      shared = r.items;
-      persistShared(r.items[r.items.length - 1].raw, true);
+    const items = await saveTemplate(itemId);
+    if (items) {
+      shared = items;
       templateSaved = itemId;
     }
   }
@@ -407,12 +313,27 @@
     templateSaved = null;
   });
   async function removeShared(it: SharedItem) {
-    const r = await engine.removeSharedItem(it.index).catch(() => null);
-    if (r) {
-      shared = r.items;
-      persistShared(it.raw, false);
-    }
+    const items = await removeTemplate(it);
+    if (items) shared = items;
   }
+
+  function popOut() {
+    if (selectedItem == null) return;
+    const id = selectedItem;
+    selectItem(null);
+    void itemWindow.show(id);
+  }
+
+  $effect(() => {
+    const id = itemWindow.docked;
+    if (id == null) return;
+    untrack(() => {
+      itemWindow.docked = null;
+      if (preview) discardPreview();
+      hideTip();
+      selectedItem = id;
+    });
+  });
 
   // The Trader window: a weighted trade search per slot, opened in the browser.
   let traderOpen = $state(false);
@@ -444,11 +365,6 @@
     }
   }
 
-  function lineStyle(l: TooltipLine): string {
-    if (l.size >= 20) return "font-size:13px;font-weight:600";
-    if (l.size >= 16) return "font-size:12px";
-    return "font-size:11px";
-  }
 
   let tip = $state<{ tt: Tooltip; x: number; y: number } | null>(null);
   let tipTimer = 0;
@@ -635,8 +551,13 @@
 
   function selectItem(id: number | null) {
     hideTip();
+    if (id != null && itemWindow.open) {
+      void itemWindow.show(id);
+      return;
+    }
     selectedItem = id;
   }
+  const shownItem = $derived(selectedItem ?? (itemWindow.open ? itemWindow.itemId : null));
 
   $effect(() => {
     const j = ui.jump;
@@ -967,7 +888,7 @@
       </div>
       {#if wickermanOpen}
       <div class="scroll scroll-hint" {@attach scrollHint}>
-        <EquipmentGrid slots={wickermanSlots} areas={wickermanAreas} {items} game={game.current} {selectedItem} legend={false}
+        <EquipmentGrid slots={wickermanSlots} areas={wickermanAreas} {items} game={game.current} selectedItem={shownItem} legend={false}
           onselect={selectItem}
           onitemhover={(event, id) => itemTip(event, id)}
           ongemhover={() => {}}
@@ -990,7 +911,7 @@
           {/if}
         </div>
         {#if !squire?.present}<p class="sqnote warn">{m.squire_no_skill()}</p>{/if}
-        <EquipmentGrid slots={squireSlots} {items} game={game.current} {selectedItem} legend={false}
+        <EquipmentGrid slots={squireSlots} {items} game={game.current} selectedItem={shownItem} legend={false}
           onselect={selectItem}
           onitemhover={(event, id) => itemTip(event, id)}
           ongemhover={() => {}}
@@ -1005,7 +926,7 @@
       </div>
       {:else}
       <div class="scroll scroll-hint" {@attach scrollHint}>
-        <EquipmentGrid slots={characterSlots} {items} game={game.current} groups={build.skills?.socketGroups ?? []} {selectedItem}
+        <EquipmentGrid slots={characterSlots} {items} game={game.current} groups={build.skills?.socketGroups ?? []} selectedItem={shownItem}
           targetSlot={preview ? previewSlot : selectedItem == null ? dbSlot : null}
           onselect={(id) => selectItem(selectedItem === id ? null : id)}
           onempty={(slot) => findForSlot(slot)}
@@ -1037,7 +958,7 @@
         {#each items as it (it.id)}
           <div
             class="item"
-            class:sel={selectedItem === it.id}
+            class:sel={shownItem === it.id}
             role="note"
             onmouseenter={(e) => showTip(e, `i${it.id}`, () => engine.itemTooltip({ itemId: it.id }))}
             onmouseleave={hideTip}
@@ -1067,19 +988,10 @@
           <span class="label">{m.items_preview_title()}</span>
           <button class="btn sm ghost" onclick={discardPreview} disabled={itemTransitionBusy}>{m.items_preview_discard()}</button>
         </div>
-        <div class="scroll detailpane scroll-hint" {@attach scrollHint} bind:this={detailPane} onscroll={followDetailScroll}>
+        <div class="scroll detailpane scroll-hint" {@attach scrollHint} bind:this={detailPane} onscroll={scrollHold.follow}>
           <div class="detailcontent">
             <p class="dim small">{m.items_preview_note()}</p>
-            {#if preview.tooltip.header}
-              <ItemFrame lines={preview.tooltip.lines} header={preview.tooltip.header} runic={preview.tooltip.runic} uniqueGem={preview.tooltip.uniqueGem} />
-            {:else}
-              <div class="ttbox plain">
-                {#each preview.tooltip.lines as l}
-                  {#if l.sep}<div class="tsep"></div>
-                  {:else}<div class="tline" class:tcenter={l.center} style={lineStyle(l)}><PobText text={l.text} /></div>{/if}
-                {/each}
-              </div>
-            {/if}
+            <ItemTooltipBox tt={preview.tooltip} art={false} />
             <div class="modrow">
               <button class="btn sm" onclick={editPreview} disabled={itemTransitionBusy}>{m.items_preview_edit()}</button>
               <button class="btn sm primary" onclick={() => addPreview(false)} disabled={itemBusy || previewStale}>{m.items_preview_add()}</button>
@@ -1104,51 +1016,32 @@
             />
           </div>
         </div>
-      {:else if selectedItem != null && detail?.itemId === selectedItem}
-        <div class="panel-head">
-          <span class="label">{m.items_item()}</span>
-          <button class="btn sm ghost" title={m.items_shared_title()} disabled={itemBusy || templateSaved === selectedItem} onclick={() => selectedItem != null && addShared(selectedItem)}>
-            {#if templateSaved === selectedItem}<Icon name="check" size={12} />{m.items_template_saved()}{:else}{m.items_add_to_shared()}{/if}
-          </button>
-          <button class="btn sm ghost" onclick={() => (buySimilarFor = selectedItem)} title={m.items_buy_similar_title()}>{m.items_buy_similar()}</button>
-          <button class="btn sm ghost" onclick={() => selectItem(null)} disabled={itemTransitionBusy}>{m.items_back_to_database()}</button>
-        </div>
-        <div class="scroll detailpane scroll-hint" {@attach scrollHint} bind:this={detailPane} onscroll={followDetailScroll}>
-          <div class="detailcontent">
-            {#if detail.tt.header}
-              <div class="ttbox">
-                <ItemFrame lines={detail.tt.lines} header={detail.tt.header} runic={detail.tt.runic} uniqueGem={detail.tt.uniqueGem} itemArt={detail.tt.itemArt} />
+      {:else if selectedItem != null}
+        <ItemDetailHead
+          saved={templateSaved === selectedItem}
+          busy={itemBusy}
+          onsave={() => selectedItem != null && addShared(selectedItem)}
+          onbuy={() => (buySimilarFor = selectedItem)}
+          move={{ icon: "arrow-square-out", title: m.items_pop_out_title(), onclick: popOut }}
+          close={{ title: m.items_back_to_database(), disabled: itemTransitionBusy, onclick: () => selectItem(null) }}
+        />
+        <ItemDetailPane
+          itemId={selectedItem}
+          {generation}
+          rev={build.rev}
+          busy={build.busy > 0}
+          bind:transitioning={detailTransition}
+          onmissing={() => selectItem(null)}
+        >
+          {#if selectedEquippedSlot}
+            <div class="craftsec">
+              <div class="label">{m.items_modify()}</div>
+              <div class="modrow">
+                <button class="btn sm ghost" title={m.items_find_upgrades_title()} onclick={() => openTrader(selectedEquippedSlot!)}>{m.items_find_upgrades()}</button>
               </div>
-            {:else}
-              <div class="ttbox plain">
-                {#each detail.tt.lines as l}
-                  {#if l.sep}
-                    <div class="tsep"></div>
-                  {:else}
-                    <div class="tline" class:tcenter={l.center} style={lineStyle(l)}><PobText text={l.text} /></div>
-                  {/if}
-                {/each}
-              </div>
-            {/if}
-
-            <ItemCustomizationControls
-              data={detail.customization}
-              target={{ itemId: selectedItem, generation }}
-              busy={itemBusy}
-              onchange={customizeSavedItem}
-              onpendingchange={setAffixPending}
-            />
-
-            {#if selectedEquippedSlot}
-              <div class="craftsec">
-                <div class="label">{m.items_modify()}</div>
-                <div class="modrow">
-                  <button class="btn sm ghost" title={m.items_find_upgrades_title()} onclick={() => openTrader(selectedEquippedSlot!)}>{m.items_find_upgrades()}</button>
-                </div>
-              </div>
-            {/if}
-          </div>
-        </div>
+            </div>
+          {/if}
+        </ItemDetailPane>
       {:else}
       <div class="panel-head dbhead">
         <span class="tabs2">
@@ -1670,25 +1563,6 @@
     padding: 10px 12px;
     box-sizing: border-box;
     flex-shrink: 0;
-  }
-  .ttbox.plain {
-    padding: 10px 12px;
-    border: 1px solid var(--line-0);
-    border-radius: var(--r-2);
-    background: var(--bg-1);
-    line-height: 1.45;
-  }
-  .tline {
-    color: var(--fg-1);
-    white-space: pre-wrap;
-  }
-  .tcenter {
-    text-align: center;
-  }
-  .tsep {
-    height: 1px;
-    background: var(--line-1);
-    margin: 6px 0;
   }
   .craftsec {
     display: flex;
