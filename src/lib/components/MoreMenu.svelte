@@ -4,6 +4,7 @@
     onclick: () => void;
     disabled?: boolean;
     danger?: boolean;
+    title?: string;
     /** Draw a rule above this item. */
     separator?: boolean;
   }
@@ -43,7 +44,7 @@
     <div class="pop" class:end={align === "end"} role="menu" aria-label={label}>
       {#each items as item}
         {#if item.separator}<div class="rule" role="separator"></div>{/if}
-        <button class="item" class:danger={item.danger} role="menuitem" disabled={item.disabled} onclick={() => pick(item)}>{item.label}</button>
+        <button class="item" class:danger={item.danger} role="menuitem" disabled={item.disabled} title={item.title} onclick={() => pick(item)}>{item.label}</button>
       {/each}
     </div>
   {/if}

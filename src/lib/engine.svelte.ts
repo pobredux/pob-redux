@@ -876,6 +876,10 @@ export interface GemInfo {
   countable: boolean;
   /** PoE1 Vaal gems: the Vaal skill and its base skill, each switched on or off on its own. */
   globalEffects?: { index: 1 | 2; name: string; enabled: boolean }[] | null;
+  corrupted?: boolean;
+  corruptLevel?: number;
+  /** PoE2 active skill gems the player socketed; PoE1 has no per-gem corruption. */
+  corruptible?: boolean;
   errMsg: string | null;
   /** Set when the game hands the skill out (a weapon's default attack, Raise Shield, a unique's skill): says what it comes with. */
   granted: string | null;
@@ -1912,7 +1916,7 @@ export const engine = {
   setGem: (
     groupIndex: number,
     gemIndex: number,
-    patch: Partial<Pick<GemInfo, "level" | "quality" | "enabled" | "count">> & { enableGlobal1?: boolean; enableGlobal2?: boolean },
+    patch: Partial<Pick<GemInfo, "level" | "quality" | "enabled" | "count" | "corrupted" | "corruptLevel">> & { enableGlobal1?: boolean; enableGlobal2?: boolean },
   ) =>
     call<Skills>("set_gem", { groupIndex, gemIndex, ...patch }),
   listSlots: () => call<SlotsResponse>("list_slots"),

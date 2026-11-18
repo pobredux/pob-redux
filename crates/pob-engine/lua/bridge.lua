@@ -532,6 +532,20 @@ function gemUtil.grantedGemNote(gemData)
 	return "granted by an item or effect, not a gem"
 end
 
+-- SkillsTab's slot.corruptLevel.shown; PoE1's SkillsTab has no corruption control.
+function gemUtil.corruptible(gem)
+	if not IS_POE2 then return false end
+	local active = gem.grantedEffect or gem.gemData and gem.gemData.grantedEffect
+	if gem.fromItem or gem.fromTree or active and (active.fromItem or active.fromTree) then return false end
+	local list = gem.gemData and gem.gemData.grantedEffectList or { gem.grantedEffect }
+	for n, ge in ipairs(list) do
+		if not ge.support and not ge.hideFromSideBar and (not ge.hasGlobalEffect or gem["enableGlobal" .. n]) then
+			return true
+		end
+	end
+	return false
+end
+
 -- Where an item-granted socket group comes from. Such a group cannot be
 -- removed or re-socketed; it leaves with the item.
 function gemUtil.grantedBy(group)
@@ -3633,6 +3647,9 @@ M.get_skills = function()
 				count = opt(gem.count),
 				countable = gemCountable(group, gi, gem),
 				globalEffects = gemGlobalEffects(gem),
+				corrupted = gem.corrupted == true,
+				corruptLevel = tonumber(gem.corruptLevel) or 0,
+				corruptible = gemUtil.corruptible(gem),
 				errMsg = opt(gem.errMsg),
 				-- Set for skills the game grants (default weapon attacks, Raise
 				-- Shield, unique-granted skills): not a socket the player filled.
@@ -4365,6 +4382,18 @@ M.set_gem = function(p)
 	if p.enabled ~= nil then gem.enabled = p.enabled end
 	if p.enableGlobal1 ~= nil then gem.enableGlobal1 = p.enableGlobal1 == true end
 	if p.enableGlobal2 ~= nil then gem.enableGlobal2 = p.enableGlobal2 == true end
+	if p.corrupted ~= nil or p.corruptLevel ~= nil then
+		if not gemUtil.corruptible(gem) then
+			error(IS_POE2 and "only an active skill gem you socketed can be corrupted" or "gem corruption is a PoE2 option", 0)
+		end
+		local level = tonumber(p.corruptLevel)
+		if p.corruptLevel ~= nil and level ~= -1 and level ~= 0 and level ~= 1 then
+			error("corruptLevel must be -1, 0 or 1", 0)
+		end
+		local corrupted = p.corrupted == true or p.corrupted == nil and (level ~= 0 or gem.corrupted == true)
+		gem.corrupted = corrupted
+		gem.corruptLevel = corrupted and (level or tonumber(gem.corruptLevel) or 0) or 0
+	end
 	if p.count ~= nil then
 		local count = math.max(0, tonumber(p.count) or 1)
 		gem.count = IS_POE2 and count or math.floor(count)

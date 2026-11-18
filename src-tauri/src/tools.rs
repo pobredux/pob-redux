@@ -633,7 +633,7 @@ setting for the whole tree. It applies to nodes allocated from then on, so set i
         ),
         rw(
             "set_gem",
-            "Change a gem's level, quality, enabled state, or swap it for another gem id. Omit a field to leave it unchanged.",
+            "Change a gem's level, quality, enabled state or corruption, or swap it for another gem id. Omit a field to leave it unchanged.",
             obj(
                 json!({
                     "group_index": group_index(),
@@ -641,7 +641,9 @@ setting for the whole tree. It applies to nodes allocated from then on, so set i
                     "level": prop("integer", "Gem level"),
                     "quality": prop("integer", "Gem quality"),
                     "enabled": prop("boolean", "Enable or disable the gem"),
-                    "gem_id": prop("string", "Replace with this gem id")
+                    "gem_id": prop("string", "Replace with this gem id"),
+                    "corrupted": prop("boolean", "PoE2 only, active skill gems whose get_skills entry has corruptible true: mark the gem corrupted. false also clears corrupt_level"),
+                    "corrupt_level": prop("integer", "PoE2 only: gem levels the corruption adds, -1, 0 or 1. A non-zero value marks the gem corrupted")
                 }),
                 &["group_index", "gem_index"],
             ),
@@ -1626,6 +1628,8 @@ pub(crate) fn run_tool(ctx: &ToolContext, name: &str, args: &JsonObject) -> Resu
                 "quality": arg_i64(args, "quality")?,
                 "enabled": arg_bool(args, "enabled"),
                 "gemId": arg_str(args, "gem_id"),
+                "corrupted": arg_bool(args, "corrupted"),
+                "corruptLevel": arg_i64(args, "corrupt_level")?,
             }),
         )?),
         "remove_gem" => stats(ctx.call(

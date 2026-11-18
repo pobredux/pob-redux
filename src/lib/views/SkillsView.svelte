@@ -1,14 +1,18 @@
 <script lang="ts">
+  import { scrollHint } from "$lib/scroll-hint";
   import { untrack } from "svelte";
   import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
-  import { engine, gemDpsParallel, type GemSearchRow, type SkillEntry, type SkillsOptions, type SocketGroup, type Tooltip } from "$lib/engine.svelte";
+  import { engine, gemDpsParallel, type GemInfo, type GemSearchRow, type SkillEntry, type SkillsOptions, type SocketGroup, type Tooltip, type TooltipLine } from "$lib/engine.svelte";
   import { build } from "$lib/state/build.svelte";
   import { ui } from "$lib/state/ui.svelte";
   import { game } from "$lib/state/game.svelte";
   import PobText from "$lib/components/PobText.svelte";
   import PobTooltip from "$lib/components/PobTooltip.svelte";
+  import Icon from "$lib/components/Icon.svelte";
+  import ContextMenu from "$lib/components/ContextMenu.svelte";
   import MoreMenu, { type MenuItem } from "$lib/components/MoreMenu.svelte";
-  import { stripPobText } from "$lib/pobtext";
+  import { parsePobText, stripPobText } from "$lib/pobtext";
+  import { slotLabel } from "$lib/pob-labels";
   import { isTextField } from "$lib/keys";
   import { m } from "$lib/paraglide/messages";
 
@@ -88,7 +92,7 @@
   });
 
   // gem tooltip (PoB's GemTooltip lines)
-  let tip = $state<{ tt: Tooltip; x: number; y: number } | null>(null);
+  let tip = $state<{ tt: Tooltip; x: number; y: number; width?: number } | null>(null);
   let tipTimer = 0;
   const tipCache = new Map<string, Tooltip>();
 
@@ -164,10 +168,39 @@
     const r = await build.run(() => engine.addSocketGroup());
     if (r) selectedIdx = r.groupIndex;
   }
-  async function removeGroup() {
-    if (!sel) return;
-    await build.run(() => engine.removeSocketGroup(sel.index));
-    selectedIdx = 1;
+  async function removeGroup(index = sel?.index) {
+    if (index == null) return;
+    const current = sel?.index;
+    if (!(await build.run(() => engine.removeSocketGroup(index)))) return;
+    if (current === index) selectedIdx = 1;
+    else if (current != null && current > index) selectedIdx = current - 1;
+  }
+
+  let menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  const onContextMenu = (handler: (e: MouseEvent) => void) => (node: HTMLElement) => {
+    node.addEventListener("contextmenu", handler);
+    return () => node.removeEventListener("contextmenu", handler);
+  };
+  function openMenu(e: MouseEvent, items: MenuItem[]) {
+    e.preventDefault();
+    hideTip();
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const fromKeyboard = e.clientX === 0 && e.clientY === 0;
+    menu = { x: fromKeyboard ? r.left + 8 : e.clientX, y: fromKeyboard ? r.bottom : e.clientY, items };
+  }
+  function groupMenu(e: MouseEvent, g: SocketGroup) {
+    openMenu(e, [
+      {
+        label: m.skills_delete_group(),
+        danger: true,
+        disabled: !!g.source,
+        title: g.source ? m.skills_delete_group_blocked() : undefined,
+        onclick: () => void removeGroup(g.index),
+      },
+    ]);
+  }
+  function gemMenu(e: MouseEvent, groupIndex: number, gemIndex: number) {
+    openMenu(e, [{ label: m.skills_remove_gem(), danger: true, onclick: () => build.run(() => engine.removeGem(groupIndex, gemIndex)) }]);
   }
 
   let listEl = $state<HTMLElement | null>(null);
@@ -215,6 +248,44 @@
   function hideTip() {
     clearTimeout(tipTimer);
     tip = null;
+  }
+
+  type CorruptKey = "none" | "plus" | "yes" | "minus";
+  const CORRUPT: Record<CorruptKey, { corrupted: boolean; corruptLevel: number }> = {
+    none: { corrupted: false, corruptLevel: 0 },
+    plus: { corrupted: true, corruptLevel: 1 },
+    yes: { corrupted: true, corruptLevel: 0 },
+    minus: { corrupted: true, corruptLevel: -1 },
+  };
+  const corruptOptions = $derived<{ key: CorruptKey; label: string }[]>([
+    { key: "none", label: m.skills_corrupt_none() },
+    { key: "plus", label: m.skills_corrupt_plus() },
+    { key: "yes", label: m.skills_corrupt_yes() },
+    { key: "minus", label: m.skills_corrupt_minus() },
+  ]);
+  const corruptKey = (gem: GemInfo): CorruptKey =>
+    gem.corruptLevel === 1 ? "plus" : gem.corruptLevel === -1 ? "minus" : gem.corrupted ? "yes" : "none";
+  const corruptTag = (gem: GemInfo) =>
+    gem.corrupted ? ` ^xDD0022C${gem.corruptLevel ? `${gem.corruptLevel > 0 ? "+" : ""}${gem.corruptLevel}` : ""}` : "";
+
+  const gemColour = (gem: GemInfo) => parsePobText(`${gem.color ?? "^7"}.`)[0]?.color ?? "var(--fg-2)";
+  const groupSlot = (g: SocketGroup) => (g.slot && !g.grantedBy ? slotLabel(g.slot) : null);
+
+  function showGroupTip(e: MouseEvent, g: SocketGroup) {
+    clearTimeout(tipTimer);
+    const x = e.clientX + 16;
+    const y = e.clientY + 12;
+    tipTimer = window.setTimeout(() => {
+      const line = (text: string, size = 16): TooltipLine => ({ text, size, center: false, sep: false, font: null });
+      const lines: TooltipLine[] = [];
+      const slot = groupSlot(g);
+      if (slot) lines.push(line(`^8${slot}`, 14), { ...line(""), sep: true });
+      for (const gem of g.gems) {
+        const off = gem.enabled ? "" : ` ^9${m.common_off()}`;
+        lines.push(line(`${gem.color ?? "^7"}${gem.name ?? gem.nameSpec ?? "?"} ^7${gem.level ?? 1}/${gem.quality ?? 0}${corruptTag(gem)}${off}`));
+      }
+      if (g.gems.length) tip = { tt: { lines, header: null, runic: false, uniqueGem: false }, x, y, width: 320 };
+    }, 120);
   }
 
   const activeSet = $derived(skillSets.find((s) => s.active));
@@ -328,18 +399,29 @@
   </div>
 
   <div class="cols">
-    <section class="col list" bind:this={listEl}>
+    <section class="col list scroll-hint" {@attach scrollHint} bind:this={listEl}>
       {#each groups as g (g.index)}
         {@const gmark = markOf(g)}
-        <div class="grow-row" class:sel={sel?.index === g.index} class:off={!g.enabled} class:dup={!!g.duplicateOf}>
+        {@const gslot = groupSlot(g)}
+        <div class="grow-row" class:sel={sel?.index === g.index} class:off={!g.enabled} class:dup={!!g.duplicateOf} {@attach onContextMenu((e) => groupMenu(e, g))}>
           <button class="gmain" title={m.skills_set_main()} class:ismain={g.isMainSkill} onclick={() => build.setMainSkill(g.index)}>⌾</button>
-          <button class="gname" onclick={() => (selectedIdx = g.index)}>
-            <PobText text={g.displayLabel ?? g.label ?? m.skills_group_fallback({ index: g.index })} />
-            {#if gmark}
-              <span class="granted mark-{gmark.kind}" title={gmark.text}>{gmark.glyph}</span>
-            {/if}
-            {#if g.duplicateOf}
-              <span class="dim small">{m.skills_item_copy_of({ source: g.duplicateOf })}</span>
+          <button class="gname" onclick={() => (selectedIdx = g.index)} onmouseenter={(e) => showGroupTip(e, g)} onmouseleave={hideTip}>
+            <span class="glabel">
+              <PobText text={g.displayLabel ?? g.label ?? m.skills_group_fallback({ index: g.index })} />
+              {#if gmark}
+                <span class="granted mark-{gmark.kind}" title={gmark.text}>{gmark.glyph}</span>
+              {/if}
+              {#if g.duplicateOf}
+                <span class="dim small">{m.skills_item_copy_of({ source: g.duplicateOf })}</span>
+              {/if}
+            </span>
+            {#if gslot}<span class="gslot">{gslot}</span>{/if}
+            {#if g.gems.length}
+              <span class="gdots" aria-hidden="true">
+                {#each g.gems as gem (gem.index)}
+                  <span class="gdot" class:sup={gem.support} class:off={!gem.enabled} style:background={gemColour(gem)}></span>
+                {/each}
+              </span>
             {/if}
           </button>
           <span class="ops">
@@ -351,9 +433,13 @@
       {#if groups.length === 0}
         <div class="dim pad">{m.skills_no_groups()}</div>
       {/if}
+      <button class="addgroup" onclick={addGroup} title={m.skills_new_group_title()}>
+        <Icon name="plus" size={12} />
+        {m.skills_new_group()}
+      </button>
     </section>
 
-    <section class="col detail">
+    <section class="col detail scroll-hint" {@attach scrollHint}>
       {#if sel}
         <div class="dhead">
           <input
@@ -385,7 +471,7 @@
             class="btn sm ghost danger"
             disabled={!!sel.source}
             title={sel.source ? m.skills_delete_group_blocked() : m.skills_delete_group_title()}
-            onclick={removeGroup}>{m.skills_delete_group()}</button>
+            onclick={() => removeGroup()}>{m.skills_delete_group()}</button>
         </div>
 
         {#if sel.skills.length > 0}
@@ -465,11 +551,11 @@
           </div>
         {/if}
 
-        <div class="gems">
-          <div class="gcols label"><span></span><span>{m.skills_col_gem()}</span><span class="r" title={m.skills_col_worth_title({ stat: SORT_LABELS[sortField] ?? sortField })}>{SORT_LABELS[sortField] ?? sortField}</span><span class="r">{m.skills_col_level()}</span><span class="r">{m.skills_col_quality()}</span><span class="r" title={m.skills_gem_count_title()}>{m.skills_col_count()}</span><span></span></div>
+        <div class="gems" class:poe2={game.isPoe2}>
+          <div class="gcols label"><span></span><span>{m.skills_col_gem()}</span><span class="r" title={m.skills_col_worth_title({ stat: SORT_LABELS[sortField] ?? sortField })}>{SORT_LABELS[sortField] ?? sortField}</span><span class="r">{m.skills_col_level()}</span><span class="r">{m.skills_col_quality()}</span><span class="r" title={m.skills_gem_count_title()}>{m.skills_col_count()}</span>{#if game.isPoe2}<span>{m.skills_col_corrupt()}</span>{/if}<span></span></div>
           {#each sel.gems as gem (gem.index)}
             {@const w = worth.get(gem.index)}
-            <div class="gem" class:disabled={!gem.enabled}>
+            <div class="gem" class:disabled={!gem.enabled} {@attach onContextMenu((e) => gemMenu(e, sel.index, gem.index))}>
               <span class="ops">
                 <button class="mini" disabled={gem.index <= 1} onclick={() => build.run(() => engine.moveGem(sel.index, gem.index, gem.index - 1))}>▲</button>
                 <button class="mini" disabled={gem.index >= sel.gems.length} onclick={() => build.run(() => engine.moveGem(sel.index, gem.index, gem.index + 1))}>▼</button>
@@ -500,6 +586,22 @@
                 />
               {:else}
                 <span></span>
+              {/if}
+              {#if game.isPoe2}
+                {#if gem.corruptible}
+                  <select
+                    class="select sm"
+                    aria-label={m.skills_col_corrupt()}
+                    value={corruptKey(gem)}
+                    onchange={(e) => patchGem(sel.index, gem.index, CORRUPT[(e.target as HTMLSelectElement).value as CorruptKey])}
+                  >
+                    {#each corruptOptions as o (o.key)}
+                      <option value={o.key}>{o.label}</option>
+                    {/each}
+                  </select>
+                {:else}
+                  <span></span>
+                {/if}
               {/if}
               <button class="mini x" title={m.skills_remove_gem()} onclick={() => build.run(() => engine.removeGem(sel.index, gem.index))}>✕</button>
               {#if gem.globalEffects?.length}
@@ -539,7 +641,7 @@
             {/if}
           </div>
           {#if pickerOpen}
-            <div class="picker">
+            <div class="picker scroll-hint" {@attach scrollHint}>
               {#if pickerScoring}
                 <div class="dim small pad">{m.skills_scoring()}</div>
               {/if}
@@ -565,8 +667,12 @@
     </section>
   </div>
 
+  {#if menu}
+    <ContextMenu x={menu.x} y={menu.y} label={m.skills_menu()} items={menu.items} onclose={() => (menu = null)} />
+  {/if}
+
   {#if tip}
-    <PobTooltip lines={tip.tt.lines} header={tip.tt.header} runic={tip.tt.runic} uniqueGem={tip.tt.uniqueGem} x={tip.x} y={tip.y} />
+    <PobTooltip lines={tip.tt.lines} header={tip.tt.header} runic={tip.tt.runic} uniqueGem={tip.tt.uniqueGem} x={tip.x} y={tip.y} width={tip.width} />
   {/if}
 </div>
 
@@ -663,13 +769,63 @@
     background: none;
     color: var(--fg-1);
     flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     text-align: left;
     padding: 6px 0;
     font-size: var(--fs-sm);
     cursor: var(--cursor-pointer, pointer);
+  }
+  .glabel {
+    flex: 1;
+    min-width: 0;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+  }
+  .gslot {
+    flex-shrink: 0;
+    font-size: var(--fs-xs);
+    color: var(--fg-3);
+  }
+  .gdots {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .gdot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+  .gdot.sup {
+    width: 6px;
+    height: 6px;
+  }
+  .gdot.off {
+    opacity: 0.3;
+  }
+  .addgroup {
+    appearance: none;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 0;
+    border-bottom: 1px solid var(--line-0);
+    background: none;
+    color: var(--fg-2);
+    font-size: var(--fs-sm);
+    text-align: left;
+    cursor: var(--cursor-pointer, pointer);
+  }
+  .addgroup:hover {
+    background: var(--bg-2);
+    color: var(--fg-0);
   }
   .grow-row:hover {
     background: var(--bg-2);
@@ -757,6 +913,10 @@
     gap: 8px;
     align-items: center;
   }
+  .gems.poe2 .gcols,
+  .gems.poe2 .gem {
+    grid-template-columns: 44px 1fr 96px 70px 70px 64px 124px 26px;
+  }
   .gcols {
     padding: 2px 0 6px;
   }
@@ -809,7 +969,7 @@
     border-radius: var(--r-1);
     max-height: 320px;
     overflow-y: auto;
-    background: var(--bg-1);
+    background-color: var(--bg-1);
   }
   .fld-inline {
     display: flex;
