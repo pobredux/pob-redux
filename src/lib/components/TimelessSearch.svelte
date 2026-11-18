@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { scrollHint } from "$lib/scroll-hint";
   import { tradeWindow } from "$lib/state/trade.svelte";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
   import {
@@ -234,7 +235,7 @@
           <span class="dim num">{options.length}</span>
         </div>
         <input class="input sm srch" placeholder={m.timeless_search_placeholder()} bind:value={search} />
-        <div class="scroll">
+        <div class="scroll scroll-hint" {@attach scrollHint}>
           {#each options as n (n.id)}
             <button class="row" onclick={() => add(n)} title={n.stats.join("\n")}>
               <span class="nm">{n.name}</span>
@@ -256,7 +257,7 @@
             </span>
           {/if}
         </div>
-        <div class="scroll">
+        <div class="scroll scroll-hint" {@attach scrollHint}>
           {#each wanted as w (w.id)}
             <div class="want">
               <span class="nm" title={w.id}>{w.name}</span>
@@ -296,7 +297,7 @@
         </div>
         {#if jewelType === 4 && radiusNotables.length}
           <div class="shead">{m.timeless_keep()}</div>
-          <div class="scroll short">
+          <div class="scroll short scroll-hint" {@attach scrollHint}>
             {#each radiusNotables as n (n.id)}
               <label class="chk small keeprow">
                 <input
@@ -338,7 +339,7 @@
           <span class="dim num">{result.results.length}</span>
           <span class="dim small">{m.timeless_pick_hint()}</span>
         </div>
-        <div class="scroll">
+        <div class="scroll scroll-hint" {@attach scrollHint}>
           {#each result.results as r (r.seed)}
             <button class="res" class:on={selected.includes(r.seed)} onclick={(e) => toggle(r.seed, e)}>
               <span class="seed num">{r.seed.toLocaleString()}</span>

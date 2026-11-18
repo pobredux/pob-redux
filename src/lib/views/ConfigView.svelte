@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { scrollHint } from "$lib/scroll-hint";
   import { engine, type ConfigOption, type ConfigState, type CustomModBlock } from "$lib/engine.svelte";
   import { build } from "$lib/state/build.svelte";
   import PobText from "$lib/components/PobText.svelte";
@@ -249,7 +250,7 @@
       {/if}
     </span>
   </div>
-  <div class="scroll">
+  <div class="scroll scroll-hint" {@attach scrollHint}>
     <section class="card custom">
       <button class="chead" aria-expanded={!collapsed.has("__custom")} onclick={() => toggle("__custom")}>
         <span class="caret" class:open={!collapsed.has("__custom")}>▸</span>
@@ -359,7 +360,7 @@
       </div>
       <!-- svelte-ignore a11y_autofocus -->
       <input class="input msearch" placeholder={m.config_browser_search()} bind:value={browserQuery} autofocus />
-      <div class="mlist">
+      <div class="mlist scroll-hint" {@attach scrollHint}>
         {#if !browserMods}
           <div class="dim small pad">{m.common_loading()}</div>
         {:else if !browserList.length}

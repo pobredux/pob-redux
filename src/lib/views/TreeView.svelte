@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { scrollHint } from "$lib/scroll-hint";
   import { onMount, untrack } from "svelte";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
   import { engine, poolStatus, powerScanParallel, type JewelRadius, type MasteryEffect, type NodeCompare, type NodeTattoos, type PowerStat, type SocketedJewel, type Tooltip, type TreePower, type WeaponSetMode } from "$lib/engine.svelte";
@@ -2393,7 +2394,7 @@
             <span>{m.tree_col_node()}</span><span class="r">{reportSort === "node" ? m.tree_col_off() : m.tree_col_off_per_point()}</span><span class="r">{reportSort === "node" ? m.tree_col_def() : m.tree_col_def_per_point()}</span><span class="r">{m.tree_col_points()}</span>
           {/if}
         </div>
-        <div class="report-list" class:stale={powerBusy}>
+        <div class="report-list scroll-hint" {@attach scrollHint} class:stale={powerBusy}>
           {#each reportRows as r (r.key)}
             <button class="report-row" class:sel={focusNode === r.id} onclick={() => jumpTo(r.id)} onmouseenter={() => { const n = model?.nodes.get(r.id); if (n) setHover(n); }}>
               <span class="rn" class:notable={r.kind === "notable"} class:keystone={r.kind === "keystone"}>{r.name}</span>
@@ -2461,7 +2462,7 @@
           />
           {m.tree_legacy_tattoos()}
         </label>
-        <div class="tatlist">
+        <div class="tatlist scroll-hint" {@attach scrollHint}>
           {#each tattooMenu.info.options as t (t.id)}
             <button class="mi effect" class:on={t.name === tattooMenu.info.applied?.name} onclick={() => pickTattoo(t.id)}>
               <span class="tatname">{t.name}</span>

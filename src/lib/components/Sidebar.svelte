@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { scrollHint } from "$lib/scroll-hint";
   import { tick } from "svelte";
   import { flip } from "svelte/animate";
   import { sortDrag } from "$lib/sortable";
@@ -290,7 +291,7 @@
       <SkillSwitcher />
     </div>
 
-    <div class="stats" class:busy={build.busy > 0} class:sorting={sorting !== null} bind:this={statsEl}>
+    <div class="stats scroll-hint" {@attach scrollHint} class:busy={build.busy > 0} class:sorting={sorting !== null} bind:this={statsEl}>
       {#if side}
         {#each infoSections as sec (sec.key)}
           <section class="scard"><div class="cardbody">{@render statRows(sec)}</div></section>
@@ -385,7 +386,7 @@
         <span class="label"><PobText text={bd.title} /></span>
         {#if bd.pinned}<span class="bdpin" title={m.sidebar_breakdown_pinned()}><Icon name="push-pin" size={12} /></span>{/if}
       </div>
-      <div class="bdscroll">
+      <div class="bdscroll scroll-hint" {@attach scrollHint}>
         <BreakdownPanel sections={bd.sections} />
       </div>
     </div>
@@ -471,7 +472,7 @@
     flex-direction: column;
     gap: 8px;
     padding: 8px 8px 16px;
-    background: var(--bg-0);
+    background-color: var(--bg-0);
     scrollbar-width: none;
     transition: opacity 120ms;
   }

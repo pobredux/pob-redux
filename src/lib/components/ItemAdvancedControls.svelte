@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { scrollHint } from "$lib/scroll-hint";
   import { onDestroy } from "svelte";
   import { engine, type ItemCustomization, type ItemCustomizationEdit, type ItemTarget, type ItemSocket, type AnointInfo } from "$lib/engine.svelte";
   import { m } from "$lib/paraglide/messages";
@@ -238,7 +239,7 @@
             </select>
           {/if}
         </div>
-        <div class="anointlist">
+        <div class="anointlist scroll-hint" {@attach scrollHint}>
           {#each anointList as n (n.id)}
             <button class="arow" class:alloc={n.allocated} title={n.stats.join("\n")} onclick={() => applyAnoint(n.id)}>
               <span class="aname">{n.name}</span>

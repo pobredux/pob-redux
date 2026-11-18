@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { scrollHint } from "$lib/scroll-hint";
   import { tick } from "svelte";
   import { engine } from "$lib/engine.svelte";
   import { build } from "$lib/state/build.svelte";
@@ -82,7 +83,7 @@
   {#if editing}
     <textarea class="notes selectable" bind:this={area} bind:value={text} oninput={onInput} placeholder={m.notes_placeholder()}></textarea>
   {:else}
-    <div class="notes preview selectable">
+    <div class="notes preview selectable scroll-hint" {@attach scrollHint}>
       {#if text.trim()}<PobText text={text} />{:else}<span class="dim">{m.notes_empty()}</span>{/if}
     </div>
   {/if}

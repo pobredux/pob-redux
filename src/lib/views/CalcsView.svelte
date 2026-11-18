@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { scrollHint } from "$lib/scroll-hint";
   import { tick, untrack } from "svelte";
   import { flip } from "svelte/animate";
   import { sortDrag } from "$lib/sortable";
@@ -461,7 +462,7 @@
   </div>
 
   <div class="body">
-      <div class="cards" class:sorting={sorting !== null} bind:this={cardsEl}>
+      <div class="cards scroll-hint" {@attach scrollHint} class:sorting={sorting !== null} bind:this={cardsEl}>
         {#if effects.length > 0}
           <div class="effectbar" role="list">
             {#each effects as effect (`${effect.kind}:${effect.name}`)}
@@ -778,7 +779,6 @@
     /* Count badges hang 8px below the icons; reserve that space plus breathing room. */
     padding: 2px 2px 18px;
     overflow-x: auto;
-    scrollbar-width: thin;
   }
   .effect {
     --effect-accent: var(--ok);

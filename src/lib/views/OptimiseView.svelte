@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { scrollHint } from "$lib/scroll-hint";
   import {
     engine,
     powerScanParallel,
@@ -279,7 +280,7 @@
 
 <div class="page">
   <p class="disclaimer"><strong>{m.opt_disclaimer_title()}</strong> {m.opt_disclaimer()}</p>
-  <section class="col review">
+  <section class="col review scroll-hint" {@attach scrollHint}>
     <div class="head">
       <span class="title">{m.opt_review()}</span>
       {#if sanity}
@@ -318,7 +319,7 @@
     {/if}
   </section>
 
-  <section class="col gear">
+  <section class="col gear scroll-hint" {@attach scrollHint}>
     <div class="head">
       <span class="title">{m.opt_gear()}</span>
     </div>

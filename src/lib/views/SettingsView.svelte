@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { scrollHint } from "$lib/scroll-hint";
   import { onMount } from "svelte";
   import { appOptions } from "$lib/state/options.svelte";
   import { mcp, mcpConfigJson } from "$lib/state/mcp.svelte";
@@ -173,7 +174,7 @@
 
 <div class="settings">
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-  <nav class="snav" aria-label={m.settings_sections()} onkeydown={onNavKey}>
+  <nav class="snav scroll-hint" {@attach scrollHint} aria-label={m.settings_sections()} onkeydown={onNavKey}>
     <div class="label ntitle">{m.settings_title()}</div>
     {#each sections as s (s.id)}
       <button class="nitem" class:on={active === s.id} aria-current={active === s.id ? "page" : undefined} data-section={s.id} onclick={() => go(s.id)}>
@@ -184,7 +185,7 @@
     <button class="btn sm ghost back" onclick={close}>{m.common_close()} <kbd>Esc</kbd></button>
   </nav>
 
-  <div class="sbody" bind:this={scroller}>
+  <div class="sbody scroll-hint" {@attach scrollHint} bind:this={scroller}>
     <div class="sinner">
       {#if active === "appearance"}
         {@render head(m.settings_appearance(), m.settings_appearance_desc())}
@@ -689,7 +690,7 @@
     gap: 2px;
     padding: 14px 8px 10px;
     border-right: 1px solid var(--line-1);
-    background: var(--bg-1);
+    background-color: var(--bg-1);
     overflow-y: auto;
   }
   .ntitle {
@@ -739,7 +740,7 @@
     flex: 1;
     min-width: 0;
     overflow-y: auto;
-    background: var(--bg-0);
+    background-color: var(--bg-0);
   }
   .sinner {
     max-width: 1080px;

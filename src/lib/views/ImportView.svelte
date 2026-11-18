@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { scrollHint } from "$lib/scroll-hint";
   import { onMount } from "svelte";
   import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
   import { open, save } from "@tauri-apps/plugin-dialog";
@@ -1027,7 +1028,7 @@
       <button class="btn sm" onclick={() => (newFolder = "")}>{m.import_new_folder()}</button>
       <button class="btn sm primary" onclick={() => build.newBuild().then((r) => r && (ui.newBuildOpen = true))} disabled={build.busy > 0}>{m.import_new_build()}</button>
     </div>
-    <div class="list">
+    <div class="list scroll-hint" {@attach scrollHint}>
       {#if welcome}
         <div class="welcome">
           <div class="whead">
@@ -1283,7 +1284,7 @@
     </div>
   </section>
 
-  <section class="col side">
+  <section class="col side scroll-hint" {@attach scrollHint}>
     <div class="panel-head">
       <span class="label">{m.ggg_account_title()}</span>
       {#if ggg.account}
@@ -1375,7 +1376,7 @@
           </select>
           <span class="dim small"><span class="num">{shownCharacters.length}</span> {m.import_characters()}</span>
         </div>
-        <div class="charlist">
+        <div class="charlist scroll-hint" {@attach scrollHint}>
           {#each shownCharacters as c (c.key)}
             {@const who = ascendByKey.get(c.className) ?? (build.classes.some((k) => k.name === c.className) ? { cls: c.className, asc: null } : undefined)}
             <div class="charrow">
@@ -1442,7 +1443,7 @@
             <span class="label">{m.import_planner_dialog()}</span>
             <button class="btn sm ghost" onclick={() => (plannerOpen = false)} disabled={plannerBusy}>{m.common_close()}</button>
           </div>
-          <div class="mbody">
+          <div class="mbody scroll-hint" {@attach scrollHint}>
             {#if plannerLoadouts > 1}
               {#each plannerModes as [id, title, hint] (id)}
                 <label class="mrow pmode">
@@ -1478,7 +1479,7 @@
             <span class="dim small mono">{moba.slug}</span>
             <button class="btn sm ghost" onclick={() => (moba = null)} disabled={mobaBusy}>{m.common_close()}</button>
           </div>
-          <div class="mbody">
+          <div class="mbody scroll-hint" {@attach scrollHint}>
             {#if moba.pobCode}
               <div class="mrow">
                 <div class="mtext">
@@ -1522,7 +1523,7 @@
             <span class="dim small mtrunc" title={guide.title}>{guide.title}</span>
             <button class="btn sm ghost" onclick={() => (guide = null)} disabled={guideBusy}>{m.common_close()}</button>
           </div>
-          <div class="mbody">
+          <div class="mbody scroll-hint" {@attach scrollHint}>
             {#each guide.links as l, i (l.url)}
               <div class="mrow">
                 <div class="mtext">

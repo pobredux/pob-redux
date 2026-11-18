@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { scrollHint } from "$lib/scroll-hint";
   import { untrack } from "svelte";
   import { engine, type MinionLibrary, type MinionEntry } from "$lib/engine.svelte";
   import { build } from "$lib/state/build.svelte";
@@ -91,7 +92,7 @@
     <div class="cols">
       <section class="side">
         <div class="shead">{m.minions_available()} <span class="dim num">{shown.length}</span></div>
-        <div class="scroll">
+        <div class="scroll scroll-hint" {@attach scrollHint}>
           {#each shown as e (e.id)}
             <button class="row" onclick={() => add(e)} title={e.id}>
               <span class="nm">{e.name}</span>
@@ -105,7 +106,7 @@
       </section>
       <section class="side">
         <div class="shead">{m.minions_owned()} <span class="dim num">{owned.length}</span></div>
-        <div class="scroll">
+        <div class="scroll scroll-hint" {@attach scrollHint}>
           {#each owned as e (e.id)}
             <button class="row own" onclick={() => remove(e.id)} title={m.minions_remove()}>
               <span class="nm">{e.name}</span>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { scrollHint } from "$lib/scroll-hint";
   import { engine, type ItemEnchants, type ItemTarget, type ItemCustomizationEdit } from "$lib/engine.svelte";
   import { m } from "$lib/paraglide/messages";
   import SearchSelect from "./SearchSelect.svelte";
@@ -106,7 +107,7 @@
           </div>
         {/if}
 
-        <div class="scroll">
+        <div class="scroll scroll-hint" {@attach scrollHint}>
           {#each lines as l (l)}
             <button class="row" onclick={() => apply(l)}>{l}</button>
           {:else}

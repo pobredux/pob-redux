@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { scrollHint } from "$lib/scroll-hint";
   import { openUrl } from "$lib/engine.svelte";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
   import { listen } from "@tauri-apps/api/event";
@@ -319,7 +320,7 @@
               <button class="btn sm ghost" onclick={() => chat.setHidden(p.id, listed.filter((x) => !(p.id === chat.provider && x.id === chat.model)).map((x) => x.id), true)}>{m.assistant_hide_all()}</button>
             </div>
           </div>
-          <div class="mlist">
+          <div class="mlist scroll-hint" {@attach scrollHint}>
             {#each listed as x (x.id)}
               {@const inUse = p.id === chat.provider && x.id === chat.model}
               <label class="mrow">

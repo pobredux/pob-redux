@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { scrollHint } from "$lib/scroll-hint";
   import { chat } from "$lib/state/chat.svelte";
   import ComposerMenu from "$lib/components/ComposerMenu.svelte";
   import ProviderIcon from "$lib/components/ProviderIcon.svelte";
@@ -57,7 +58,7 @@
     <span class="name">{current?.label ?? chat.model}</span>
   {/snippet}
   <div class="picker">
-    <div class="rail" role="tablist" aria-label={m.chat_providers()}>
+    <div class="rail scroll-hint" {@attach scrollHint} role="tablist" aria-label={m.chat_providers()}>
       {#each chat.offered as p (p.id)}
         <button
           role="tab"
@@ -78,7 +79,7 @@
         <Icon name="magnifying-glass" size={12} />
         <input bind:this={searchEl} {@attach (el) => el.focus()} bind:value={query} placeholder={m.chat_search_models({ name: provider?.label ?? "" })} onkeydown={onKey} oninput={() => (active = 0)} />
       </div>
-      <div class="list" role="listbox" aria-label={provider?.label}>
+      <div class="list scroll-hint" {@attach scrollHint} role="listbox" aria-label={provider?.label}>
         {#if provider && !provider.ready}
           <div class="note">
             <span>{m.chat_provider_not_ready({ name: provider.label })}</span>
@@ -129,7 +130,7 @@
     gap: 2px;
     padding: 6px 4px;
     border-right: 1px solid var(--line-1);
-    background: var(--bg-1);
+    background-color: var(--bg-1);
     overflow-x: hidden;
     overflow-y: auto;
     flex: none;

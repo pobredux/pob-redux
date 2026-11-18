@@ -22,6 +22,7 @@
 </script>
 
 <script lang="ts">
+  import { scrollHint } from "$lib/scroll-hint";
   import { tick } from "svelte";
   import Icon from "./Icon.svelte";
 
@@ -124,7 +125,7 @@
 
 {#if open}
   <div
-    class="menu"
+    class="menu scroll-hint" {@attach scrollHint}
     role="menu"
     tabindex="-1"
     aria-label={label}
@@ -257,9 +258,8 @@
     overflow-y: auto;
     border: 1px solid var(--line-2);
     border-radius: var(--r-2);
-    background: var(--bg-1);
+    background-color: var(--bg-1);
     box-shadow: var(--shadow-tooltip);
-    scrollbar-width: thin;
   }
   .menu:focus {
     outline: none;

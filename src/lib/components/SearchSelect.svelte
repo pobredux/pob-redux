@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { scrollHint } from "$lib/scroll-hint";
   import { tick, untrack, type Snippet } from "svelte";
   import { m } from "$lib/paraglide/messages";
 
@@ -138,7 +139,7 @@
       oninput={() => (active = 0)}
     />
     <div class="body">
-      <div class="list" id={listId} role="listbox" aria-label={label}>
+      <div class="list scroll-hint" {@attach scrollHint} id={listId} role="listbox" aria-label={label}>
         {#each shown as o, i (o.value)}
           <button
             type="button"

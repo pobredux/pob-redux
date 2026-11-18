@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { scrollHint } from "$lib/scroll-hint";
   import { onMount } from "svelte";
   import { chat, experimentDelta, lookupSite, MAX_WIDTH, MIN_WIDTH, type ToolTurn } from "$lib/state/chat.svelte";
   import Icon from "$lib/components/Icon.svelte";
@@ -352,7 +353,7 @@
     </div>
   {:else}
     <div class="logwrap">
-    <div class="log" bind:this={scroller} onscroll={onScroll}>
+    <div class="log scroll-hint" {@attach scrollHint} bind:this={scroller} onscroll={onScroll}>
       {#each chat.turns as turn, i}
         {#if turn.kind === "user"}
           <button
@@ -467,7 +468,7 @@
 
     <div class="composer">
       {#if slashHits.length}
-        <div class="slash">
+        <div class="slash scroll-hint" {@attach scrollHint}>
           <div class="slabel">Built-in tools · {chat.toolNames.length} available</div>
           {#each slashHits as t, i}
             <button class="srow" class:sel={i === slashIndex} onclick={() => pickTool(t.name)}>
@@ -1162,7 +1163,7 @@
     right: 0;
     max-height: 260px;
     overflow-y: auto;
-    background: var(--bg-2);
+    background-color: var(--bg-2);
     border: 1px solid var(--line-2);
     border-radius: var(--r-2);
     padding: 4px;

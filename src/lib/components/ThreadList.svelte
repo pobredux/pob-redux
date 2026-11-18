@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { scrollHint } from "$lib/scroll-hint";
   import { tick } from "svelte";
   import { chat, type ThreadMeta } from "$lib/state/chat.svelte";
   import { locale } from "$lib/state/locale.svelte";
@@ -123,7 +124,7 @@
       {m.threads_new()}
     </button>
   </div>
-  <div class="list" role="list" aria-label={m.threads_title()}>
+  <div class="list scroll-hint" {@attach scrollHint} role="list" aria-label={m.threads_title()}>
     {#if fresh && !query}
       <div class="row open" role="listitem">
         <div class="pick static">
@@ -175,7 +176,6 @@
     min-height: 0;
     overflow-y: auto;
     padding: 4px;
-    scrollbar-width: thin;
   }
   .sec {
     padding: 8px 8px 3px;

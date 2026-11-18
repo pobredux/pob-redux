@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { scrollHint } from "$lib/scroll-hint";
   import {
     engine,
     listBuilds,
@@ -247,7 +248,7 @@
         <input class="input sm grow" placeholder={m.compare_search_saved()} bind:value={pickQuery} />
         <span class="dim num small">{shownBuilds.length}</span>
       </div>
-      <div class="plist">
+      <div class="plist scroll-hint" {@attach scrollHint}>
         {#each shownBuilds.slice(0, 200) as b (b.path)}
           <button class="brow" onclick={() => addFromFile(b)} disabled={busy}>
             <span class="nm">{b.name}</span>
@@ -303,7 +304,7 @@
             <span class="tnum">{m.compare_col_change()}</span>
             <span class="tpct"></span>
           </div>
-          <div class="scroll">
+          <div class="scroll scroll-hint" {@attach scrollHint}>
             <!-- PoB's stat list repeats a stat under different skill flags, so position is part of the key. -->
             {#each summary.rows as r, i (r.stat + "#" + i)}
               <div class="srow">
@@ -358,7 +359,7 @@
           <span class="tside">{m.compare_col_theirs()}</span>
           <span class="tact"></span>
         </div>
-        <div class="scroll">
+        <div class="scroll scroll-hint" {@attach scrollHint}>
           {#each items as r (r.slot)}
             <div class="srow">
               <span class="tlabel">{slotLabel(r.label ?? r.slot)}</span>
@@ -381,7 +382,7 @@
           <span class="tside">{m.compare_col_yours()}</span>
           <span class="tside">{m.compare_col_theirs()}</span>
         </div>
-        <div class="scroll">
+        <div class="scroll scroll-hint" {@attach scrollHint}>
           {#each skills as r (r.index)}
             <div class="srow tall">
               <span class="tlabel"><PobText text={r.mine?.label ?? r.theirs?.label ?? m.compare_group_fallback({ index: r.index })} /></span>
@@ -410,7 +411,7 @@
           <span class="tside">{m.compare_col_yours()}</span>
           <span class="tside">{m.compare_col_theirs()}</span>
         </div>
-        <div class="scroll">
+        <div class="scroll scroll-hint" {@attach scrollHint}>
           {#each config as r (r.var)}
             <div class="srow">
               <span class="tlabel" title={r.var}>{r.label}</span>

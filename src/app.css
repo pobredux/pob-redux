@@ -429,23 +429,28 @@ body {
   background: rgba(127, 157, 255, 0.28);
 }
 
-/* Scrollbars: thin, hairline, never bright */
 * {
-  scrollbar-width: thin;
-  scrollbar-color: var(--line-2) transparent;
+  scrollbar-width: none;
 }
 *::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  display: none;
 }
-*::-webkit-scrollbar-thumb {
-  background: var(--line-2);
-  border-radius: 4px;
-  border: 2px solid transparent;
-  background-clip: content-box;
-}
-*::-webkit-scrollbar-track {
-  background: transparent;
+
+/* --scroll-more and --scroll-fade-bg come from the scrollHint attachment in src/lib/scroll-hint.ts. */
+.scroll-hint::after {
+  content: "";
+  position: sticky;
+  /* Sticky stops at the scroller's padding edge; the negative inset reaches the real bottom edge. */
+  bottom: calc(-1 * var(--scroll-pad, 0px));
+  display: block;
+  grid-column: 1 / -1;
+  flex: none;
+  height: 40px;
+  margin-top: -40px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--scroll-fade-bg, var(--bg-0)) 85%);
+  opacity: var(--scroll-more, 0);
+  transition: opacity 150ms;
 }
 
 /* Base controls */
@@ -624,7 +629,6 @@ optgroup {
     background: var(--bg-2);
     color: var(--fg-1);
     box-shadow: var(--shadow-pop);
-    scrollbar-width: thin;
   }
   select option {
     padding: 5px 8px;

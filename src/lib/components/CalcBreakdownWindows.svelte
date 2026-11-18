@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { scrollHint } from "$lib/scroll-hint";
   import { onDestroy, tick, untrack } from "svelte";
   import { engine, type BreakdownSection } from "$lib/engine.svelte";
   import {
@@ -349,7 +350,7 @@
       <div class="bdhead">
         <span class="label"><PobText text={hover.title} calcs /></span>
       </div>
-      <div class="bdscroll">
+      <div class="bdscroll scroll-hint" {@attach scrollHint}>
         <BreakdownPanel sections={hover.sections} />
       </div>
     </aside>
@@ -377,7 +378,7 @@
         </span>
         <button class="btn sm ghost" onclick={() => closePinned(popup.key)}>{m.common_close()}</button>
       </div>
-      <div class="bdscroll">
+      <div class="bdscroll scroll-hint" {@attach scrollHint}>
         <BreakdownPanel sections={popup.sections} />
       </div>
       {#each ["nw", "ne", "sw", "se"] as corner}

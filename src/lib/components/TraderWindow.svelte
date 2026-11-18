@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { scrollHint } from "$lib/scroll-hint";
   import { onMount } from "svelte";
   import { tradeWindow } from "$lib/state/trade.svelte";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
@@ -790,7 +791,7 @@
         <span class="dim num">{rows.length}</span>
         {#if ready}<span class="dim small">{m.trader_with_search({ count: ready })}</span>{/if}
       </div>
-      <div class="scroll">
+      <div class="scroll scroll-hint" {@attach scrollHint}>
         {#each rows as r, index (r.key)}
           {#if r.special && !rows[index - 1]?.special}
             <div class="other dim small">{m.trader_other_trades()}</div>

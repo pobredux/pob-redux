@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { scrollHint } from "$lib/scroll-hint";
   import { tick } from "svelte";
   import { engine, listBuilds, type BuildEntry, type ConfigOption, type ItemInfo } from "$lib/engine.svelte";
   import { build, type ViewId } from "$lib/state/build.svelte";
@@ -279,7 +280,7 @@
           oninput={() => (active = 0)}
         />
       </div>
-      <div class="plist" id="palette-list" role="listbox" aria-label={m.palette_title()}>
+      <div class="plist scroll-hint" {@attach scrollHint} id="palette-list" role="listbox" aria-label={m.palette_title()}>
         {#each groups as g (g.name)}
           <div class="ghead" role="presentation">{g.name}</div>
           {#each g.entries as e (e.id)}
