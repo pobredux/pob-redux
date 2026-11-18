@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { scrollHint } from "$lib/scroll-hint";
   import { tick } from "svelte";
   import { flip } from "svelte/animate";
   import { overviewLayout, type Column, type PanelId } from "$lib/state/overview-layout.svelte";
@@ -92,6 +93,13 @@
       .sort((a, b) => Number(b.main) - Number(a.main) || ORDER[a.press] - ORDER[b.press] || a.group - b.group),
   );
   const SHOWN = 9;
+  function skillTip(e: MouseEvent | FocusEvent, group: number, skill: string) {
+    const gems = build.skills?.socketGroups.find((g) => g.index === group)?.gems.filter((x) => !x.support) ?? [];
+    const name = stripPobText(skill);
+    const gem = gems.find((x) => (x.name ?? x.nameSpec) === name) ?? gems[0];
+    if (!gem) return;
+    showTip(e, () => engine.gemTooltip(group, gem.index), (e.currentTarget as HTMLElement).querySelector(".g"));
+  }
 
   const nodesBy = $derived.by(() => {
     const out = { keystones: [] as { id: number; name: string }[], asc: [] as { id: number; name: string }[], notables: 0 };
@@ -189,10 +197,10 @@
   let tip = $state<{ tt: Tooltip; x: number; y: number } | null>(null);
   let tipTimer = 0;
   let tipRequest = 0;
-  function showTip(e: MouseEvent | FocusEvent, fetch: () => Promise<Tooltip>) {
+  function showTip(e: MouseEvent | FocusEvent, fetch: () => Promise<Tooltip>, anchor?: Element | null) {
     clearTimeout(tipTimer);
     const request = ++tipRequest;
-    const cell = (e.currentTarget as HTMLElement | null)?.getBoundingClientRect();
+    const cell = (anchor ?? (e.currentTarget as HTMLElement | null))?.getBoundingClientRect();
     const x = cell && cell.right + 8 + 540 <= window.innerWidth ? cell.right + 8 : Math.max(8, (cell?.left ?? 8) - 548);
     const y = Math.min(cell?.top ?? 40, Math.max(window.innerHeight - 520, 40));
     tipTimer = window.setTimeout(async () => {
@@ -260,7 +268,7 @@
 {/snippet}
 
 {#if info}
-  <div class="page" class:sorting={dragging !== null} bind:this={pageEl}>
+  <div class="page scroll-hint" {@attach scrollHint} class:sorting={dragging !== null} bind:this={pageEl}>
     <div class="col" bind:this={colEls.left}>
       <section class="panel">
         <div class="hero">
@@ -374,8 +382,19 @@
                 {m.ov_persistent()}{#if game.isPoe2 && summary}<span class:neg={summary.spiritUnreserved < 0}>{` · ${m.ov_spirit_used({ used: fmt(summary.spirit - summary.spiritUnreserved), total: fmt(summary.spirit) })}`}</span>{/if}
               </div>
             {/if}
-            <button class="sk" class:main={r.main} onclick={() => go("skills", { view: "skills", group: r.group })}>
-              <span class="g">{stripPobText(r.skill)}{#if r.main}<span class="tag">{m.sidebar_stats_for()}</span>{/if}</span>
+            <button
+              class="sk"
+              class:main={r.main}
+              onclick={() => {
+                hideTip();
+                go("skills", { view: "skills", group: r.group });
+              }}
+              onmouseenter={(e) => skillTip(e, r.group, r.skill)}
+              onmouseleave={hideTip}
+              onfocus={(e) => skillTip(e, r.group, r.skill)}
+              onblur={hideTip}
+            >
+              <span class="g">{stripPobText(r.skill)}{#if r.main}<span class="tag">{m.sidebar_main_skill()}</span>{/if}</span>
               <span class="sup">{(supportsOf.get(r.group) ?? []).join(" · ")}</span>
             </button>
           {/each}
@@ -473,7 +492,7 @@
     grid-template-columns: minmax(0, 1.5fr) minmax(320px, 1fr);
     gap: 14px;
     align-content: start;
-    background: var(--bg-0);
+    background-color: var(--bg-0);
     scrollbar-width: none;
   }
   .page::-webkit-scrollbar {
@@ -772,10 +791,19 @@
     white-space: nowrap;
   }
   .sk .tag {
+    display: inline-flex;
+    align-items: center;
     margin-left: 8px;
+    padding: 1px 7px;
+    border: 1px solid color-mix(in oklab, var(--focus) 45%, transparent);
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--focus) 12%, transparent);
     font-size: var(--fs-2xs);
+    font-weight: 600;
+    line-height: 1.4;
     letter-spacing: 0.06em;
     text-transform: uppercase;
+    vertical-align: 1px;
     color: var(--focus);
   }
   .sk .sup {
