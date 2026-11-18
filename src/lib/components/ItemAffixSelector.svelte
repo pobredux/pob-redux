@@ -21,7 +21,7 @@
     onend: () => void;
   } = $props();
 
-  type Choice = { modId: string; affix: string | null; tier: number; step: AffixRollStep; position: number };
+  type Choice = { modId: string; affix: string | null; tier: number; step: AffixRollStep; tierIndex: number; position: number };
   const segment = 101;
 
   const families = $derived(slot.options);
@@ -111,24 +111,27 @@
     };
   }
 
-  function sliderPosition(tierIndex: number, stepPosition: number): number {
-    return tierIndex * segment + stepPosition;
-  }
-
-  function makeChoice(tierIndex: number, step: AffixRollStep): Choice {
-    const tier = tiers[tierIndex];
-    return { modId: tier.modId, affix: tier.affix, tier: tier.tier, step, position: sliderPosition(tierIndex, step.position) };
-  }
+  // Every roll of every tier is one evenly spaced slider stop, so the ends are the lowest and highest rolls.
+  const choices: Choice[] = $derived.by(() => {
+    const list: Choice[] = [];
+    tiers.forEach((tier, tierIndex) => {
+      for (const step of tier.steps) list.push({ modId: tier.modId, affix: tier.affix, tier: tier.tier, step, tierIndex, position: list.length });
+    });
+    return list;
+  });
+  const lastPosition = $derived(Math.max(1, choices.length - 1));
+  const ticks = $derived.by(() => {
+    const out: number[] = [];
+    let seen = 0;
+    for (const tier of tiers.slice(0, -1)) {
+      seen += tier.steps.length;
+      out.push((seen - 0.5) / lastPosition);
+    }
+    return out;
+  });
 
   function nearest(position: number): Choice | null {
-    if (!tiers.length) return null;
-    const tierIndex = Math.min(tiers.length - 1, Math.max(0, Math.floor(position / segment)));
-    const tier = tiers[tierIndex];
-    const inTier = Math.min(100, Math.max(0, position - tierIndex * segment));
-    const step = tier.steps.reduce((best, candidate) =>
-      Math.abs(candidate.position - inTier) < Math.abs(best.position - inTier) ? candidate : best,
-    );
-    return makeChoice(tierIndex, step);
+    return choices[Math.min(choices.length - 1, Math.max(0, Math.round(position)))] ?? null;
   }
 
   const savedChoice: Choice | null = $derived.by(() => {
@@ -140,15 +143,16 @@
     const step = matchingStep ?? tier.steps.reduce((best, candidate) =>
       Math.abs(candidate.range - range) < Math.abs(best.range - range) ? candidate : best,
     );
-    return makeChoice(tierIndex, step);
+    return choices.find((choice) => choice.tierIndex === tierIndex && choice.step === step) ?? null;
   });
   const shownChoice = $derived(localChoice ?? savedChoice);
   const valueText = $derived(localChoice?.step.value ?? slot.value ?? shownChoice?.step.value ?? slot.label ?? "");
-  const choices: Choice[] = $derived(tiers.flatMap((tier, tierIndex) => tier.steps.map((step) => makeChoice(tierIndex, step))));
 
   async function changeFamily(seriesId: string) {
     if (changing || seriesId === selectedSeries || !onbegin()) return;
-    const fraction = shownChoice && tiers.length ? shownChoice.position / (tiers.length * segment - 1) : (slot.range ?? 0.5);
+    const fraction = shownChoice && tiers.length
+      ? (shownChoice.tierIndex * segment + shownChoice.step.position) / (tiers.length * segment - 1)
+      : (slot.range ?? 0.5);
     changing = true;
     error = null;
     try {
@@ -256,8 +260,12 @@
       <span class="value">{valueText}</span>
     </div>
     {#if choices.length > 1 && shownChoice}
-      <div class="slider-wrap">
-        <input use:restoreFocusAfterBusy type="range" min="0" max={tiers.length * segment - 1} step="1" value={shownChoice.position} disabled={changing}
+      <div class="slider-wrap" style:--fill={shownChoice.position / lastPosition}>
+        <span class="track" aria-hidden="true"><span class="fill"></span></span>
+        {#each ticks as at}
+          <span class="tick" style:--at={at} aria-hidden="true"></span>
+        {/each}
+        <input use:restoreFocusAfterBusy type="range" min="0" max={lastPosition} step="1" value={shownChoice.position} disabled={changing}
           aria-label={m.items_affix_roll()}
           aria-valuetext={`${valueText}, ${shownChoice.affix ?? ""}, ${m.items_affix_tier({ tier: shownChoice.tier })}`}
           oninput={(e) => choose(Number(e.currentTarget.value), e.currentTarget)}
@@ -265,9 +273,6 @@
           onkeydown={keydown}
           onkeyup={keyup}
           onchange={(e) => commit(Number(e.currentTarget.value), e.currentTarget)} />
-        {#each tiers.slice(1) as _, index}
-          <span class="tick" style:left={`calc(8px + (100% - 16px) * ${(index + 1) / tiers.length})`} aria-hidden="true"></span>
-        {/each}
       </div>
     {:else if loading}
       <span class="dim">{m.items_mod_loading()}</span>
@@ -280,8 +285,15 @@
   .affix-roll { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
   .affix-detail { display: flex; flex-wrap: wrap; gap: 4px 10px; color: var(--fg-2); }
   .value { color: var(--fg-1); }
-  .slider-wrap { position: relative; min-width: 100px; }
-  input[type="range"] { width: 100%; margin: 0; position: relative; z-index: 1; accent-color: var(--fg-1); }
-  .tick { position: absolute; z-index: 2; top: 2px; bottom: 2px; width: 2px; background: var(--fg-2); pointer-events: none; }
+  .slider-wrap { --thumb: 14px; position: relative; min-width: 100px; height: 18px; }
+  .track { position: absolute; left: calc(var(--thumb) / 2); right: calc(var(--thumb) / 2); top: 7px; height: 4px; border-radius: 2px; background: var(--line-2); pointer-events: none; }
+  .fill { position: absolute; top: 0; bottom: 0; left: 0; width: calc(var(--fill) * 100%); border-radius: inherit; background: var(--fg-1); }
+  .tick { position: absolute; top: 4px; bottom: 4px; width: 2px; margin-left: -1px; left: calc(var(--thumb) / 2 + (100% - var(--thumb)) * var(--at)); background: var(--fg-3); pointer-events: none; }
+  input[type="range"] { appearance: none; position: relative; z-index: 1; display: block; width: 100%; height: 18px; margin: 0; background: transparent; }
+  input[type="range"]::-webkit-slider-runnable-track { height: 18px; background: transparent; }
+  input[type="range"]::-webkit-slider-thumb { appearance: none; width: var(--thumb); height: var(--thumb); margin-top: 2px; border-radius: 50%; background: var(--fg-0); box-shadow: 0 0 0 2px var(--bg-1); cursor: var(--cursor-pointer, pointer); }
+  input[type="range"]:focus-visible { outline: none; }
+  input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--bg-1), 0 0 0 4px var(--fg-0); }
+  input[type="range"]:disabled { opacity: 0.6; }
   .error { color: var(--bad); }
 </style>
