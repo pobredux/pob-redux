@@ -17,6 +17,7 @@ macro_rules! topic {
 }
 
 pub(crate) const TOPICS: &[Topic] = &[
+    topic!("app", "Using this app: where each tab, setting and shortcut is", "app.md"),
     topic!("progression-and-points", "Levels, the passive point budget, quest rewards, spirit", "poe2/00-progression-and-points.md"),
     topic!("defences", "Armour, evasion, energy shield, block, resistances, the damage calculation order", "poe2/01-defences.md"),
     topic!("damage", "Damage types, conversion, crit, accuracy, penetration, skill speed", "poe2/02-damage.md"),
@@ -37,6 +38,7 @@ pub(crate) const TOPICS: &[Topic] = &[
 ];
 
 pub(crate) const TOPICS_POE1: &[Topic] = &[
+    topic!("app", "Using this app: where each tab, setting and shortcut is", "app.md"),
     topic!("progression-and-points", "Levels, the passive point budget, quest rewards, the bandit choice, ascendancy points", "poe1/00-progression-and-points.md"),
     topic!("defences", "Life, energy shield, armour, evasion, block, spell suppression, resistances, the damage order", "poe1/01-defences.md"),
     topic!("damage", "Damage types, conversion, crit, accuracy, penetration and exposure, skill speed", "poe1/02-damage.md"),
@@ -82,7 +84,7 @@ mod tests {
 
     #[test]
     fn poe1_topics_state_their_version_and_sources() {
-        for t in TOPICS_POE1 {
+        for t in TOPICS_POE1.iter().filter(|t| t.slug != "app") {
             assert!(t.text.starts_with("# "), "{} has no title", t.slug);
             assert!(t.text.contains("Written against 3.29"), "{} does not say which patch it was written against", t.slug);
             assert!(t.text.contains("## Sources"), "{} has no Sources section", t.slug);

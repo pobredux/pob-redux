@@ -329,7 +329,7 @@ fn defs_poe2() -> Vec<ToolDef> {
         ro(
             "library",
             &format!(
-                "Game knowledge PoB does not carry, written for advising on builds. Pass `topic` to read one; omit it for the index. Topics: {}.",
+                "Game knowledge PoB does not carry, and the guide to this app. Pass `topic` to read one; omit it for the index. Topics: {}.",
                 crate::library::index(Game::Poe2)
             ),
             obj(json!({ "topic": prop("string", "Topic slug from the list, or a word from its description") }), &[]),
@@ -840,7 +840,7 @@ fn adapt_for_poe1(defs: &mut Vec<ToolDef>) {
             }
             "library" => {
                 d.description = format!(
-                    "Game knowledge PoB does not carry, written for advising on builds. Pass `topic` to read one; omit it for the index. Topics: {}.",
+                    "Game knowledge PoB does not carry, and the guide to this app. Pass `topic` to read one; omit it for the index. Topics: {}.",
                     crate::library::index(Game::Poe1)
                 )
             }

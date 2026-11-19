@@ -31,8 +31,22 @@ import {
 } from "$lib/ai/tools";
 import { writeTextFile } from "$lib/engine.svelte";
 import { stripPobText } from "$lib/pobtext";
-import { build } from "$lib/state/build.svelte";
+import { build, type ViewId } from "$lib/state/build.svelte";
 import { appOptions } from "$lib/state/options.svelte";
+
+const TAB_NAMES: Record<ViewId, string> = {
+  import: "Builds",
+  overview: "Overview",
+  tree: "Tree",
+  skills: "Skills",
+  items: "Items",
+  calcs: "Calcs",
+  config: "Config",
+  notes: "Notes",
+  party: "Party",
+  optimise: "Optimize",
+  compare: "Compare",
+};
 import { gems } from "$lib/state/gems.svelte";
 
 const KEY = "pob-redux:chat";
@@ -1139,7 +1153,9 @@ class ChatStore {
   /** A short snapshot of the open build, refreshed each turn. */
   private async context(): Promise<string> {
     if (IS_ASSISTANT_WINDOW) await build.mirror().catch(() => {});
-    if (!build.loaded) return "No build is open. Ask the user to load one, or use the tools to inspect once it is.";
+    // The popped-out window cannot see which tab the main window shows.
+    const tab = IS_ASSISTANT_WINDOW ? "" : `Open tab: ${TAB_NAMES[build.view]}${appOptions.open ? ", with Settings open" : ""}`;
+    if (!build.loaded) return ["No build is open. Ask the user to load one, or use the tools to inspect once it is.", tab].filter(Boolean).join("\n");
     const info = build.info;
     const rows = (build.sidebar?.rows ?? [])
       .slice(0, 24)
@@ -1150,6 +1166,7 @@ class ChatStore {
       `Open build: ${info?.name ?? "unnamed"} — level ${info?.level} ${info?.className}` +
         (info?.ascendClassName && info.ascendClassName !== "None" ? ` (${info.ascendClassName})` : ""),
       rows ? `Sidebar: ${rows}` : "",
+      tab,
     ]
       .filter(Boolean)
       .join("\n");
