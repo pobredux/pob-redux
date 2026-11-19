@@ -101,6 +101,8 @@ out.push(
   "Windows: run the `.exe` installer. Linux: `.rpm` on Fedora and openSUSE, `.deb` on Debian, Ubuntu and Chromebooks, or the `.AppImage`. The `aarch64` and `arm64` files are for ARM64 Linux. macOS: open the `.dmg`.",
   "Installed copies update themselves once a newer release is published.",
   "",
+  "[Code signing policy](https://pobredux.com/code-signing) · [Privacy policy](https://pobredux.com/privacy)",
+  "",
 );
 
 if (prev) out.push(`**Full changelog:** https://github.com/${REPO}/compare/${prev}...${tag}`);

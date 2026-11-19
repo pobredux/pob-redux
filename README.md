@@ -172,6 +172,24 @@ Built with [LuaJIT](https://luajit.org) through [mlua](https://github.com/mlua-r
 
 This product isn't affiliated with or endorsed by Grinding Gear Games in any way.
 
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by
+[SignPath Foundation](https://signpath.org/).
+
+- Committers and reviewers: [members of the pobredux team](https://github.com/orgs/pobredux/people)
+- Approvers: [owners of the pobredux team](https://github.com/orgs/pobredux/people?query=role%3Aowner)
+
+We sign the Windows installer and the program it installs, and only files built from this
+repository. The [release workflow](.github/workflows/windows.yml) builds them on GitHub-hosted runners,
+and an approver checks each signing request by hand. The full policy is at
+[pobredux.com/code-signing](https://pobredux.com/code-signing).
+
+## Privacy
+
+PoB Redux sends no analytics, telemetry or crash reports. The
+[privacy policy](https://pobredux.com/privacy) lists every service the app contacts and when.
+
 ## Licence
 
 MIT. See [LICENSE](LICENSE). Path of Building Community is MIT as well, and its licence file is
