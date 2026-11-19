@@ -257,7 +257,44 @@
       selectedItem = null;
     }
     if (result) await build.run(() => build.sync(), { sync: false, user: false });
+    if (result) followInWindow(result.itemId);
     previewCommitting = false;
+  }
+
+  // Only the pop-out follows: inline, the detail would replace the database list being browsed.
+  function followInWindow(itemId: number) {
+    if (itemWindow.open) void itemWindow.show(itemId);
+  }
+
+  async function previewText(load: () => Promise<string>) {
+    if (previewCommitting) return;
+    const stamp = ++previewStamp;
+    previewLoading = true;
+    previewError = null;
+    try {
+      const raw = await load();
+      if (alive && stamp === previewStamp) await requestPreview(raw, stamp, true);
+    } catch (e) {
+      if (alive && stamp === previewStamp) {
+        previewError = String(e);
+        previewLoading = false;
+      }
+    }
+  }
+
+  // A double-click, or Enter on the focused name, opens the preview; a single click leaves the list in place.
+  function previewOnOpen(e: MouseEvent, load: () => Promise<string>) {
+    if (e.detail === 0 || e.detail === 2) void previewText(load);
+  }
+
+  async function equipFromDb(name: string) {
+    const r = await build.run(() => engine.itemDbEquip(dbShown, name, dbSlot ?? undefined));
+    if (r) followInWindow(r.itemId);
+  }
+
+  async function equipShared(index: number) {
+    const r = await build.run(() => engine.equipSharedItem(index, dbSlot ?? undefined));
+    if (r) followInWindow(r.itemId);
   }
 
   $effect(() => {
@@ -1085,10 +1122,10 @@
               onmouseenter={(e) => showTip(e, `h${it.raw}`, () => engine.itemTooltip({ raw: it.raw }))}
               onmouseleave={hideTip}
             >
-              <span class="iname" style:color={rarityColor[it.rarity ?? ""] ?? "var(--fg-1)"}>{it.name}</span>
+              <button class="iname" style:color={rarityColor[it.rarity ?? ""] ?? "var(--fg-1)"} onclick={(e) => previewOnOpen(e, async () => it.raw)}>{it.name}</button>
               <span class="itag dim">{it.baseName ?? ""}</span>
               <span class="iops">
-                <button class="mini w" title={m.items_shared_equip_title()} onclick={() => build.run(() => engine.equipSharedItem(it.index, dbSlot ?? undefined))}>{m.items_equip()}</button>
+                <button class="mini w" title={m.items_shared_equip_title()} onclick={() => equipShared(it.index)}>{m.items_equip()}</button>
                 <button class="mini x" title={m.items_shared_remove_title()} onclick={() => removeShared(it)}>✕</button>
               </span>
             </div>
@@ -1107,10 +1144,10 @@
             onmouseenter={(e) => showTip(e, `d${dbShown}:${row.name}:${build.rev}`, () => engine.itemTooltip({ db: dbShown, name: row.name }))}
             onmouseleave={hideTip}
           >
-            <span class="iname" style:color={rarityColor[row.rarity ?? ""] ?? "var(--fg-1)"}>{row.name}</span>
+            <button class="iname" style:color={rarityColor[row.rarity ?? ""] ?? "var(--fg-1)"} onclick={(e) => previewOnOpen(e, async () => (await engine.itemDbRaw(dbShown, row.name)).raw)}>{row.name}</button>
             <span class="itag dim">{row.baseName ?? row.type}</span>
             <span class="iops">
-              <button class="mini w" title={m.items_db_equip_title()} onclick={() => build.run(() => engine.itemDbEquip(dbShown, row.name, dbSlot ?? undefined))}>{m.items_equip()}</button>
+              <button class="mini w" title={m.items_db_equip_title()} onclick={() => equipFromDb(row.name)}>{m.items_equip()}</button>
             </span>
           </div>
         {/each}

@@ -4902,6 +4902,15 @@ M.item_db_equip = function(p)
 	return r
 end
 
+M.item_db_raw = function(p)
+	ensureBuild()
+	if not p or not p.name then error("params.db and params.name are required", 0) end
+	itemUtil.ensureItemDb()
+	local dbItem = itemUtil.dbFor(p.db).list[p.name]
+	if not dbItem then error("unknown database item " .. tostring(p.name), 0) end
+	return { raw = dbItem.raw or dbItem:BuildRaw() }
+end
+
 -- Canonical raw text for the edit dialog.
 M.item_raw = function(p)
 	ensureBuild()

@@ -1921,6 +1921,7 @@ export const engine = {
   /** `variants`: one entry per pick, a variant's name, a substring of it, or its index. */
   itemDbEquip: (db: ItemDbName, name: string, slotName?: string, variants?: (string | number)[]) =>
     call<{ ok: boolean; itemId: number; slot: string; itemName: string; variants: string[]; mods: string[] }>("item_db_equip", { db, name, slotName, variants }),
+  itemDbRaw: (db: ItemDbName, name: string) => call<{ raw: string }>("item_db_raw", { db, name }),
   itemRaw: (itemId: number) => call<{ raw: string }>("item_raw", { itemId }),
   itemEdit: (text: string, itemId?: number, generation?: number) => call<{ ok: boolean; itemId: number; name: string }>("item_edit", { text, itemId, generation }),
   setWeaponSet: (set: 1 | 2) => call<SlotsResponse>("set_weapon_set", { set }),
@@ -1965,7 +1966,8 @@ export const engine = {
   getSharedItems: () => call<{ items: SharedItem[] }>("get_shared_items"),
   addSharedItem: (p: { itemId?: number; raw?: string }) => call<{ items: SharedItem[] }>("add_shared_item", p),
   removeSharedItem: (index: number) => call<{ items: SharedItem[] }>("remove_shared_item", { index }),
-  equipSharedItem: (index: number, slotName?: string) => call<unknown>("equip_shared_item", { index, slotName }),
+  equipSharedItem: (index: number, slotName?: string) =>
+    call<{ ok: boolean; itemId: number; slot: string; itemName: string }>("equip_shared_item", { index, slotName }),
   tradeSearchStart: (p: TradeQueryOptions) => call<{ started: boolean }>("trade_search_start", p),
   weightedTradeLink: (p: WeightedTradeLinkOptions) =>
     call<{ tradeUrl: string; itemName: string; slot: string; realm: string; league: string; maxPrice: number; currency: string }>("weighted_trade_link", p),
