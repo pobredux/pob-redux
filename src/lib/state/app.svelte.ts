@@ -7,6 +7,7 @@ import { chat } from "$lib/state/chat.svelte";
 import { appUpdate } from "$lib/state/update.svelte";
 import { game, type Game } from "$lib/state/game.svelte";
 import { links } from "$lib/state/links.svelte";
+import { ui } from "$lib/state/ui.svelte";
 import { SHARED_ITEMS_KEY } from "$lib/shared-items";
 import { m } from "$lib/paraglide/messages";
 
@@ -83,6 +84,11 @@ class AppStore {
     } else if (session?.uncleanExit && (await this.declineRecovery())) {
       await build.run(async () => {}, { sync: true });
       opened = false;
+    } else if (first && ui.startEmpty && !session?.uncleanExit) {
+      // The untouched blank is not autosaved, so the Builds tab can still offer the last session.
+      await build.run(async () => {}, { sync: true });
+      opened = false;
+      nothingSaved = true;
     } else if (!(await build.reopenLast())) {
       await build.run(async () => {}, { sync: true });
       opened = false;

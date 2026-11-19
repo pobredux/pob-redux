@@ -117,6 +117,7 @@
 
   const sections = $derived<{ id: string; label: string; tone?: Tone }[]>([
     { id: "appearance", label: m.settings_appearance() },
+    { id: "startup", label: m.settings_startup() },
     { id: "numbers", label: m.settings_numbers() },
     { id: "assistant", label: m.settings_assistant(), tone: assistantTone },
     { id: "mcp", label: m.settings_mcp(), tone: mcpTone },
@@ -288,6 +289,17 @@
               <span class="hint">{m.settings_tree_asc_centre_hint()}</span>
             </span>
             <input class="switch" type="checkbox" role="switch" checked={ui.treeAscCentre} onchange={(e) => ui.setTreeAscCentre((e.target as HTMLInputElement).checked)} />
+          </label>
+        </div>
+      {:else if active === "startup"}
+        {@render head(m.settings_startup(), m.settings_startup_desc())}
+        <div class="rows">
+          <label class="opt">
+            <span>
+              {m.settings_start_empty()}
+              <span class="hint">{m.settings_start_empty_hint()}</span>
+            </span>
+            <input class="switch" type="checkbox" role="switch" checked={ui.startEmpty} onchange={(e) => ui.setStartEmpty((e.target as HTMLInputElement).checked)} />
           </label>
         </div>
       {:else if active === "numbers"}
