@@ -1,0 +1,234 @@
+name: windows
+
+# SignPath signs pob-redux.exe before NSIS packs it, then signs the installer; an empty policy builds unsigned.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: true
+      signing-policy:
+        type: string
+        default: ""
+      upload:
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag or commit to build"
+        required: true
+        default: main
+      signing-policy:
+        description: "SignPath signing policy"
+        type: choice
+        options: [test-signing, release-signing, none]
+        default: test-signing
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      POLICY: ${{ inputs.signing-policy != 'none' && inputs.signing-policy || '' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Read pinned PoB commits
+        id: pin
+        shell: bash
+        run: |
+          pin() { awk -v s="[$1]" '$0 == s {f=1; next} /^\[/ {f=0} f && /^commit/' pob-sync.toml | cut -d'"' -f2; }
+          echo "commit=$(pin poe2)" >> "$GITHUB_OUTPUT"
+          echo "commit1=$(pin poe1)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache vendored Path of Building
+        id: pob
+        uses: actions/cache@v6
+        with:
+          path: |
+            src-tauri/resources/pob
+            src-tauri/resources/pob1
+            src-tauri/resources/pob1-data
+          key: pob-${{ runner.os }}-${{ steps.pin.outputs.commit }}-${{ steps.pin.outputs.commit1 }}-${{ hashFiles('crates/pob-sync/**/*.rs', 'crates/pob-sync/Cargo.toml', 'pob-sync.toml', 'patches/**', 'trees/**') }}
+
+      - name: Checkout PathOfBuilding-PoE2
+        if: steps.pob.outputs.cache-hit != 'true'
+        uses: actions/checkout@v7
+        with:
+          repository: PathOfBuildingCommunity/PathOfBuilding-PoE2
+          ref: ${{ steps.pin.outputs.commit }}
+          path: upstream/PathOfBuilding-PoE2
+
+      - name: Checkout PathOfBuilding (PoE1)
+        if: steps.pob.outputs.cache-hit != 'true'
+        uses: actions/checkout@v7
+        with:
+          repository: PathOfBuildingCommunity/PathOfBuilding
+          ref: ${{ steps.pin.outputs.commit1 }}
+          path: upstream/PathOfBuilding
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Cache bun packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-${{ runner.arch }}-
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+          shared-key: pob-redux-${{ runner.arch }}
+          cache-on-failure: true
+
+      - run: bun install --frozen-lockfile
+
+      - name: Vendor Path of Building
+        if: steps.pob.outputs.cache-hit != 'true'
+        run: |
+          cargo run -p pob-sync -- --source upstream/PathOfBuilding-PoE2
+          cargo run -p pob-sync -- --game poe1 --source upstream/PathOfBuilding
+
+      - name: Check the downloadable files are on R2
+        run: bun scripts/downloads.ts check
+
+      - name: Read the app version
+        id: version
+        shell: bash
+        env:
+          TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+        run: |
+          version=$(bun -e "console.log(require('./src-tauri/tauri.conf.json').version)")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "installer=out/PoB.Redux_${version}_x64-setup.exe" >> "$GITHUB_OUTPUT"
+          if [ -n "$POLICY" ] && [ -z "$TOKEN" ]; then
+            echo "::error::Signing policy $POLICY needs the SIGNPATH_API_TOKEN secret"
+            exit 1
+          fi
+
+      - name: Build the app
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: bun run tauri build --no-bundle
+
+      - name: Upload the unsigned app for SignPath
+        if: env.POLICY != ''
+        id: unsigned-app
+        uses: actions/upload-artifact@v7
+        with:
+          name: unsigned-app
+          path: target/release/pob-redux.exe
+          if-no-files-found: error
+
+      - name: Sign the app
+        if: env.POLICY != ''
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: efeb4261-13a8-4416-a1a6-2d0c4715e27a
+          project-slug: pob-redux
+          signing-policy-slug: ${{ env.POLICY }}
+          artifact-configuration-slug: app
+          github-artifact-id: ${{ steps.unsigned-app.outputs.artifact-id }}
+          wait-for-completion-timeout-in-seconds: 7200
+          output-artifact-directory: signed/app
+          parameters: |
+            version: "${{ steps.version.outputs.version }}"
+
+      - name: Use the signed app
+        if: env.POLICY != ''
+        shell: bash
+        run: cp signed/app/pob-redux.exe target/release/pob-redux.exe
+
+      - name: Build the installer
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: bun run tauri bundle --bundles nsis
+
+      - name: Name the installer as the release does
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          INSTALLER: ${{ steps.version.outputs.installer }}
+        run: |
+          mkdir -p out
+          cp "target/release/bundle/nsis/PoB Redux_${VERSION}_x64-setup.exe" "$INSTALLER"
+
+      - name: Upload the unsigned installer for SignPath
+        if: env.POLICY != ''
+        id: unsigned-installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: unsigned-installer
+          path: ${{ steps.version.outputs.installer }}
+          if-no-files-found: error
+
+      - name: Sign the installer
+        if: env.POLICY != ''
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: efeb4261-13a8-4416-a1a6-2d0c4715e27a
+          project-slug: pob-redux
+          signing-policy-slug: ${{ env.POLICY }}
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.unsigned-installer.outputs.artifact-id }}
+          wait-for-completion-timeout-in-seconds: 7200
+          output-artifact-directory: signed/installer
+          parameters: |
+            version: "${{ steps.version.outputs.version }}"
+
+      - name: Use the signed installer
+        if: env.POLICY != ''
+        shell: bash
+        env:
+          INSTALLER: ${{ steps.version.outputs.installer }}
+        run: cp "signed/installer/$(basename "$INSTALLER")" "$INSTALLER"
+
+      - name: Check both files carry a signature
+        if: env.POLICY != ''
+        shell: pwsh
+        env:
+          INSTALLER: ${{ steps.version.outputs.installer }}
+        run: |
+          foreach ($f in 'target/release/pob-redux.exe', $env:INSTALLER) {
+            $s = Get-AuthenticodeSignature $f
+            Write-Output "$f`: $($s.Status) $($s.SignerCertificate.Subject)"
+            if (-not $s.SignerCertificate) { exit 1 }
+          }
+
+      # Authenticode signing changes the installer, so the updater signature from the bundle step no longer matches.
+      - name: Sign the update
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          VERSION: ${{ steps.version.outputs.version }}
+          INSTALLER: ${{ steps.version.outputs.installer }}
+        run: bun run tauri signer sign --app-version "$VERSION" "$INSTALLER"
+
+      - name: Upload to the draft release
+        if: inputs.upload
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.ref }}
+          INSTALLER: ${{ steps.version.outputs.installer }}
+        run: gh release upload "$TAG" "$INSTALLER" "$INSTALLER.sig" --clobber -R "$GITHUB_REPOSITORY"
+
+      - name: Keep the installer as a workflow artifact
+        if: ${{ !inputs.upload }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-installer
+          path: out/

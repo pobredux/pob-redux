@@ -15,6 +15,7 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   # One job makes the draft, so parallel builds cannot each create their own for the same tag.
@@ -52,8 +53,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: windows-latest
-            bundles: nsis
           - os: ubuntu-22.04
             bundles: deb,rpm,appimage
           - os: ubuntu-22.04-arm
@@ -179,9 +178,19 @@ jobs:
           path: smoke.png
           if-no-files-found: ignore
 
+  # Signed with the SignPath policy in this repository variable; unset builds unsigned.
+  windows:
+    needs: draft
+    uses: ./.github/workflows/windows.yml
+    with:
+      ref: ${{ inputs.tag || github.ref_name }}
+      signing-policy: ${{ vars.SIGNPATH_SIGNING_POLICY }}
+      upload: true
+    secrets: inherit
+
   # Matrix jobs each rewrite latest.json and can drop a platform when two finish together.
   updater-manifest:
-    needs: release
+    needs: [release, windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
