@@ -29,6 +29,7 @@
     readTextFile,
     writeTextFile,
     SHARE_SITES,
+    shareSitesFor,
     type ShareSite,
     type AppPaths,
     type PlannerMode,
@@ -88,6 +89,10 @@
     const saved = localStorage.getItem(SITE_KEY);
     if (saved && (SHARE_SITES as readonly string[]).includes(saved)) shareSite = saved as ShareSite;
   } catch {}
+  const shareSites = $derived(shareSitesFor(game.current));
+  $effect(() => {
+    if (!shareSites.includes(shareSite)) shareSite = "pobb.in";
+  });
   let sharing = $state(false);
   let shareUrl = $state<string | null>(null);
 
@@ -1487,7 +1492,7 @@
           <span class="joined">
             <button class="btn sm" onclick={shareLink} disabled={sharing} title={m.import_link_title()}>{sharing ? m.import_creating_link() : m.import_link()}</button>
             <select class="select xs" bind:value={shareSite} disabled={sharing}>
-              {#each SHARE_SITES as site}<option value={site}>{site}</option>{/each}
+              {#each shareSites as site}<option value={site}>{site}</option>{/each}
             </select>
           </span>
         </div>

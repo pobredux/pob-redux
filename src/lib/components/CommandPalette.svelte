@@ -129,7 +129,7 @@
       ["notes", m.view_notes(), "7"],
       ["party", m.view_party(), "8"],
       ["optimise", m.view_optimise(), "9"],
-      ["compare", m.view_compare(), "0"],
+      ["compare", m.view_compare(), ""],
     ];
     return all
       .filter(([id]) => build.loaded || id === "import")
