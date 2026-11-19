@@ -1,6 +1,9 @@
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
+use tauri::webview::{NewWindowResponse, PageLoadEvent};
+use tauri::{AppHandle, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 use crate::game::Game;
 
@@ -51,22 +54,6 @@ pub struct Character {
 pub struct CharacterList {
     pub account: String,
     pub characters: Vec<Character>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Snapshot {
-    url: String,
-    #[serde(rename = "type")]
-    kind: Option<String>,
-    version: String,
-    snapshot_name: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct CharacterBuild {
-    path_of_building_export: Option<String>,
 }
 
 fn ninja_account(name: &str) -> String {
@@ -178,35 +165,65 @@ pub async fn list(game: Game, account: &str) -> Result<CharacterList, String> {
     Ok(CharacterList { account, characters })
 }
 
-pub async fn build_code(game: Game, account: &str, character: &str, league_url: &str) -> Result<String, String> {
-    const NO_BUILD: &str = "poe.ninja has no build for that character.";
-    let client = client()?;
-    let q = crate::character::query_value;
-    let url = format!("{HOST}{}/api/data/snapshot-versions?league={}", game.id(), q(league_url));
-    let body = get(&client, &url).await?.ok_or("poe.ninja did not return its league list")?;
-    let snapshots: Vec<Snapshot> = serde_json::from_str(&body).map_err(|_| "poe.ninja sent a league list this app could not read".to_string())?;
-    // PoE1 leagues have an experience ladder and a delve depth ladder; both hold the same characters
-    let snapshot = snapshots
-        .iter()
-        .filter(|s| s.url == league_url)
-        .min_by_key(|s| !matches!(s.kind.as_deref(), None | Some("exp")))
-        .ok_or("poe.ninja no longer has build data for that league.")?;
-    let url = format!(
-        "{HOST}{}/api/builds/{}/character?account={}&name={}&overview={}&timeMachine=",
-        game.id(),
-        q(&snapshot.version),
-        q(&ninja_account(account)),
-        q(character),
-        q(&snapshot.snapshot_name),
-    );
-    let body = get(&client, &url).await?.ok_or(NO_BUILD)?;
-    let build: CharacterBuild = serde_json::from_str(&body).map_err(|_| "poe.ninja sent a character this app could not read".to_string())?;
-    build.path_of_building_export.filter(|c| !c.trim().is_empty()).ok_or_else(|| NO_BUILD.into())
+fn character_url(game: Game, account: &str, character: &str, league: &str) -> reqwest::Url {
+    let mut url = reqwest::Url::parse(HOST).expect("valid poe.ninja base URL");
+    url.path_segments_mut()
+        .expect("poe.ninja URL supports path segments")
+        .extend([game.id(), "builds", league, "character", &ninja_account(account), character]);
+    url
+}
+
+async fn read_export(window: &WebviewWindow) -> Result<String, String> {
+    // poe.ninja renders the public export field after its page JavaScript loads.
+    const READ_CODE: &str = r#"(() => {
+        const value = document.querySelector('input[readonly][aria-label="Import code for Path of Building"]')?.value?.trim();
+        return value && /^[A-Za-z0-9_+/-]{100,250000}={0,2}$/.test(value) ? value : "";
+    })()"#;
+    loop {
+        let (send, mut receive) = tokio::sync::mpsc::channel(1);
+        window.eval_with_callback(READ_CODE, move |json| {
+            let _ = send.try_send(serde_json::from_str::<String>(&json).unwrap_or_default());
+        }).map_err(|e| e.to_string())?;
+        if let Some(code) = receive.recv().await.filter(|code| !code.is_empty()) {
+            return Ok(code);
+        }
+        tokio::time::sleep(Duration::from_millis(300)).await;
+    }
+}
+
+pub async fn build_code(app: AppHandle, game: Game, account: &str, character: &str, league: &str) -> Result<String, String> {
+    if league.is_empty() {
+        return Err("poe.ninja did not provide the character's league.".into());
+    }
+    static NEXT_WINDOW: AtomicU64 = AtomicU64::new(0);
+    let label = format!("ninja-import-{}", NEXT_WINDOW.fetch_add(1, Ordering::Relaxed));
+    let url = character_url(game, account, character, league);
+    let (loaded, mut load_event) = tokio::sync::mpsc::channel(1);
+    let window = WebviewWindowBuilder::new(&app, label, WebviewUrl::External(url.clone()))
+        .visible(false)
+        .focused(false)
+        .incognito(true)
+        .on_navigation(move |target| target == &url)
+        .on_new_window(|_, _| NewWindowResponse::Deny)
+        .on_download(|_, _| false)
+        .on_page_load(move |_, event| {
+            if event.event() == PageLoadEvent::Finished {
+                let _ = loaded.try_send(());
+            }
+        })
+        .build()
+        .map_err(|e| e.to_string())?;
+    let result = tokio::time::timeout(Duration::from_secs(9), async {
+        load_event.recv().await.ok_or("poe.ninja closed before the page loaded.")?;
+        read_export(&window).await
+    }).await;
+    let _ = window.destroy();
+    result.map_err(|_| "poe.ninja did not display an export code in time.".to_string())?
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{character_url, hash_account, ninja_account, Game};
 
     #[test]
     fn account_names() {
@@ -217,14 +234,14 @@ mod tests {
     }
 
     #[test]
-    fn parse_snapshot_versions() {
-        let json = r#"[
-            {"url":"covens","type":"exp","name":"Covens","version":"1336-20261119-16250","snapshotName":"covens"},
-            {"url":"covens","type":"depthsolo","name":"Covens","version":"1342-20261119-14292","snapshotName":"covens"}
-        ]"#;
-        let snapshots: Vec<Snapshot> = serde_json::from_str(json).unwrap();
-        assert_eq!(snapshots.len(), 2);
-        assert_eq!(snapshots[0].snapshot_name, "covens");
-        assert_eq!(snapshots[0].kind.as_deref(), Some("exp"));
+    fn character_pages_encode_each_segment() {
+        assert_eq!(
+            character_url(Game::Poe2, "Sample#0675", "ExampleCharacter", "forbiddenrites").as_str(),
+            "https://poe.ninja/poe2/builds/forbiddenrites/character/Sample-0675/ExampleCharacter"
+        );
+        assert_eq!(
+            character_url(Game::Poe1, "Some-name#1234", "Name/é", "hc covens").as_str(),
+            "https://poe.ninja/poe1/builds/hc%20covens/character/Some-name-1234/Name%2F%C3%A9"
+        );
     }
 }

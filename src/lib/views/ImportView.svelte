@@ -23,6 +23,7 @@
     gggCharacter,
     ninjaCharacters,
     ninjaCharacterCode,
+    openUrl,
     type ReimportOptions,
     saveGameBuildFiles,
     listGameBuilds,
@@ -561,6 +562,9 @@
   let charList = $state<{ source: CharSource; game: string; account: string; rows: CharRow[] } | null>(null);
   let charLeague = $state("");
   let charBusy = $state<string | null>(null);
+  let ninjaFallback = $state<string | null>(null);
+  let updating = $state<string | null>(null);
+  let ninjaCode = $state("");
   try {
     const saved = JSON.parse(localStorage.getItem(CHAR_KEY) ?? "{}");
     charAccount = saved.account ?? "";
@@ -614,6 +618,9 @@
     const src = charSource;
     if (charBusy || (src === "ninja" ? !charAccount.trim() : ggg.account === null)) return;
     charBusy = "list";
+    ninjaFallback = null;
+    updating = null;
+    ninjaCode = "";
     const g = game.current;
     try {
       if (src === "ninja") {
@@ -669,6 +676,38 @@
     }
   }
 
+  async function openNinjaCharacter(c: CharRow) {
+    const list = shownList;
+    if (list?.source !== "ninja") return;
+    const account = encodeURIComponent(list.account.replace(/\s/g, "").replace(/#(?=\d+$)/, "-"));
+    const profile = `https://poe.ninja/${list.game}/profile/${account}`;
+    const url = c.leagueUrl
+      ? `https://poe.ninja/${list.game}/builds/${encodeURIComponent(c.leagueUrl)}/character/${account}/${encodeURIComponent(c.name)}`
+      : profile;
+    try {
+      await openUrl(url);
+    } catch (e) {
+      build.error = String(e);
+    }
+  }
+
+  function toggleCharacterUpdate(c: CharRow) {
+    updating = updating === c.key ? null : c.key;
+    ninjaFallback = null;
+    ninjaCode = "";
+  }
+
+  async function ninjaExport(c: CharRow, account: string) {
+    if (ninjaFallback === c.key) return ninjaCode.trim();
+    try {
+      return await ninjaCharacterCode(account, c.name, c.leagueUrl);
+    } catch {
+      ninjaFallback = c.key;
+      ninjaCode = "";
+      return "";
+    }
+  }
+
   async function importCharacter(c: CharRow) {
     const list = shownList;
     if (!list || charBusy) return;
@@ -676,9 +715,22 @@
     try {
       const name = [list.account.replace(/[#-]\d+$/, ""), c.name].filter(Boolean).join(" - ");
       if (list.source === "ninja") {
-        const code = await ninjaCharacterCode(list.account, c.name, c.leagueUrl);
+        if (updating !== null) {
+          updating = null;
+          ninjaFallback = null;
+          ninjaCode = "";
+        }
+        const pasted = ninjaFallback === c.key;
+        const code = await ninjaExport(c, list.account);
+        if (!code) return;
         const r = await build.loadCode(code, name);
-        if (r) build.say(c.updated ? m.import_imported_ninja({ name: c.name, date: shortDate(c.updated) }) : m.import_imported_ninja_plain({ name: c.name }));
+        if (r) {
+          ninjaFallback = null;
+          ninjaCode = "";
+          build.say(!pasted && c.updated
+            ? m.import_imported_ninja({ name: c.name, date: shortDate(c.updated) })
+            : m.import_imported_ninja_plain({ name: c.name }));
+        }
       } else {
         const data = await gggCharacter(charRealm, c.name);
         const r = await build.run(() => engine.importCharacter({ data, name }));
@@ -695,7 +747,6 @@
     }
   }
 
-  let updating = $state<string | null>(null);
   let reimport = $state<ReimportOptions>({ tree: true, gear: true, deleteJewels: true, deleteEquipment: true, deleteSkills: true, ignoreWeaponSwap: false });
 
   async function reimportCharacter(c: CharRow) {
@@ -705,7 +756,8 @@
     try {
       let r;
       if (list.source === "ninja") {
-        const code = await ninjaCharacterCode(list.account, c.name, c.leagueUrl);
+        const code = await ninjaExport(c, list.account);
+        if (!code) return;
         r = await build.run(() => engine.mergeBuild({ code, ...reimport }));
       } else {
         const data = await gggCharacter(charRealm, c.name);
@@ -713,6 +765,8 @@
       }
       if (r) {
         updating = null;
+        ninjaFallback = null;
+        ninjaCode = "";
         build.say(m.import_reimported({ name: c.name }));
       }
     } catch (e) {
@@ -1396,7 +1450,7 @@
                     class:on={updating === c.key}
                     aria-expanded={updating === c.key}
                     title={m.import_update_open_title()}
-                    onclick={() => (updating = updating === c.key ? null : c.key)}
+                    onclick={() => toggleCharacterUpdate(c)}
                     disabled={charBusy !== null || build.busy > 0}>{m.import_update_open()}</button
                   >
                 {/if}
@@ -1407,6 +1461,29 @@
                 <span class="dim small nobuild" title={m.import_no_ninja_build()}>{ninjaReason(c)}</span>
               {/if}
             </div>
+            {#if charSource === "ninja" && ninjaFallback === c.key}
+              <div class="reimport">
+                <span class="dim small">{m.import_ninja_copy_code()}</span>
+                <textarea
+                  class="input"
+                  rows="2"
+                  aria-label={m.import_ninja_code()}
+                  placeholder={m.import_ninja_code()}
+                  bind:value={ninjaCode}
+                  disabled={charBusy !== null}
+                ></textarea>
+                <div class="rgo">
+                  <button class="btn sm" onclick={() => openNinjaCharacter(c)}>{m.import_ninja_open()}</button>
+                  {#if updating !== c.key}
+                    <button
+                      class="btn sm primary"
+                      onclick={() => importCharacter(c)}
+                      disabled={!ninjaCode.trim() || charBusy !== null || build.busy > 0}
+                    >{charBusy === c.key ? m.import_importing() : m.import_title()}</button>
+                  {/if}
+                </div>
+              </div>
+            {/if}
             {#if updating === c.key && build.info}
               <div class="reimport">
                 <div class="rpart">
@@ -1424,7 +1501,7 @@
                   <button
                     class="btn sm primary"
                     onclick={() => reimportCharacter(c)}
-                    disabled={(!reimport.tree && !reimport.gear) || charBusy !== null || build.busy > 0}
+                    disabled={(!reimport.tree && !reimport.gear) || (charSource === "ninja" && ninjaFallback === c.key && !ninjaCode.trim()) || charBusy !== null || build.busy > 0}
                   >{charBusy === c.key ? m.import_updating() : m.import_update()}</button>
                 </div>
               </div>

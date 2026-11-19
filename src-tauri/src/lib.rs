@@ -591,8 +591,8 @@ async fn ninja_characters(state: State<'_, AppState>, account: String) -> Result
 }
 
 #[tauri::command]
-async fn ninja_character_code(state: State<'_, AppState>, account: String, character: String, league: String) -> Result<String, String> {
-    ninja::build_code(state.game(), &account, &character, &league).await
+async fn ninja_character_code(app: tauri::AppHandle, state: State<'_, AppState>, account: String, character: String, league: String) -> Result<String, String> {
+    ninja::build_code(app, state.game(), &account, &character, &league).await
 }
 
 /// Resolve a Maxroll build guide or planner to the PoB links it offers.
