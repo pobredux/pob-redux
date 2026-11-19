@@ -44,7 +44,7 @@ pub fn parse(raw: &str) -> Option<Link> {
     let rest = rest.trim_start_matches(['/', '\\']);
     let (site, id) = rest.split_once(['/', '\\'])?;
     let id = id.trim_matches(['/', '\\']);
-    if id.is_empty() || !id.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '~')) {
+    if id.is_empty() || !id.chars().all(|c| c.is_ascii_graphic()) {
         return None;
     }
     let (_, prefix) = sites.iter().find(|(s, _)| s.eq_ignore_ascii_case(site))?;
@@ -130,6 +130,10 @@ mod tests {
         assert_eq!(parse("pob://pobbin/abc123"), Some(Link { game: Game::Poe1, url: "https://pobb.in/abc123".into() }));
         assert_eq!(parse("pob://PoeNinja/xyz/"), Some(Link { game: Game::Poe1, url: "https://poe.ninja/poe1/pob/xyz".into() }));
         assert_eq!(parse("pob2://poeninja/xyz"), Some(Link { game: Game::Poe2, url: "https://poe.ninja/poe2/pob/xyz".into() }));
+        assert_eq!(
+            parse("pob://poeninja/overview/code?account=Some-1234&name=Char%25C3%25A9&overview=covens&type=exp"),
+            Some(Link { game: Game::Poe1, url: "https://poe.ninja/poe1/pob/overview/code?account=Some-1234&name=Char%25C3%25A9&overview=covens&type=exp".into() })
+        );
         assert_eq!(parse("pob2://maxroll/g312000h"), Some(Link { game: Game::Poe2, url: "https://maxroll.gg/poe2/pob/g312000h".into() }));
         assert_eq!(parse(r"pob:\\poedb\abc"), Some(Link { game: Game::Poe1, url: "https://poedb.tw/pob/abc".into() }));
         assert_eq!(parse("pob2://poedb/abc"), None);

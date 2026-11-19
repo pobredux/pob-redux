@@ -117,6 +117,10 @@ mod tests {
         assert_eq!(download_url("https://poe2.ninja/pob/abc").unwrap().1, "https://poe.ninja/poe2/pob/raw/abc");
         assert_eq!(download_url("https://poe.ninja/pob/abc").unwrap().1, "https://poe.ninja/poe1/pob/raw/abc");
         assert_eq!(download_url("https://poe.ninja/poe1/pob/abc").unwrap().1, "https://poe.ninja/poe1/pob/raw/abc");
+        assert_eq!(
+            download_url("https://poe.ninja/poe2/pob/overview/code?account=Some-1234&name=Char&overview=runes-of-aldur").unwrap().1,
+            "https://poe.ninja/poe2/pob/raw/overview/code?account=Some-1234&name=Char&overview=runes-of-aldur"
+        );
         assert_eq!(download_url("https://poedb.tw/pob/abc").unwrap().1, "https://poedb.tw/pob/abc/raw");
         assert_eq!(download_url("https://pob.codes/b/abc").unwrap().1, "https://api.pob.codes/abc/raw");
         assert!(download_url("https://pob.codes/").is_none());
