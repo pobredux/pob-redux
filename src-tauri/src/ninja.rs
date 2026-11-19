@@ -55,12 +55,6 @@ pub struct CharacterList {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct IndexState {
-    snapshot_versions: Vec<Snapshot>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct Snapshot {
     url: String,
     #[serde(rename = "type")]
@@ -187,16 +181,16 @@ pub async fn list(game: Game, account: &str) -> Result<CharacterList, String> {
 pub async fn build_code(game: Game, account: &str, character: &str, league_url: &str) -> Result<String, String> {
     const NO_BUILD: &str = "poe.ninja has no build for that character.";
     let client = client()?;
-    let index = get(&client, &format!("{HOST}{}/api/data/index-state", game.id())).await?.ok_or("poe.ninja did not return its league list")?;
-    let index: IndexState = serde_json::from_str(&index).map_err(|_| "poe.ninja sent a league list this app could not read".to_string())?;
+    let q = crate::character::query_value;
+    let url = format!("{HOST}{}/api/data/snapshot-versions?league={}", game.id(), q(league_url));
+    let body = get(&client, &url).await?.ok_or("poe.ninja did not return its league list")?;
+    let snapshots: Vec<Snapshot> = serde_json::from_str(&body).map_err(|_| "poe.ninja sent a league list this app could not read".to_string())?;
     // PoE1 leagues have an experience ladder and a delve depth ladder; both hold the same characters
-    let snapshot = index
-        .snapshot_versions
+    let snapshot = snapshots
         .iter()
         .filter(|s| s.url == league_url)
         .min_by_key(|s| !matches!(s.kind.as_deref(), None | Some("exp")))
         .ok_or("poe.ninja no longer has build data for that league.")?;
-    let q = crate::character::query_value;
     let url = format!(
         "{HOST}{}/api/builds/{}/character?account={}&name={}&overview={}&timeMachine=",
         game.id(),
@@ -212,7 +206,7 @@ pub async fn build_code(game: Game, account: &str, character: &str, league_url: 
 
 #[cfg(test)]
 mod tests {
-    use super::{hash_account, ninja_account};
+    use super::*;
 
     #[test]
     fn account_names() {
@@ -220,5 +214,17 @@ mod tests {
         assert_eq!(ninja_account("ohitsjudd-7248"), "ohitsjudd-7248");
         assert_eq!(ninja_account("some-name#12"), "some-name-12");
         assert_eq!(hash_account("some-name-12"), "some-name#12");
+    }
+
+    #[test]
+    fn parse_snapshot_versions() {
+        let json = r#"[
+            {"url":"covens","type":"exp","name":"Covens","version":"1336-20261119-16250","snapshotName":"covens"},
+            {"url":"covens","type":"depthsolo","name":"Covens","version":"1342-20261119-14292","snapshotName":"covens"}
+        ]"#;
+        let snapshots: Vec<Snapshot> = serde_json::from_str(json).unwrap();
+        assert_eq!(snapshots.len(), 2);
+        assert_eq!(snapshots[0].snapshot_name, "covens");
+        assert_eq!(snapshots[0].kind.as_deref(), Some("exp"));
     }
 }
