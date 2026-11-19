@@ -1621,7 +1621,7 @@ export interface CompareLoadout {
   socketGroups: { index: number; label: string; active: boolean }[];
 }
 
-export type BuySimilarTarget = { itemId: number } | { slot: string; side: "mine" | "theirs" };
+export type BuySimilarTarget = { itemId: number } | { slot: string; side: "mine" | "theirs" } | { raw: string; slot: string };
 
 export interface BuySimilarInfo {
   name: string;

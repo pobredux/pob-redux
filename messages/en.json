@@ -1045,6 +1045,8 @@
   "opt_replaces": "replaces {item}",
   "opt_applied": "Applied",
   "opt_apply": "Apply",
+  "opt_trade": "Trade",
+  "opt_trade_title": "Search the trade site for items like this one",
   "opt_look_for": "Look for",
   "opt_implicit": "· implicit",
   "opt_carried": "Keep from the old item",

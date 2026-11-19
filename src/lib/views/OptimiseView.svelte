@@ -1,24 +1,11 @@
 <script lang="ts">
   import { scrollHint } from "$lib/scroll-hint";
-  import {
-    engine,
-    powerScanParallel,
-    planPointsParallel,
-    type PointPlan,
-    type PowerReportRow,
-    type BuildSummary,
-    type GearOptParams,
-    type GearOptProgress,
-    type GearOptResult,
-    type GearProposal,
-    type ClusterSuggestion,
-    type ClusterSuggestions,
-    type SanityCheck,
-    type SlotInfo,
-  } from "$lib/engine.svelte";
+  import { engine, type BuildSummary, type GearProposal, type SanityCheck, type SlotInfo } from "$lib/engine.svelte";
   import { build } from "$lib/state/build.svelte";
   import { game } from "$lib/state/game.svelte";
+  import { optimise as opt } from "$lib/state/optimise.svelte";
   import { stripPobText } from "$lib/pobtext";
+  import BuySimilarDialog from "$lib/components/BuySimilarDialog.svelte";
   import { m } from "$lib/paraglide/messages";
 
   // Review: PoB's numbers plus the rule-based findings, refreshed with the build.
@@ -40,25 +27,16 @@
       .catch(() => {});
   });
 
+  $effect(() => opt.syncBuild());
+
   // Gear optimiser
   const OPT_SLOTS = ["Weapon 1", "Weapon 2", "Helmet", "Body Armour", "Gloves", "Boots", "Belt", "Amulet", "Ring 1", "Ring 2"];
-  let preset = $state<"balanced" | "defence" | "damage">("balanced");
-  let itemLevel = $state(82);
   // Mods need an item level the character could have found, so the default
   // follows the level until the user types one.
-  let itemLevelTouched = $state(false);
   $effect(() => {
     const lvl = summary?.characterLevel;
-    if (lvl && !itemLevelTouched) itemLevel = Math.min(82, lvl);
+    if (lvl && !opt.itemLevelTouched) opt.itemLevel = Math.min(82, lvl);
   });
-  let range = $state(1);
-  let chosen = $state<Set<string>>(new Set());
-  let running = $state(false);
-  let progress = $state<GearOptProgress | null>(null);
-  let result = $state<GearOptResult | null>(null);
-  let error = $state<string | null>(null);
-  let applied = $state<Set<string>>(new Set());
-  let cancel = false;
 
   const equipped = $derived(
     slots.filter((s) => OPT_SLOTS.includes(s.slot) && s.itemId > 0).map((s) => ({ slot: s.slot, name: s.itemName, unique: s.itemRarity === "UNIQUE" })),
@@ -67,81 +45,10 @@
   $effect(() => {
     // Default to every equipped rare slot; keep the user's picks across refreshes.
     const list = equipped;
-    if (chosen.size === 0 && list.length) chosen = new Set(list.filter((e) => !e.unique).map((e) => e.slot));
+    if (opt.chosen.size === 0 && list.length) opt.chosen = new Set(list.filter((e) => !e.unique).map((e) => e.slot));
   });
 
-  function toggleSlot(slot: string) {
-    const next = new Set(chosen);
-    if (next.has(slot)) next.delete(slot);
-    else next.add(slot);
-    chosen = next;
-  }
-
-  async function run() {
-    if (running || !build.loaded) return;
-    running = true;
-    cancel = false;
-    error = null;
-    result = null;
-    applied = new Set();
-    const params: GearOptParams = { preset, itemLevel, range, slots: [...chosen] };
-    try {
-      let r = await engine.gearOptStart(params);
-      progress = r.progress;
-      while (!r.done && !cancel) {
-        r = await engine.gearOptStep(120);
-        progress = r.progress;
-        await new Promise((res) => setTimeout(res, 0));
-      }
-      if (!cancel) {
-        result = await engine.gearOptResult();
-        await build.sync();
-      }
-    } catch (e) {
-      error = String(e);
-    } finally {
-      running = false;
-      progress = null;
-    }
-  }
-
-  async function apply(p: GearProposal) {
-    const ok = await build.run(() => engine.equipItemRaw(p.raw, p.slot));
-    if (ok) applied = new Set([...applied, p.slot]);
-  }
-
-  async function applyAll() {
-    if (!result) return;
-    for (const p of result.proposals) {
-      if (!applied.has(p.slot)) await apply(p);
-    }
-  }
-
-  let clusterRunning = $state(false);
-  let clusters = $state<ClusterSuggestions | null>(null);
-  let clusterError = $state<string | null>(null);
-  let clusterRev = $state(-1);
-  const clusterStale = $derived(clusters != null && build.rev !== clusterRev);
-
-  async function findClusters() {
-    if (clusterRunning || !build.loaded) return;
-    clusterRunning = true;
-    clusterError = null;
-    try {
-      const r = await engine.suggestClusterJewels(preset, 8);
-      await build.sync();
-      clusters = r;
-      clusterRev = build.rev;
-    } catch (e) {
-      clusterError = String(e);
-    } finally {
-      clusterRunning = false;
-    }
-  }
-
-  async function applyCluster(s: ClusterSuggestion) {
-    await build.run(() => engine.applyClusterJewel(s));
-  }
+  let buyFor = $state<GearProposal | null>(null);
 
   const HEADLINE = $derived<{ key: string; label: string; pct?: boolean }[]>([
     { key: "Life", label: m.opt_stat_life() },
@@ -201,80 +108,11 @@
     ["Armour", m.opt_stat_armour()],
     ["EffectiveMovementSpeedMod", m.opt_tree_speed()],
   ]);
-  let treeStat = $state("Life");
-  let treeStatChosen = false;
   $effect(() => {
-    if (!treeStatChosen && summary) treeStat = summary.energyShield > summary.life ? "EnergyShield" : "Life";
+    if (!opt.treeStatChosen && summary) opt.treeStat = summary.energyShield > summary.life ? "EnergyShield" : "Life";
   });
-  let notablesOnly = $state(true);
-  let treeRunning = $state(false);
-  let treeRows = $state<{ best: PowerReportRow[]; weakest: PowerReportRow[]; stat: string; ms: number } | null>(null);
-  let treeError = $state<string | null>(null);
 
-  async function scanTree() {
-    if (treeRunning || !build.loaded) return;
-    treeRunning = true;
-    treeError = null;
-    try {
-      const { result } = await powerScanParallel(treeStat, null);
-      const best = result.report
-        .filter((r) => !r.allocated && r.pathPower > 0 && (r.pathDist ?? 99) <= 8 && r.type !== "Mastery" && (!notablesOnly || r.type !== "Normal"))
-        .sort((a, b) => b.pathPower - a.pathPower)
-        .slice(0, 12);
-      const weakest = result.report
-        .filter((r) => r.allocated && r.type !== "ClassStart")
-        .sort((a, b) => b.power - a.power)
-        .slice(0, 8);
-      treeRows = { best, weakest, stat: result.label, ms: result.ms };
-      treeStale = false;
-    } catch (e) {
-      treeError = String(e);
-    } finally {
-      treeRunning = false;
-    }
-  }
-
-  // A change leaves the list in place but stale; a rescan costs seconds.
-  let treeStale = $state(false);
-  async function allocate(id: number) {
-    await build.allocNode(id);
-    treeStale = planStale = true;
-  }
-  async function remove(id: number) {
-    await build.deallocNode(id);
-    treeStale = planStale = true;
-  }
-
-  let planBudget = $state<number | null>(null);
-  let planRunning = $state(false);
-  let plan = $state<PointPlan | null>(null);
-  let planError = $state<string | null>(null);
-  let planStale = $state(false);
   const unspent = $derived(summary ? Math.max(0, summary.pointsAvailableMax - summary.passivePointsSpent) : 0);
-
-  async function planTree() {
-    if (planRunning || !build.loaded) return;
-    const budget = Math.round(planBudget ?? (unspent || 10));
-    if (!(budget >= 1)) return;
-    planRunning = true;
-    planError = null;
-    try {
-      plan = (await planPointsParallel(treeStat, Math.min(budget, 120))).result;
-      planStale = false;
-    } catch (e) {
-      planError = String(e);
-    } finally {
-      planRunning = false;
-    }
-  }
-
-  async function applyPlan() {
-    if (!plan) return;
-    for (const p of plan.picks) {
-      if (!(await build.allocNode(p.id))) break;
-    }
-    planStale = treeStale = true;
-  }
   const fmtGain = (v: number) => (Math.abs(v) >= 100 ? Math.round(v).toLocaleString() : (Math.round(v * 10) / 10).toString());
 </script>
 
@@ -328,19 +166,19 @@
         <span class="label">{m.opt_aim()}</span>
         <div class="seg" role="radiogroup">
           {#each [["balanced", m.opt_aim_balanced()], ["defence", m.opt_aim_defence()], ["damage", m.opt_aim_damage()]] as [id, label]}
-            <button class:on={preset === id} onclick={() => (preset = id as typeof preset)} disabled={running}>{label}</button>
+            <button class:on={opt.preset === id} onclick={() => (opt.preset = id as typeof opt.preset)} disabled={opt.running}>{label}</button>
           {/each}
         </div>
       </div>
       <div class="ctl">
         <span class="label">{m.opt_item_level()}</span>
-        <input class="input mono ilvl" type="number" min="1" max="100" bind:value={itemLevel} oninput={() => (itemLevelTouched = true)} disabled={running} />
+        <input class="input mono ilvl" type="number" min="1" max="100" bind:value={opt.itemLevel} oninput={() => (opt.itemLevelTouched = true)} disabled={opt.running} />
       </div>
       <div class="ctl">
         <span class="label">{m.opt_rolls()}</span>
         <div class="seg" role="radiogroup">
           {#each [[1, m.opt_roll_perfect()], [0.8, m.opt_roll_good()], [0.5, m.opt_roll_average()]] as [v, label]}
-            <button class:on={range === v} onclick={() => (range = v as number)} disabled={running}>{label}</button>
+            <button class:on={opt.range === v} onclick={() => (opt.range = v as number)} disabled={opt.running}>{label}</button>
           {/each}
         </div>
       </div>
@@ -348,7 +186,7 @@
         <span class="label">{m.opt_slots()}</span>
         <div class="chips">
           {#each equipped as e (e.slot)}
-            <button class="chip" class:on={chosen.has(e.slot)} disabled={running} title={e.name ?? ""} onclick={() => toggleSlot(e.slot)}>
+            <button class="chip" class:on={opt.chosen.has(e.slot)} disabled={opt.running} title={e.name ?? ""} onclick={() => opt.toggleSlot(e.slot)}>
               {e.slot}{#if e.unique}<span class="dim"> {m.opt_unique()}</span>{/if}
             </button>
           {/each}
@@ -356,48 +194,51 @@
         </div>
       </div>
       <div class="ctl run">
-        {#if running}
-          <button class="btn sm" onclick={() => (cancel = true)}>{m.common_stop()}</button>
+        {#if opt.running}
+          <button class="btn sm" onclick={() => (opt.cancel = true)}>{m.common_stop()}</button>
           <span class="prog">
-            <span class="bar"><span class="fill" style:width={progress && progress.total ? `${(100 * progress.done) / progress.total}%` : "0%"}></span></span>
-            <span class="dim small">{progress?.note ?? m.opt_starting()}</span>
+            <span class="bar"><span class="fill" style:width={opt.progress && opt.progress.total ? `${(100 * opt.progress.done) / opt.progress.total}%` : "0%"}></span></span>
+            <span class="dim small">{opt.progress?.note ?? m.opt_starting()}</span>
           </span>
         {:else}
-          <button class="btn sm primary" onclick={run} disabled={!build.loaded || chosen.size === 0} title={m.opt_run_title()}>{m.opt_run({ count: chosen.size })}</button>
+          <button class="btn sm primary" onclick={opt.run} disabled={!build.loaded || opt.chosen.size === 0} title={m.opt_run_title()}>{m.opt_run({ count: opt.chosen.size })}</button>
         {/if}
       </div>
-      {#if error}<div class="err small">{error}</div>{/if}
+      {#if opt.error}<div class="err small">{opt.error}</div>{/if}
     </div>
 
-    {#if result}
+    {#if opt.result}
       <div class="results">
         <div class="ghead">
           <span>{m.opt_result()}</span>
-          <span class="dim">{m.opt_result_summary({ count: result.proposals.length, seconds: Math.round(result.ms / 100) / 10 })}</span>
-          <button class="btn sm primary" onclick={applyAll} disabled={build.busy > 0 || result.proposals.every((p) => applied.has(p.slot))}>{m.opt_apply_all()}</button>
+          <span class="dim">{m.opt_result_summary({ count: opt.result.proposals.length, seconds: Math.round(opt.result.ms / 100) / 10 })}</span>
+          <button class="btn sm primary" onclick={opt.applyAll} disabled={build.busy > 0 || opt.result.proposals.every((p) => opt.applied.has(p.slot))}>{m.opt_apply_all()}</button>
         </div>
         <table class="before">
           <thead><tr><th></th><th class="num">{m.opt_col_now()}</th><th class="num">{m.opt_col_proposed()}</th><th class="num">{m.opt_col_change()}</th></tr></thead>
           <tbody>
             {#each HEADLINE as h}
-              {#if result.before[h.key] !== undefined || result.after[h.key] !== undefined}
+              {#if opt.result.before[h.key] !== undefined || opt.result.after[h.key] !== undefined}
                 <tr>
                   <td>{h.label}</td>
-                  <td class="num mono">{fmt(result.before[h.key], h.pct)}</td>
-                  <td class="num mono">{fmt(result.after[h.key], h.pct)}</td>
-                  <td class="num mono {deltaClass(result.delta[h.key])}">{fmtDelta(result.delta[h.key], h.pct)}</td>
+                  <td class="num mono">{fmt(opt.result.before[h.key], h.pct)}</td>
+                  <td class="num mono">{fmt(opt.result.after[h.key], h.pct)}</td>
+                  <td class="num mono {deltaClass(opt.result.delta[h.key])}">{fmtDelta(opt.result.delta[h.key], h.pct)}</td>
                 </tr>
               {/if}
             {/each}
           </tbody>
         </table>
-        {#each result.proposals as p (p.slot)}
-          <div class="prop" class:done={applied.has(p.slot)}>
+        {#each opt.result.proposals as p (p.slot)}
+          <div class="prop" class:done={opt.applied.has(p.slot)}>
             <div class="phead">
               <span class="pslot">{p.slot}</span>
               <span class="pbase">{p.base}</span>
               {#if p.replaces}<span class="dim small">{m.opt_replaces({ item: stripPobText(p.replaces) })}</span>{/if}
-              <button class="btn sm" onclick={() => apply(p)} disabled={build.busy > 0 || applied.has(p.slot)}>{applied.has(p.slot) ? m.opt_applied() : m.opt_apply()}</button>
+              <span class="pacts">
+                <button class="btn sm ghost" onclick={() => (buyFor = p)} title={m.opt_trade_title()}>{m.opt_trade()}</button>
+                <button class="btn sm" onclick={() => opt.apply(p)} disabled={build.busy > 0 || opt.applied.has(p.slot)}>{opt.applied.has(p.slot) ? m.opt_applied() : m.opt_apply()}</button>
+              </span>
             </div>
             <div class="mods mono">
               {#each p.mods as mod}<div>{mod}</div>{/each}
@@ -416,7 +257,7 @@
             </div>
           </div>
         {/each}
-        {#each result.skipped as s}
+        {#each opt.result.skipped as s}
           <div class="dim small pad">{s.slot}: {s.reason}</div>
         {/each}
       </div>
@@ -427,28 +268,28 @@
       </div>
       <div class="controls">
         <div class="ctl run">
-          <button class="btn sm primary" onclick={findClusters} disabled={clusterRunning || running || !build.loaded} title={m.opt_cluster_run_title()}>{clusterRunning ? m.opt_cluster_running() : m.opt_cluster_run()}</button>
+          <button class="btn sm primary" onclick={opt.findClusters} disabled={opt.clusterRunning || opt.running || !build.loaded} title={m.opt_cluster_run_title()}>{opt.clusterRunning ? m.opt_cluster_running() : m.opt_cluster_run()}</button>
           <span class="dim small">{m.opt_cluster_hint()}</span>
         </div>
-        {#if clusterError}<div class="err small">{clusterError}</div>{/if}
+        {#if opt.clusterError}<div class="err small">{opt.clusterError}</div>{/if}
       </div>
-      {#if clusters}
+      {#if opt.clusters}
         <div class="results">
           <div class="ghead">
             <span>{m.opt_result()}</span>
-            <span class="dim">{m.opt_cluster_result({ count: clusters.suggestions.length, seconds: Math.round(clusters.ms / 100) / 10 })}</span>
-            {#if clusterStale}<span class="warn">{m.opt_cluster_stale()}</span>{/if}
+            <span class="dim">{m.opt_cluster_result({ count: opt.clusters.suggestions.length, seconds: Math.round(opt.clusters.ms / 100) / 10 })}</span>
+            {#if opt.clusterStale}<span class="warn">{m.opt_cluster_stale()}</span>{/if}
           </div>
-          {#if clusters.suggestions.length === 0}
-            <div class="dim small pad">{clusters.sockets.length === 0 ? m.opt_cluster_no_sockets() : m.opt_cluster_none()}</div>
+          {#if opt.clusters.suggestions.length === 0}
+            <div class="dim small pad">{opt.clusters.sockets.length === 0 ? m.opt_cluster_no_sockets() : m.opt_cluster_none()}</div>
           {/if}
-          {#each clusters.suggestions as s, i (i)}
+          {#each opt.clusters.suggestions as s, i (i)}
             <div class="prop">
               <div class="phead">
                 <span class="pslot">{s.base}</span>
                 <span class="pbase">{s.enchant}</span>
                 <span class="dim small">{s.slot} · <span class="mono">{s.points}</span> {s.points === 1 ? m.opt_point_one() : m.opt_point_many()}{s.socketAllocated ? "" : ` ${m.opt_cluster_path()}`}</span>
-                <button class="btn sm" onclick={() => applyCluster(s)} disabled={build.busy > 0 || clusterStale}>{m.opt_apply()}</button>
+                <button class="btn sm" onclick={() => opt.applyCluster(s)} disabled={build.busy > 0 || opt.clusterStale}>{m.opt_apply()}</button>
               </div>
               <div class="mods mono">
                 {#each s.enchantText as line}<div class="dim">{line}</div>{/each}
@@ -476,19 +317,19 @@
         <div class="seg" role="radiogroup">
           {#each TREE_STATS as [id, label]}
             <button
-              class:on={treeStat === id}
+              class:on={opt.treeStat === id}
               onclick={() => {
-                treeStatChosen = true;
-                treeStat = id;
+                opt.treeStatChosen = true;
+                opt.treeStat = id;
               }}
-              disabled={treeRunning || planRunning}>{label}</button
+              disabled={opt.treeRunning || opt.planRunning}>{label}</button
             >
           {/each}
         </div>
       </div>
       <div class="ctl run">
-        <button class="btn sm primary" onclick={scanTree} disabled={treeRunning || planRunning || !build.loaded}>{treeRunning ? m.opt_scanning() : m.opt_scan()}</button>
-        <label class="chk small"><input type="checkbox" bind:checked={notablesOnly} disabled={treeRunning} /> {m.opt_notables_only()}</label>
+        <button class="btn sm primary" onclick={opt.scanTree} disabled={opt.treeRunning || opt.planRunning || !build.loaded}>{opt.treeRunning ? m.opt_scanning() : m.opt_scan()}</button>
+        <label class="chk small"><input type="checkbox" bind:checked={opt.notablesOnly} disabled={opt.treeRunning} /> {m.opt_notables_only()}</label>
         {#if summary}
           <span class="dim small"><span class="mono">{Math.max(0, summary.pointsAvailableMax - summary.passivePointsSpent)}</span> {m.opt_points_unspent()}</span>
         {/if}
@@ -501,28 +342,28 @@
           min="1"
           max="120"
           placeholder={String(unspent || 10)}
-          bind:value={planBudget}
-          disabled={planRunning}
+          bind:value={opt.planBudget}
+          disabled={opt.planRunning}
           title={m.opt_plan_budget_title()}
         />
         <span class="dim small">{m.opt_plan_points()}</span>
-        <button class="btn sm" onclick={planTree} disabled={planRunning || treeRunning || !build.loaded}>{planRunning ? m.opt_planning() : m.opt_plan()}</button>
+        <button class="btn sm" onclick={() => opt.planTree(unspent)} disabled={opt.planRunning || opt.treeRunning || !build.loaded}>{opt.planRunning ? m.opt_planning() : m.opt_plan()}</button>
       </div>
-      {#if treeError}<div class="err small">{treeError}</div>{/if}
-      {#if planError}<div class="err small">{planError}</div>{/if}
+      {#if opt.treeError}<div class="err small">{opt.treeError}</div>{/if}
+      {#if opt.planError}<div class="err small">{opt.planError}</div>{/if}
     </div>
-    {#if plan}
+    {#if opt.plan}
       <div class="results">
         <div class="ghead">
-          <span>{m.opt_plan_header()} <span class="mono">{plan.spent}</span> {m.opt_plan_points_label()} <span class="mono up">+{fmtGain(plan.total)}</span> {plan.label}</span>
-          <span class="dim">{Math.round(plan.ms / 100) / 10}s</span>
-          {#if planStale}<span class="warn">{m.opt_plan_stale()}</span>{/if}
-          <button class="btn sm primary" onclick={applyPlan} disabled={build.busy > 0 || planStale || plan.picks.length === 0}>{m.opt_allocate_all()}</button>
+          <span>{m.opt_plan_header()} <span class="mono">{opt.plan.spent}</span> {m.opt_plan_points_label()} <span class="mono up">+{fmtGain(opt.plan.total)}</span> {opt.plan.label}</span>
+          <span class="dim">{Math.round(opt.plan.ms / 100) / 10}s</span>
+          {#if opt.planStale}<span class="warn">{m.opt_plan_stale()}</span>{/if}
+          <button class="btn sm primary" onclick={opt.applyPlan} disabled={build.busy > 0 || opt.planStale || opt.plan.picks.length === 0}>{m.opt_allocate_all()}</button>
         </div>
-        {#if plan.picks.length === 0}
-          <div class="dim small pad">{m.opt_plan_none({ budget: plan.budget, stat: plan.label })}</div>
+        {#if opt.plan.picks.length === 0}
+          <div class="dim small pad">{m.opt_plan_none({ budget: opt.plan.budget, stat: opt.plan.label })}</div>
         {/if}
-        {#each plan.picks as p, i (p.id)}
+        {#each opt.plan.picks as p, i (p.id)}
           <div class="node">
             <span class="nname" title={p.name ?? ""}><span class="dim mono">{i + 1}</span> {p.name}</span>
             <span class="ntype dim small">{p.type}</span>
@@ -533,32 +374,36 @@
         {/each}
       </div>
     {/if}
-    {#if treeRows}
+    {#if opt.treeRows}
       <div class="results">
-        <div class="ghead"><span>{m.opt_best_to_add({ stat: treeRows.stat })}</span><span class="dim">{Math.round(treeRows.ms / 100) / 10}s</span>{#if treeStale}<span class="warn">{m.opt_scan_stale()}</span>{/if}</div>
-        {#each treeRows.best as r (r.id)}
+        <div class="ghead"><span>{m.opt_best_to_add({ stat: opt.treeRows.stat })}</span><span class="dim">{Math.round(opt.treeRows.ms / 100) / 10}s</span>{#if opt.treeStale}<span class="warn">{m.opt_scan_stale()}</span>{/if}</div>
+        {#each opt.treeRows.best as r (r.id)}
           <div class="node">
             <span class="nname" title={r.name}>{r.name}</span>
             <span class="ntype dim small">{r.type}</span>
             <span class="ngain mono up">+{fmtGain(r.pathPower)}</span>
             <span class="nnote dim small">{m.opt_per_point()} <span class="mono">{r.pathDist}</span> {m.opt_to_reach()}</span>
-            <button class="btn sm" onclick={() => allocate(r.id)} disabled={build.busy > 0}>{m.opt_allocate()}</button>
+            <button class="btn sm" onclick={() => opt.allocate(r.id)} disabled={build.busy > 0}>{m.opt_allocate()}</button>
           </div>
         {/each}
         <div class="ghead"><span>{m.opt_weakest()}</span></div>
-        {#each treeRows.weakest as r (r.id)}
+        {#each opt.treeRows.weakest as r (r.id)}
           <div class="node">
             <span class="nname" title={r.name}>{r.name}</span>
             <span class="ntype dim small">{r.type}</span>
             <span class="ngain mono" class:down={r.power < 0}>{r.power < 0 ? fmtGain(r.power) : "0"}</span>
             <span class="nnote dim small">{m.opt_if_removed()} <span class="mono">{r.pathDist}</span> {m.opt_depend_on_it()}</span>
-            <button class="btn sm ghost" onclick={() => remove(r.id)} disabled={build.busy > 0}>{m.common_remove()}</button>
+            <button class="btn sm ghost" onclick={() => opt.remove(r.id)} disabled={build.busy > 0}>{m.common_remove()}</button>
           </div>
         {/each}
       </div>
     {/if}
   </section>
 </div>
+
+{#if buyFor}
+  <BuySimilarDialog target={{ raw: buyFor.raw, slot: buyFor.slot }} onclose={() => (buyFor = null)} />
+{/if}
 
 <style>
   .page {
@@ -826,6 +671,14 @@
   }
   .phead .btn {
     margin-left: auto;
+  }
+  .pacts {
+    display: flex;
+    gap: 6px;
+    margin-left: auto;
+  }
+  .phead .pacts .btn {
+    margin-left: 0;
   }
   .pslot {
     font-weight: 600;

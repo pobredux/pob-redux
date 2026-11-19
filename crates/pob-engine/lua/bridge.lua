@@ -9646,6 +9646,13 @@ itemUtil.BUY_SIMILAR_TYPE_SLOT = {
 }
 
 function itemUtil.buySimilarTarget(p)
+	if type(p.raw) == "string" then
+		local slotName = tostring(p.slot or "")
+		if not build.itemsTab.slots[slotName] then error("unknown slot " .. slotName, 0) end
+		local item = new("Item"):Item(p.raw)
+		if not item.base then error("could not read that item", 0) end
+		return item, slotName
+	end
 	if p.side == "mine" or p.side == "theirs" then
 		local b = p.side == "mine" and build or cmpUtil.compareEntry()
 		local slotName = tostring(p.slot or "")
@@ -9693,7 +9700,7 @@ function itemUtil.buySimilarRows(item)
 end
 
 --- The rows PoB's Buy Similar popup offers for an item.
---- params: { itemId } for this build's item, or { slot, side = "mine"|"theirs" } on the Compare tab
+--- params: { itemId } for this build's item, { slot, side = "mine"|"theirs" } on the Compare tab, or { raw, slot } for an item not in the build
 M.buy_similar_info = function(p)
 	ensureBuild()
 	local item, slotName = itemUtil.buySimilarTarget(p or {})

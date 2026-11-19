@@ -57,7 +57,7 @@
       listed = saved.listed && saved.listed >= 1 && saved.listed <= i.listed.length ? saved.listed : 1;
       defences = i.defences.map((d) => ({ checked: false, min: String(d.value), max: "" }));
       mods = i.mods.map((mod) => ({
-        checked: false,
+        checked: "raw" in target && mod.searchable,
         min: mod.ranged && typeof mod.value === "number" && mod.value !== 0 ? String(mod.value) : "",
         max: "",
       }));
