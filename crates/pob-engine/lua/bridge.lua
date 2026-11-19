@@ -7334,7 +7334,7 @@ function cmpUtil.socketKey(group)
 	return (group.slot or "") .. "|" .. table.concat(names, ",")
 end
 
--- poe.ninja hands over a whole PoB code rather than GGG's character data, so the re-import copies its parts across.
+-- A PoB code is a whole build rather than GGG's character data, so the re-import copies its parts across.
 M.merge_build = function(p)
 	ensureBuild()
 	p = p or {}

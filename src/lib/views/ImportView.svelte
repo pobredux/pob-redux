@@ -21,8 +21,6 @@
     resolveMaxroll,
     gggCharacters,
     gggCharacter,
-    ninjaCharacters,
-    ninjaCharacterCode,
     type ReimportOptions,
     saveGameBuildFiles,
     listGameBuilds,
@@ -541,7 +539,6 @@
     }
   }
 
-  type CharSource = "ggg" | "ninja";
   interface CharRow {
     key: string;
     name: string;
@@ -549,23 +546,15 @@
     level: number;
     league: string;
     when: number;
-    status: string;
-    minLevel: number | null;
-    leagueUrl: string;
-    updated: string | null;
   }
   const CHAR_KEY = "pob-redux:character-import";
-  let charAccount = $state("");
   let charRealm = $state("pc");
-  let charSource = $state<CharSource>("ggg");
-  let charList = $state<{ source: CharSource; game: string; account: string; rows: CharRow[] } | null>(null);
+  let charList = $state<{ game: string; account: string; rows: CharRow[] } | null>(null);
   let charLeague = $state("");
   let charBusy = $state<string | null>(null);
   try {
     const saved = JSON.parse(localStorage.getItem(CHAR_KEY) ?? "{}");
-    charAccount = saved.account ?? "";
     charRealm = saved.realm ?? "pc";
-    charSource = saved.source === "ninja" ? "ninja" : "ggg";
   } catch {}
 
   onMount(() => ggg.sync());
@@ -578,9 +567,7 @@
     }
   }
 
-  const shownList = $derived(
-    charList && charList.source === charSource && charList.game === game.current && (charSource === "ninja" || ggg.account !== null) ? charList : null,
-  );
+  const shownList = $derived(charList && charList.game === game.current && ggg.account !== null ? charList : null);
   const charLeagues = $derived.by(() => {
     const seen = new Map<string, number>();
     for (const c of shownList?.rows ?? []) seen.set(c.league, Math.max(seen.get(c.league) ?? 0, c.when));
@@ -590,80 +577,32 @@
     (shownList?.rows ?? []).filter((c) => !charLeague || c.league === charLeague).sort((a, b) => b.when - a.when || b.level - a.level),
   );
 
-  function ninjaReason(c: CharRow): string {
-    switch (c.status) {
-      case "belowCutoff":
-        return m.import_reason_below_cutoff({ level: c.minLevel ?? 80 });
-      case "leagueEnded":
-        return m.import_reason_league_ended();
-      case "inactive":
-        return m.import_reason_inactive();
-      case "notFetched":
-        return m.import_reason_not_fetched();
-      default:
-        return m.import_reason_no_build();
-    }
-  }
-
-  function shortDate(iso: string): string {
-    const d = new Date(iso);
-    return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
-  }
-
   async function findCharacters() {
-    const src = charSource;
-    if (charBusy || (src === "ninja" ? !charAccount.trim() : ggg.account === null)) return;
+    if (charBusy || ggg.account === null) return;
     charBusy = "list";
     const g = game.current;
     try {
-      if (src === "ninja") {
-        const r = await ninjaCharacters(charAccount);
-        charList = {
-          source: src,
-          game: g,
-          account: r.account,
-          rows: r.characters.map((c) => ({
-            key: `${c.league}/${c.name}`,
-            name: c.name,
-            className: c.className ?? "",
-            level: c.level,
-            league: c.league,
-            when: (c.updated ? Date.parse(c.updated) : 0) || 0,
-            status: c.status,
-            minLevel: c.minLevel,
-            leagueUrl: c.leagueUrl,
-            updated: c.updated,
-          })),
-        };
-        charAccount = r.account;
-      } else {
-        const characters = await gggCharacters(charRealm);
-        charList = {
-          source: src,
-          game: g,
-          account: ggg.account?.name ?? "",
-          rows: characters.map((c) => ({
-            key: `${c.league ?? ""}/${c.name}`,
-            name: c.name,
-            className: c.class,
-            level: c.level,
-            league: c.league ?? "",
-            when: c.current ? 1 : 0,
-            status: "listed",
-            minLevel: null,
-            leagueUrl: "",
-            updated: null,
-          })),
-        };
-      }
+      const characters = await gggCharacters(charRealm);
+      charList = {
+        game: g,
+        account: ggg.account?.name ?? "",
+        rows: characters.map((c) => ({
+          key: `${c.league ?? ""}/${c.name}`,
+          name: c.name,
+          className: c.class,
+          level: c.level,
+          league: c.league ?? "",
+          when: c.current ? 1 : 0,
+        })),
+      };
       charLeague = charLeagues[0] ?? "";
       try {
-        localStorage.setItem(CHAR_KEY, JSON.stringify({ account: charAccount, realm: charRealm, source: charSource }));
+        localStorage.setItem(CHAR_KEY, JSON.stringify({ realm: charRealm }));
       } catch {}
     } catch (e) {
       charList = null;
       build.error = String(e);
-      if (src === "ggg") await ggg.sync();
+      await ggg.sync();
     } finally {
       charBusy = null;
     }
@@ -675,21 +614,15 @@
     charBusy = c.key;
     try {
       const name = [list.account.replace(/[#-]\d+$/, ""), c.name].filter(Boolean).join(" - ");
-      if (list.source === "ninja") {
-        const code = await ninjaCharacterCode(list.account, c.name, c.leagueUrl);
-        const r = await build.loadCode(code, name);
-        if (r) build.say(c.updated ? m.import_imported_ninja({ name: c.name, date: shortDate(c.updated) }) : m.import_imported_ninja_plain({ name: c.name }));
-      } else {
-        const data = await gggCharacter(charRealm, c.name);
-        const r = await build.run(() => engine.importCharacter({ data, name }));
-        if (r) {
-          build.say(m.import_imported({ name: c.name }));
-          build.view = "overview";
-        }
+      const data = await gggCharacter(charRealm, c.name);
+      const r = await build.run(() => engine.importCharacter({ data, name }));
+      if (r) {
+        build.say(m.import_imported({ name: c.name }));
+        build.view = "overview";
       }
     } catch (e) {
       build.error = String(e);
-      if (list.source === "ggg") await ggg.sync();
+      await ggg.sync();
     } finally {
       charBusy = null;
     }
@@ -703,21 +636,15 @@
     if (!list || charBusy || !build.info) return;
     charBusy = c.key;
     try {
-      let r;
-      if (list.source === "ninja") {
-        const code = await ninjaCharacterCode(list.account, c.name, c.leagueUrl);
-        r = await build.run(() => engine.mergeBuild({ code, ...reimport }));
-      } else {
-        const data = await gggCharacter(charRealm, c.name);
-        r = await build.run(() => engine.importCharacterInto({ data, ...reimport }));
-      }
+      const data = await gggCharacter(charRealm, c.name);
+      const r = await build.run(() => engine.importCharacterInto({ data, ...reimport }));
       if (r) {
         updating = null;
         build.say(m.import_reimported({ name: c.name }));
       }
     } catch (e) {
       build.error = String(e);
-      if (list.source === "ggg") await ggg.sync();
+      await ggg.sync();
     } finally {
       charBusy = null;
     }
@@ -1334,25 +1261,9 @@
 
     <div class="panel-head">
       <span class="label">{m.import_character()}</span>
-      <select class="select sm" bind:value={charSource} title={m.import_source_title()}>
-        <option value="ggg">pathofexile.com</option>
-        <option value="ninja">poe.ninja</option>
-      </select>
     </div>
     <div class="block">
-      {#if charSource === "ninja"}
-        <div class="charform">
-          <input
-            class="input grow"
-            placeholder={m.import_account_placeholder()}
-            bind:value={charAccount}
-            onkeydown={(e) => e.key === "Enter" && findCharacters()}
-          />
-          <button class="btn" onclick={findCharacters} disabled={!charAccount.trim() || charBusy !== null}>
-            {charBusy === "list" ? m.import_finding() : m.import_find()}
-          </button>
-        </div>
-      {:else if ggg.account}
+      {#if ggg.account}
         <div class="charform">
           {#if !game.isPoe2}
             <select class="select" bind:value={charRealm} title={m.import_realm()}>
@@ -1385,27 +1296,23 @@
               {:else}
                 <span class="noart small-art"></span>
               {/if}
-              <span class="cname" title={c.updated ? m.import_char_title_saved({ name: c.name, league: c.league, date: shortDate(c.updated) }) : m.import_char_title({ name: c.name, league: c.league })}>
+              <span class="cname" title={m.import_char_title({ name: c.name, league: c.league })}>
                 {c.name}{#if !charLeague}<span class="dim small cleague">{c.league}</span>{/if}
               </span>
               <span class="dim small"><span style:color={classColour.get(c.className)}>{who?.asc ?? c.className}</span> <span class="num">{c.level}</span></span>
-              {#if c.status === "listed"}
-                {#if build.info}
-                  <button
-                    class="act"
-                    class:on={updating === c.key}
-                    aria-expanded={updating === c.key}
-                    title={m.import_update_open_title()}
-                    onclick={() => (updating = updating === c.key ? null : c.key)}
-                    disabled={charBusy !== null || build.busy > 0}>{m.import_update_open()}</button
-                  >
-                {/if}
-                <button class="act" onclick={() => importCharacter(c)} disabled={charBusy !== null || build.busy > 0}>
-                  {charBusy === c.key && updating !== c.key ? m.import_importing() : m.import_import_short()}
-                </button>
-              {:else}
-                <span class="dim small nobuild" title={m.import_no_ninja_build()}>{ninjaReason(c)}</span>
+              {#if build.info}
+                <button
+                  class="act"
+                  class:on={updating === c.key}
+                  aria-expanded={updating === c.key}
+                  title={m.import_update_open_title()}
+                  onclick={() => (updating = updating === c.key ? null : c.key)}
+                  disabled={charBusy !== null || build.busy > 0}>{m.import_update_open()}</button
+                >
               {/if}
+              <button class="act" onclick={() => importCharacter(c)} disabled={charBusy !== null || build.busy > 0}>
+                {charBusy === c.key && updating !== c.key ? m.import_importing() : m.import_import_short()}
+              </button>
             </div>
             {#if updating === c.key && build.info}
               <div class="reimport">
@@ -1431,9 +1338,8 @@
             {/if}
           {/each}
         </div>
-      {:else if charSource === "ninja"}
-        <div class="dim small">{m.import_ninja_blurb()}</div>
       {/if}
+      <div class="dim small">{m.import_char_others()}</div>
     </div>
 
     {#if plannerOpen}
@@ -2136,9 +2042,6 @@
     align-items: center;
     gap: 6px;
   }
-  .charform .grow {
-    min-width: 0;
-  }
   .charlist {
     display: flex;
     flex-direction: column;
@@ -2166,10 +2069,6 @@
   .noart.small-art {
     width: 18px;
     height: 18px;
-  }
-  .nobuild {
-    flex: none;
-    white-space: nowrap;
   }
   .cname {
     flex: 1;

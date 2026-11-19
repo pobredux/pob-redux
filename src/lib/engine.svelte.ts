@@ -430,28 +430,6 @@ export interface SavedBuildFile {
   snapshot: { xml: string; fileModified: number | null; unsaved: boolean };
 }
 
-export interface NinjaCharacter {
-  name: string;
-  className: string | null;
-  level: number;
-  league: string;
-  leagueUrl: string;
-  updated: string | null;
-  isCurrent: boolean;
-  /** "listed" when poe.ninja has the build; otherwise its reason: "belowCutoff", "leagueEnded", "inactive", "notFetched" or "unlisted". */
-  status: string;
-  minLevel: number | null;
-}
-
-/** `account` comes back as poe.ninja spells it. */
-export function ninjaCharacters(account: string): Promise<{ account: string; characters: NinjaCharacter[] }> {
-  return invoke<{ account: string; characters: NinjaCharacter[] }>("ninja_characters", { account });
-}
-
-export function ninjaCharacterCode(account: string, character: string, league: string): Promise<string> {
-  return invoke<string>("ninja_character_code", { account, character, league });
-}
-
 export interface MaxrollPobLink {
   name: string;
   /** The planner the link came from, or the guide text. */

@@ -17,7 +17,6 @@ mod mobalytics;
 mod maxroll;
 mod character;
 mod ggg;
-mod ninja;
 mod links;
 mod diagnostics;
 mod game;
@@ -583,16 +582,6 @@ async fn share_build_code(state: State<'_, AppState>, site: String, code: String
 #[tauri::command]
 async fn mobalytics_resolve(url: String) -> Result<mobalytics::Resolved, String> {
     mobalytics::resolve(&url).await
-}
-
-#[tauri::command]
-async fn ninja_characters(state: State<'_, AppState>, account: String) -> Result<ninja::CharacterList, String> {
-    ninja::list(state.game(), &account).await
-}
-
-#[tauri::command]
-async fn ninja_character_code(state: State<'_, AppState>, account: String, character: String, league: String) -> Result<String, String> {
-    ninja::build_code(state.game(), &account, &character, &league).await
 }
 
 /// Resolve a Maxroll build guide or planner to the PoB links it offers.
@@ -1354,8 +1343,6 @@ pub fn run() {
             ggg::ggg_characters,
             ggg::ggg_character,
             ggg::ggg_trade_request,
-            ninja_characters,
-            ninja_character_code,
             save_game_build_files,
             share_build_code,
             set_game_build_meta,
