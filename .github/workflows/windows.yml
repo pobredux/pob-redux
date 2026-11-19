@@ -120,6 +120,19 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: bun run tauri build --no-bundle
 
+      # The updater reads this marker; Tauri writes it while bundling, after signing, which would break the signature.
+      - name: Mark the app as an NSIS install
+        shell: bash
+        run: |
+          bun -e "
+            const file = 'target/release/pob-redux.exe';
+            const bytes = Buffer.from(await Bun.file(file).arrayBuffer());
+            const at = bytes.indexOf('__TAURI_BUNDLE_TYPE_VAR_UNK');
+            if (at < 0) throw new Error('bundle type marker not found in ' + file);
+            bytes.write('__TAURI_BUNDLE_TYPE_VAR_NSS', at);
+            await Bun.write(file, bytes);
+          "
+
       - name: Upload the unsigned app for SignPath
         if: env.POLICY != ''
         id: unsigned-app
@@ -153,7 +166,7 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: bun run tauri bundle --bundles nsis
+        run: bun run tauri bundle --bundles nsis --no-binary-patching
 
       - name: Name the installer as the release does
         shell: bash
@@ -195,16 +208,17 @@ jobs:
           INSTALLER: ${{ steps.version.outputs.installer }}
         run: cp "signed/installer/$(basename "$INSTALLER")" "$INSTALLER"
 
-      - name: Check both files carry a signature
+      - name: Check the installer and the app inside it carry intact signatures
         if: env.POLICY != ''
         shell: pwsh
         env:
           INSTALLER: ${{ steps.version.outputs.installer }}
         run: |
-          foreach ($f in 'target/release/pob-redux.exe', $env:INSTALLER) {
+          7z e $env:INSTALLER -oinside pob-redux.exe -r -y | Out-Null
+          foreach ($f in $env:INSTALLER, 'inside/pob-redux.exe') {
             $s = Get-AuthenticodeSignature $f
             Write-Output "$f`: $($s.Status) $($s.SignerCertificate.Subject)"
-            if (-not $s.SignerCertificate) { exit 1 }
+            if (-not $s.SignerCertificate -or $s.Status -eq 'HashMismatch') { exit 1 }
           }
 
       # Authenticode signing changes the installer, so the updater signature from the bundle step no longer matches.
