@@ -20,6 +20,7 @@ import {
 import { game } from "$lib/state/game.svelte";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { emit } from "@tauri-apps/api/event";
+import { IS_MAIN_WINDOW, WINDOW_LABEL } from "$lib/window";
 
 const AUTOSAVE_KEY = "pob-redux:autosave";
 
@@ -80,8 +81,8 @@ class BuildStore {
       return undefined;
     } finally {
       this.busy--;
-      // A popped-out assistant follows the count for its Undo warning, and refreshes its build summary.
-      if (opts.user !== false) emit("build:edited").catch(() => {});
+      // Every other window re-syncs; a popped-out assistant also follows the count for its Undo warning.
+      if (opts.user !== false) emit("build:edited", { from: WINDOW_LABEL }).catch(() => {});
     }
   }
 
@@ -182,7 +183,7 @@ class BuildStore {
 
   /** Re-pull everything derived from the engine's current build. */
   async sync() {
-    this.scheduleAutosave();
+    if (IS_MAIN_WINDOW) this.scheduleAutosave();
     const [info, sidebar, tree, skills, specs] = await Promise.all([
       engine.getBuild(),
       engine.getSidebar(),
@@ -196,7 +197,7 @@ class BuildStore {
     this.skills = skills;
     this.specs = specs.specs;
     this.rev = info.rev;
-    this.schedulePresync();
+    if (IS_MAIN_WINDOW) this.schedulePresync();
     if (this.classes.length === 0) {
       const list = await engine.listClasses();
       this.classes = list.classes;

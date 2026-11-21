@@ -29,6 +29,14 @@ All tabs exist in both games. Everything except Builds is disabled until a build
 Ctrl+1 to Ctrl+9 open Builds, Tree, Skills, Items, Calcs, Config, Notes, Party and Optimize.
 Overview and Compare have no shortcut. Ctrl+Tab cycles tabs.
 
+Any tab except Builds can move to its own window: drag it out of the title bar and drop it, or
+right-click it and choose **Open in new window**. The window shows only that tab, without the
+sidebar, and stays in step with every other window. Its tab in the main window shows a small arrow;
+clicking it brings the window forward, and right-click offers **Show window** and **Dock in the main
+window**. The window's dock button (or closing it) puts the tab back. Torn-off windows reopen where
+they were on the next start. In a torn-off window Ctrl+S saves and Ctrl+Z and Ctrl+Y undo and redo
+the tree.
+
 ### Builds
 
 - Left: the build list. "Filter builds…" (Ctrl+F), sort, **Open file…** (.xml, or a PoE2 `.build`

@@ -20,6 +20,7 @@
   } from "$lib/engine.svelte";
   import { build } from "$lib/state/build.svelte";
   import { ui } from "$lib/state/ui.svelte";
+  import { goTo } from "$lib/state/tabs.svelte";
   import { itemWindow } from "$lib/state/item-window.svelte";
   import { createScrollHold } from "$lib/scroll-hold";
   import { removeTemplate, saveTemplate, SHARED_ITEMS_CHANGED } from "$lib/shared-items";
@@ -583,8 +584,7 @@
 
   function openSquireSkill() {
     if (squire?.group == null) return;
-    ui.jump = { view: "skills", group: squire.group };
-    build.view = "skills";
+    goTo("skills", { view: "skills", group: squire.group });
   }
 
   function setSlotActive(slot: string, active: boolean) {

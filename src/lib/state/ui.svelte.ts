@@ -50,6 +50,31 @@ class UiStore {
   private systemContrast = window.matchMedia("(prefers-contrast: more)");
 
   constructor() {
+    this.load();
+    this.applyTheme();
+    this.applyCursor();
+    // Another window saved its settings: theme, scale and the rest follow in this one.
+    window.addEventListener("storage", (e) => {
+      if (e.key !== KEY) return;
+      this.load();
+      this.applyTheme();
+      this.applyCursor();
+      void this.applyScale();
+    });
+    this.systemLight.addEventListener("change", () => this.applyTheme());
+    this.systemContrast.addEventListener("change", () => this.applyContrast());
+    void this.applyScale();
+    let timer = 0;
+    const refit = () => {
+      clearTimeout(timer);
+      timer = window.setTimeout(() => void this.applyScale(), 120);
+    };
+    const win = getCurrentWindow();
+    win.onResized(refit).catch(() => {});
+    win.onScaleChanged(refit).catch(() => {});
+  }
+
+  private load() {
     try {
       const saved = JSON.parse(localStorage.getItem(KEY) ?? "{}");
       if (typeof saved.sidebarCollapsed === "boolean") this.sidebarCollapsed = saved.sidebarCollapsed;
@@ -69,19 +94,6 @@ class UiStore {
       if (typeof saved.startEmpty === "boolean") this.startEmpty = saved.startEmpty;
       if (typeof saved.cursor === "string" && CURSORS.includes(saved.cursor)) this.cursor = saved.cursor;
     } catch {}
-    this.applyTheme();
-    this.applyCursor();
-    this.systemLight.addEventListener("change", () => this.applyTheme());
-    this.systemContrast.addEventListener("change", () => this.applyContrast());
-    void this.applyScale();
-    let timer = 0;
-    const refit = () => {
-      clearTimeout(timer);
-      timer = window.setTimeout(() => void this.applyScale(), 120);
-    };
-    const win = getCurrentWindow();
-    win.onResized(refit).catch(() => {});
-    win.onScaleChanged(refit).catch(() => {});
   }
 
   get scaleLimited() {

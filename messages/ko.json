@@ -1354,6 +1354,13 @@
   "tree_click_to_remove": "클릭하여 제거",
   "tree_keywords_hint": "Alt를 누르고 있으면 키워드 설명을 볼 수 있습니다",
   "tree_keywords_pin_hint": "키워드를 클릭하면 고정됩니다",
+  "tab_window_open": "새 창에서 열기",
+  "tab_window_show": "창 보기",
+  "tab_window_dock_menu": "메인 창으로 되돌리기",
+  "tab_window_dock_title": "탭을 메인 창으로 되돌립니다",
+  "tab_window_torn_title": "{tab}은(는) 별도 창에 있습니다. 클릭하면 표시됩니다.",
+  "tab_window_menu": "탭",
+  "tab_window_loading": "불러오는 중…",
   "tree_right_click_switch": " · 우클릭하여 전환",
   "tree_right_click_effect": " · 우클릭하여 효과 변경",
   "tree_point_cost": [

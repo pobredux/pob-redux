@@ -6,7 +6,8 @@
   import { sortDrag } from "$lib/sortable";
   import { engine, type BuildSummary, type ItemInfo, type SanityCheck, type SlotInfo, type Tooltip } from "$lib/engine.svelte";
   import { build, type ViewId } from "$lib/state/build.svelte";
-  import { ui, type Jump } from "$lib/state/ui.svelte";
+  import { type Jump } from "$lib/state/ui.svelte";
+  import { goTo } from "$lib/state/tabs.svelte";
   import { game } from "$lib/state/game.svelte";
   import { loadTree } from "$lib/tree/load";
   import { ascendancyPlate, portraitPins, type TNode, type TreeModel } from "$lib/tree/model";
@@ -80,8 +81,7 @@
   });
 
   function go(view: ViewId, jump?: Jump) {
-    if (jump) ui.jump = jump;
-    build.view = view;
+    goTo(view, jump ?? null);
   }
 
   const ORDER: Record<string, number> = { active: 0, trigger: 1, meta: 2, persistent: 3, granted: 4 };

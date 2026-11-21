@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { emit } from "@tauri-apps/api/event";
 import { build } from "$lib/state/build.svelte";
 import { app } from "$lib/state/app.svelte";
 import { confirm } from "$lib/state/confirm.svelte";
@@ -65,6 +66,8 @@ class GameStore {
       this.apply(await invoke<GameStatus>("set_game", { game: g }));
       build.reset();
       await app.boot();
+      // Torn-off tabs reload for the other game once its engine is up.
+      void emit("game:changed").catch(() => {});
       return true;
     } catch (e) {
       this.error = String(e);

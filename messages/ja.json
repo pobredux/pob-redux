@@ -1354,6 +1354,13 @@
   "tree_click_to_remove": "クリックで解除",
   "tree_keywords_hint": "Altを押し続けるとキーワードを読めます",
   "tree_keywords_pin_hint": "キーワードをクリックすると固定できます",
+  "tab_window_open": "新しいウィンドウで開く",
+  "tab_window_show": "ウィンドウを表示",
+  "tab_window_dock_menu": "メインウィンドウに戻す",
+  "tab_window_dock_title": "タブをメインウィンドウに戻す",
+  "tab_window_torn_title": "{tab} は別ウィンドウで開いています。クリックで表示します。",
+  "tab_window_menu": "タブ",
+  "tab_window_loading": "読み込み中…",
   "tree_right_click_switch": " · 右クリックで切り替え",
   "tree_right_click_effect": " · 右クリックで効果を変更",
   "tree_point_cost": [

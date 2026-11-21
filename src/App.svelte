@@ -4,18 +4,8 @@
   import Sidebar from "$lib/components/Sidebar.svelte";
   import StatusBar from "$lib/components/StatusBar.svelte";
   import DownloadToast from "$lib/components/DownloadToast.svelte";
-  import TreeView from "$lib/views/TreeView.svelte";
-  import OverviewView from "$lib/views/OverviewView.svelte";
   import CharacterDialog from "$lib/components/CharacterDialog.svelte";
-  import SkillsView from "$lib/views/SkillsView.svelte";
-  import ItemsView from "$lib/views/ItemsView.svelte";
-  import CalcsView from "$lib/views/CalcsView.svelte";
-  import ConfigView from "$lib/views/ConfigView.svelte";
-  import NotesView from "$lib/views/NotesView.svelte";
-  import PartyView from "$lib/views/PartyView.svelte";
-  import OptimiseView from "$lib/views/OptimiseView.svelte";
-  import CompareView from "$lib/views/CompareView.svelte";
-  import ImportView from "$lib/views/ImportView.svelte";
+  import ViewHost from "$lib/components/ViewHost.svelte";
   import SettingsView from "$lib/views/SettingsView.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import Tooltip from "$lib/components/Tooltip.svelte";
@@ -33,6 +23,7 @@
   import { game, GAMES, GAME_LABEL } from "$lib/state/game.svelte";
   import { ui } from "$lib/state/ui.svelte";
   import { itemWindow } from "$lib/state/item-window.svelte";
+  import { followOtherWindows, tabs } from "$lib/state/tabs.svelte";
   import { appOptions } from "$lib/state/options.svelte";
   import { m } from "$lib/paraglide/messages";
 
@@ -57,6 +48,13 @@
     });
   });
 
+  let restored = false;
+  $effect(() => {
+    if (!app.ready || restored) return;
+    restored = true;
+    untrack(() => tabs.restore());
+  });
+
   onMount(() => {
     // Single-letter keys belong to the tree view.
     const onKey = (e: KeyboardEvent) => {
@@ -73,10 +71,13 @@
     window.addEventListener("keydown", onKey);
     const offTooltips = tooltip.install();
     itemWindow.init();
+    tabs.init();
+    const following = followOtherWindows();
     void app.boot();
     return () => {
       window.removeEventListener("keydown", onKey);
       offTooltips();
+      void following.then((off) => off());
     };
   });
 </script>
@@ -109,30 +110,8 @@
             </div>
           </div>
         </div>
-      {:else if build.view === "overview"}
-        <OverviewView />
-      {:else if build.view === "tree"}
-        <TreeView />
-      {:else if build.view === "skills"}
-        <SkillsView />
-      {:else if build.view === "items"}
-        {#key build.info?.generation}
-          <ItemsView />
-        {/key}
-      {:else if build.view === "calcs"}
-        <CalcsView />
-      {:else if build.view === "config"}
-        <ConfigView />
-      {:else if build.view === "notes"}
-        <NotesView />
-      {:else if build.view === "party"}
-        <PartyView />
-      {:else if build.view === "optimise"}
-        <OptimiseView />
-      {:else if build.view === "compare"}
-        <CompareView />
       {:else}
-        <ImportView {paths} />
+        <ViewHost view={build.view} {paths} />
       {/if}
     </main>
     {#if chat.open && !chat.poppedOut && !appOptions.open && status?.state === "ready"}<ChatPanel />{/if}

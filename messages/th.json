@@ -1354,6 +1354,13 @@
   "tree_click_to_remove": "คลิกเพื่อถอดออก",
   "tree_keywords_hint": "กด Alt ค้างไว้เพื่ออ่านคำสำคัญ",
   "tree_keywords_pin_hint": "คลิกคำสำคัญเพื่อปักหมุด",
+  "tab_window_open": "เปิดในหน้าต่างใหม่",
+  "tab_window_show": "แสดงหน้าต่าง",
+  "tab_window_dock_menu": "นำกลับไปที่หน้าต่างหลัก",
+  "tab_window_dock_title": "นำแท็บกลับไปที่หน้าต่างหลัก",
+  "tab_window_torn_title": "{tab} อยู่ในหน้าต่างแยก คลิกเพื่อแสดง",
+  "tab_window_menu": "แท็บ",
+  "tab_window_loading": "กำลังโหลด…",
   "tree_right_click_switch": " · คลิกขวาเพื่อสลับ",
   "tree_right_click_effect": " · คลิกขวาเพื่อเปลี่ยนผล",
   "tree_point_cost": [

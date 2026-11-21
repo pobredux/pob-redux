@@ -4,6 +4,7 @@
   import { engine, listBuilds, type BuildEntry, type ConfigOption, type ItemInfo } from "$lib/engine.svelte";
   import { build, type ViewId } from "$lib/state/build.svelte";
   import { ui, type Jump } from "$lib/state/ui.svelte";
+  import { goTo as show } from "$lib/state/tabs.svelte";
   import { chat } from "$lib/state/chat.svelte";
   import { appOptions } from "$lib/state/options.svelte";
   import { game, GAMES, GAME_LABEL } from "$lib/state/game.svelte";
@@ -38,9 +39,7 @@
   }
 
   function goTo(view: ViewId, jump: Jump | null = null) {
-    appOptions.open = false;
-    ui.jump = jump;
-    build.view = view;
+    show(view, jump);
   }
 
   $effect(() => {

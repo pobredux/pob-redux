@@ -5,8 +5,11 @@
   import { ui } from "$lib/state/ui.svelte";
   import { appOptions } from "$lib/state/options.svelte";
   import { game, GAMES, GAME_SHORT, GAME_LABEL, type Game } from "$lib/state/game.svelte";
-  import Icon, { type IconName } from "$lib/components/Icon.svelte";
+  import Icon from "$lib/components/Icon.svelte";
   import Kbd from "$lib/components/Kbd.svelte";
+  import ContextMenu from "$lib/components/ContextMenu.svelte";
+  import type { MenuItem } from "$lib/components/MoreMenu.svelte";
+  import { goTo, tabList, tabs as tabWindows, tearable } from "$lib/state/tabs.svelte";
   import { isTextField } from "$lib/keys";
   import { m } from "$lib/paraglide/messages";
 
@@ -22,8 +25,51 @@
   const compact = $derived(ui.tabIcons || labelsWidth > room);
 
   function openView(id: ViewId) {
-    appOptions.open = false;
-    build.view = id;
+    goTo(id);
+  }
+
+  let menu = $state<{ x: number; y: number; view: ViewId } | null>(null);
+  const menuItems = $derived.by<MenuItem[]>(() => {
+    const at = menu;
+    if (!at) return [];
+    return tabWindows.isTorn(at.view)
+      ? [
+          { label: m.tab_window_show(), onclick: () => tabWindows.show(at.view) },
+          { label: m.tab_window_dock_menu(), onclick: () => tabWindows.dock(at.view) },
+        ]
+      : [{ label: m.tab_window_open(), onclick: () => void tabWindows.tearOff(at.view) }];
+  });
+
+  function openMenu(e: MouseEvent, view: ViewId) {
+    e.preventDefault();
+    if (build.loaded && tearable(view)) menu = { x: e.clientX, y: e.clientY, view };
+  }
+
+  // A tab dragged out of the window and dropped opens in its own window there.
+  let pull: { view: ViewId; pointer: number } | null = null;
+  let pulling = $state<ViewId | null>(null);
+  let tore = false;
+
+  const outside = (e: PointerEvent) => e.clientX < 0 || e.clientY < 0 || e.clientX > window.innerWidth || e.clientY > window.innerHeight;
+
+  function pullStart(e: PointerEvent, view: ViewId) {
+    tore = false;
+    if (e.button !== 0 || !build.loaded || !tearable(view) || tabWindows.isTorn(view)) return;
+    pull = { view, pointer: e.pointerId };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function pullMove(e: PointerEvent) {
+    if (pull?.pointer === e.pointerId) pulling = outside(e) ? pull.view : null;
+  }
+
+  function pullEnd(e: PointerEvent) {
+    const p = pull;
+    pull = null;
+    pulling = null;
+    if (p?.pointer !== e.pointerId || e.type === "pointercancel" || !outside(e)) return;
+    tore = true;
+    void tabWindows.tearOff(p.view, true);
   }
 
   // Declining the unsaved-changes prompt leaves the game as it was, which the
@@ -39,21 +85,10 @@
     tabsEl?.querySelector(".tab.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
   });
 
-  const tabs = $derived<{ id: ViewId; label: string; key: string; icon: IconName }[]>([
-    { id: "import", label: m.view_builds(), key: "1", icon: "folder" },
-    { id: "overview", label: m.view_overview(), key: "", icon: "squares-four" },
-    { id: "tree", label: m.view_tree(), key: "2", icon: "graph" },
-    { id: "skills", label: m.view_skills(), key: "3", icon: "diamonds-four" },
-    { id: "items", label: m.view_items(), key: "4", icon: "sword" },
-    { id: "calcs", label: m.view_calcs(), key: "5", icon: "calculator" },
-    { id: "config", label: m.view_config(), key: "6", icon: "sliders-horizontal" },
-    { id: "notes", label: m.view_notes(), key: "7", icon: "note-pencil" },
-    { id: "party", label: m.view_party(), key: "8", icon: "users-three" },
-    { id: "optimise", label: m.view_optimise(), key: "9", icon: "chart-line-up" },
-    { id: "compare", label: m.view_compare(), key: "", icon: "scales" },
-  ]);
+  const tabs = $derived(tabList());
 
-  function tabTitle(t: { label: string; key: string }) {
+  function tabTitle(t: { id: ViewId; label: string; key: string }) {
+    if (tabWindows.isTorn(t.id)) return m.tab_window_torn_title({ tab: t.label });
     const shortcut = t.key ? `Ctrl+${t.key}` : "";
     if (!compact) return shortcut || undefined;
     return shortcut ? `${t.label} (${shortcut})` : t.label;
@@ -70,7 +105,7 @@
     const un = win.onResized(async () => (maximized = await win.isMaximized()));
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey && !e.altKey && e.key === "Tab") {
-        const open = tabs.filter((t) => build.loaded || t.id === "import");
+        const open = tabs.filter((t) => (build.loaded || t.id === "import") && !tabWindows.isTorn(t.id));
         const at = Math.max(0, open.findIndex((t) => t.id === build.view));
         openView(open[(at + (e.shiftKey ? -1 : 1) + open.length) % open.length].id);
         e.preventDefault();
@@ -182,13 +217,24 @@
         role="tab"
         class="tab"
         class:active={build.view === t.id && !appOptions.open}
+        class:torn={tabWindows.isTorn(t.id)}
+        class:pulling={pulling === t.id}
         aria-selected={build.view === t.id && !appOptions.open}
         disabled={!build.loaded && t.id !== "import"}
-        onclick={() => openView(t.id)}
+        onclick={() => {
+          if (tore) tore = false;
+          else openView(t.id);
+        }}
+        oncontextmenu={(e) => openMenu(e, t.id)}
+        onpointerdown={(e) => pullStart(e, t.id)}
+        onpointermove={pullMove}
+        onpointerup={pullEnd}
+        onpointercancel={pullEnd}
         title={tabTitle(t)}
         aria-label={t.label}
       >
         {#if compact}<Icon name={t.icon} size={16} />{:else}{t.label}{/if}
+        {#if tabWindows.isTorn(t.id)}<span class="out"><Icon name="arrow-square-out" size={11} /></span>{/if}
       </button>
     {/each}
   </div>
@@ -238,6 +284,10 @@
     </button>
   </div>
 </header>
+
+{#if menu}
+  <ContextMenu x={menu.x} y={menu.y} label={m.tab_window_menu()} items={menuItems} onclose={() => (menu = null)} />
+{/if}
 
 <style>
   .titlebar {
@@ -394,6 +444,23 @@
     top: 0;
     height: 1px;
     background: var(--accent);
+  }
+  .tab.torn {
+    color: var(--fg-3);
+  }
+  .tab.pulling {
+    opacity: 0.5;
+  }
+  .out {
+    display: inline-grid;
+    margin-left: 5px;
+    vertical-align: -1px;
+  }
+  .tabs.compact .out {
+    position: absolute;
+    top: 5px;
+    right: 4px;
+    margin: 0;
   }
   .tab:disabled {
     color: var(--fg-4);

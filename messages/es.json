@@ -1354,6 +1354,13 @@
   "tree_click_to_remove": "clic para quitar",
   "tree_keywords_hint": "Mantén Alt para leer las palabras clave",
   "tree_keywords_pin_hint": "Haz clic en una palabra clave para fijarla",
+  "tab_window_open": "Abrir en una ventana nueva",
+  "tab_window_show": "Mostrar ventana",
+  "tab_window_dock_menu": "Acoplar en la ventana principal",
+  "tab_window_dock_title": "Devolver la pestaña a la ventana principal",
+  "tab_window_torn_title": "{tab} está en su propia ventana. Haz clic para mostrarla.",
+  "tab_window_menu": "Pestaña",
+  "tab_window_loading": "Cargando…",
   "tree_right_click_switch": " · clic derecho para cambiar",
   "tree_right_click_effect": " · clic derecho para cambiar efecto",
   "tree_point_cost": [
