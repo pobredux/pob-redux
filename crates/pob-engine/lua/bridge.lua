@@ -4806,7 +4806,10 @@ function itemUtil.resolveItem(p)
 		if not item.base then error("unrecognised item text", 0) end
 		return item, true
 	end
-	error("params.itemId, params.db+name or params.raw is required", 0)
+	if type(p.craft) == "table" then
+		return itemUtil.newCraftedItem(p.craft), true
+	end
+	error("params.itemId, params.db+name, params.raw or params.craft is required", 0)
 end
 
 -- PoB's full item tooltip, including the "Equipping this item in X will give
@@ -5191,12 +5194,16 @@ function itemUtil.equipFirstValid(item, slotName)
 	return nil
 end
 
+function itemUtil.newCraftedItem(p)
+	local item = itemUtil.makeCraftedItem(itemUtil.findBase(p.type, p.baseName), p.rarity, p.title)
+	if item.clusterJewel then itemUtil.craftClusterJewel(item) end
+	return item
+end
+
 M.craft_item = function(p)
 	ensureBuild()
 	if not p or not p.type or not p.baseName then error("params.type and params.baseName are required", 0) end
-	local entry = itemUtil.findBase(p.type, p.baseName)
-	local item = itemUtil.makeCraftedItem(entry, p.rarity, p.title)
-	if item.clusterJewel then itemUtil.craftClusterJewel(item) end
+	local item = itemUtil.newCraftedItem(p)
 	build.itemsTab:AddItem(item, true)
 	if p.equip or p.slotName then itemUtil.equipFirstValid(item, p.slotName) end
 	build.itemsTab:PopulateSlots()

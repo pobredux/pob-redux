@@ -92,6 +92,8 @@ the selected group: label, Full DPS and Enabled checkboxes, and the gem table. T
 
 - Toolbar: item set dropdown, weapon set I or II, **Craft item…**, **New item from text**, **Paste
   item** (Ctrl+V), **Trader…**, **Stat differences** (Ctrl+D).
+- Craft item… picks rarity, type and base. Hovering a base in the Base list shows its tooltip and
+  what equipping it would change.
 - Column 1, Equipment: every slot with a picker; the magnifier is **Buy similar**; right-click a slot
   for Add unique, Add template, Craft item… and Remove from slot. Sub-tabs Squire (PoE2) and
   Wickerman appear only when the build uses them.

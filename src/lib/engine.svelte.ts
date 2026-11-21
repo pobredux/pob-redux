@@ -1908,7 +1908,14 @@ export const engine = {
   itemDbList: (opts: { db: ItemDbName; query?: string; type?: string; slot?: string; limit?: number; offset?: number }) =>
     call<{ items: ItemDbRow[]; total: number; offset: number; types: { type: string; count: number }[] }>("item_db_list", opts),
   statDifferences: (show?: boolean) => call<{ show: boolean }>("stat_differences", show === undefined ? undefined : { show }),
-  itemTooltip: (opts: { itemId?: number; db?: ItemDbName; name?: string; raw?: string; slotName?: string | false }) =>
+  itemTooltip: (opts: {
+    itemId?: number;
+    db?: ItemDbName;
+    name?: string;
+    raw?: string;
+    craft?: { type: string; baseName: string; rarity: string; title?: string };
+    slotName?: string | false;
+  }) =>
     call<Tooltip & { rarity: string | null }>("item_tooltip", opts),
   prepareItemPreview: (raw: string, generation: number, normalise: boolean) =>
     call<{ raw?: string }>("item_prepare_preview", { raw, generation, normalise }),

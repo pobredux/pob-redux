@@ -575,6 +575,12 @@
     showTip(e, `i${id}`, () => engine.itemTooltip({ itemId: id }));
   }
 
+  function craftTip(anchor: HTMLElement, baseName: string) {
+    const craft = { type: craftType, baseName, rarity: craftRarity, title: craftTitle };
+    const slotName = craftSlot ?? undefined;
+    showTip(anchor, `c${craftType}:${baseName}:${craftRarity}:${craftTitle}:${slotName ?? ""}`, () => engine.itemTooltip({ craft, slotName }));
+  }
+
   function openSquireSkill() {
     if (squire?.group == null) return;
     ui.jump = { view: "skills", group: squire.group };
@@ -1198,6 +1204,7 @@
             options={(craftData?.bases[craftType] ?? []).map((b) => ({ value: b.name, label: b.subType ? `${b.name} (${b.subType})` : b.name }))}
             label={m.items_base()}
             onchange={(b) => (craftBase = b)}
+            onhover={(b, anchor) => (anchor && b ? craftTip(anchor, b) : hideTip())}
           />
         </div>
         <div class="crow">
