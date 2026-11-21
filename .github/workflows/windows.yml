@@ -87,6 +87,8 @@ jobs:
         with:
           workspaces: ". -> target"
           shared-key: pob-redux-${{ runner.arch }}
+          # A new runner image can move MSVC, and a cached CMake config keeps the old compiler path.
+          env-vars: ImageVersion
           cache-on-failure: true
 
       - run: bun install --frozen-lockfile
