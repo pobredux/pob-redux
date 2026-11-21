@@ -18,6 +18,7 @@
 
   const groups = $derived(build.skills?.socketGroups ?? []);
   const skillSets = $derived(build.skills?.skillSets ?? []);
+  const socketSlots = $derived(build.skills?.socketSlots ?? null);
   let selectedIdx = $state(1);
   const sel = $derived<SocketGroup | undefined>(groups.find((g) => g.index === selectedIdx) ?? groups[0]);
   $effect(() => {
@@ -87,6 +88,27 @@
       })
       .catch(() => {
         if (live) worth = new Map();
+      });
+    return () => (live = false);
+  });
+
+  let imbuedRows = $state<GemSearchRow[]>([]);
+  $effect(() => {
+    const g = sel?.index;
+    const editable = sel?.imbued?.editable ?? false;
+    build.rev;
+    if (g == null || !editable) {
+      imbuedRows = [];
+      return;
+    }
+    let live = true;
+    engine
+      .gemSearch({ groupIndex: g, imbued: true, limit: 1000 })
+      .then((r) => {
+        if (live) imbuedRows = r.gems.filter((x) => x.valid).sort((a, b) => a.name.localeCompare(b.name));
+      })
+      .catch(() => {
+        if (live) imbuedRows = [];
       });
     return () => (live = false);
   });
@@ -280,6 +302,7 @@
       const lines: TooltipLine[] = [];
       const slot = groupSlot(g);
       if (slot) lines.push(line(`^8${slot}`, 14), { ...line(""), sep: true });
+      if (g.enabled && !g.slotEnabled) lines.push(line(`^8${m.skills_inactive_set()}`, 14), { ...line(""), sep: true });
       for (const gem of g.gems) {
         const off = gem.enabled ? "" : ` ^9${m.common_off()}`;
         lines.push(line(`${gem.color ?? "^7"}${gem.name ?? gem.nameSpec ?? "?"} ^7${gem.level ?? 1}/${gem.quality ?? 0}${corruptTag(gem)}${off}`));
@@ -403,7 +426,7 @@
       {#each groups as g (g.index)}
         {@const gmark = markOf(g)}
         {@const gslot = groupSlot(g)}
-        <div class="grow-row" class:sel={sel?.index === g.index} class:off={!g.enabled} class:dup={!!g.duplicateOf} {@attach onContextMenu((e) => groupMenu(e, g))}>
+        <div class="grow-row" class:sel={sel?.index === g.index} class:off={!g.enabled || !g.slotEnabled} class:dup={!!g.duplicateOf} {@attach onContextMenu((e) => groupMenu(e, g))}>
           <button class="gmain" title={m.skills_set_main()} class:ismain={g.isMainSkill} onclick={() => build.setMainSkill(g.index)}>⌾</button>
           <button class="gname" onclick={() => (selectedIdx = g.index)} onmouseenter={(e) => showGroupTip(e, g)} onmouseleave={hideTip}>
             <span class="glabel">
@@ -449,7 +472,7 @@
             onblur={() => labelDraft !== (sel.label ?? "") && patchGroup(sel.index, { label: labelDraft })}
             onkeydown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
           />
-          {#if sel.slot && !sel.grantedBy}<span class="dim small">{m.skills_socketed_in({ slot: sel.slot })}</span>{/if}
+          {#if sel.slot && !sel.grantedBy && !socketSlots}<span class="dim small">{m.skills_socketed_in({ slot: sel.slot })}</span>{/if}
           {#if markOf(sel)}{@const sm = markOf(sel)!}<span class="dim small">{sm.glyph} {sm.text}</span>{/if}
           <span class="grow"></span>
           <label class="chk small"><input type="checkbox" checked={sel.includeInFullDPS} onchange={(e) => patchGroup(sel.index, { includeInFullDPS: (e.target as HTMLInputElement).checked })} /> {m.skills_full_dps()}</label>
@@ -473,6 +496,60 @@
             title={sel.source ? m.skills_delete_group_blocked() : m.skills_delete_group_title()}
             onclick={() => removeGroup()}>{m.skills_delete_group()}</button>
         </div>
+
+        {#if socketSlots && !sel.source}
+          <div class="slotrow">
+            <label class="fld-inline" title={m.skills_slot_title()}>
+              <span class="label">{m.skills_slot()}</span>
+              <select class="select sm slotsel" value={sel.slot ?? ""} onchange={(e) => patchGroup(sel.index, { slot: (e.target as HTMLSelectElement).value })}>
+                <option value="">{m.skills_slot_none()}</option>
+                {#each socketSlots as s (s.slot)}
+                  <option value={s.slot}>{s.item ? `${s.label} · ${s.item}` : s.label}</option>
+                {/each}
+              </select>
+            </label>
+            {#if sel.itemSockets}
+              <span class="fld-inline">
+                <span class="label">{m.skills_item_sockets()}</span>
+                {#if sel.itemSockets.socketable}
+                  <span class="sockets"><PobText text={sel.itemSockets.text ?? ""} /></span>
+                  <button
+                    class="btn sm ghost"
+                    disabled={!sel.itemSockets.canOptimise}
+                    title={m.skills_optimise_sockets_title()}
+                    onclick={() => build.run(() => engine.optimiseSockets(sel.index))}>{m.skills_optimise_sockets()}</button>
+                {:else}
+                  <span class="dim small">{m.skills_no_sockets()}</span>
+                {/if}
+              </span>
+            {/if}
+            {#if sel.imbued}
+              {@const imb = sel.imbued}
+              <label class="fld-inline" title={imb.editable || !sel.slot ? m.skills_imbued_title() : m.skills_imbued_taken()}>
+                <span class="label">{m.skills_imbued()}</span>
+                <select
+                  class="select sm imbsel"
+                  value={imb.gemId ?? ""}
+                  disabled={!imb.editable}
+                  style:color={imb.color ? parsePobText(`${imb.color}.`)[0]?.color : undefined}
+                  onchange={(e) => {
+                    const id = (e.target as HTMLSelectElement).value;
+                    build.run(() => engine.setImbuedSupport(sel.index, id || undefined));
+                  }}
+                >
+                  <option value="">{m.skills_slot_none()}</option>
+                  {#if imb.gemId && !imbuedRows.some((r) => r.gemId === imb.gemId)}
+                    <option value={imb.gemId}>{imb.name}</option>
+                  {/if}
+                  {#each imbuedRows as row (row.gemId)}
+                    <option value={row.gemId}>{row.name}</option>
+                  {/each}
+                </select>
+              </label>
+            {/if}
+            {#if sel.enabled && !sel.slotEnabled}<span class="dim small">{m.skills_inactive_set()}</span>{/if}
+          </div>
+        {/if}
 
         {#if sel.skills.length > 0}
           <div class="skillsel">
@@ -870,6 +947,25 @@
   }
   .danger:hover {
     color: var(--bad);
+  }
+  .slotrow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 16px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line-0);
+  }
+  .select.sm.slotsel {
+    width: 260px;
+  }
+  .select.sm.imbsel {
+    width: 200px;
+  }
+  .sockets {
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    letter-spacing: 0.04em;
   }
   .skillsel {
     display: flex;

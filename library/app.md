@@ -98,7 +98,10 @@ The skill set dropdown and its actions, **New socket group** (Ctrl+N), **Copy gr
 group**, default gem level and quality, a sort stat, and support filters. The left list holds the
 socket groups (set the main skill, reorder, right-click or Delete to remove). The right side edits
 the selected group: label, Full DPS and Enabled checkboxes, and the gem table. The gem adder
-("Add a gem…") has a **DPS** button that scores each support for the selected skill.
+("Add a gem…") has a **DPS** button that scores each support for the selected skill. In PoE1 a row
+under the label sets **Socketed in** (the item the group's gems sit in, so they get its "socketed
+gems" modifiers), shows that item's sockets with an **Optimise sockets** button that recolours them
+to fit the gems, and picks the item's **Imbued support** (one per item; set Socketed in first).
 
 ### Items
 

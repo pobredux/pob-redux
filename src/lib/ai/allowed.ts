@@ -62,6 +62,8 @@ export const ALLOWED = new Set([
   "set_main_skill",
   "add_socket_group",
   "set_socket_group",
+  "set_imbued_support",
+  "optimise_sockets",
   "add_gem",
   "set_gem",
   "remove_gem",

@@ -3605,6 +3605,108 @@ local function groupSkills(group)
 	return skills
 end
 
+function gemUtil.slotItem(slotName)
+	local slot = slotName and build.itemsTab.slots[slotName]
+	return slot and build.itemsTab.items[slot.selItemId] or nil
+end
+
+-- SkillsTab's "Socketed in" list; PoE2 has no item-socketed gems and no such control.
+function gemUtil.socketSlots()
+	local control = not IS_POE2 and build.skillsTab.controls.groupSlot
+	if not control then return null end
+	local out = array({})
+	for _, entry in ipairs(control.list) do
+		if entry.slotName then
+			local item = gemUtil.slotItem(entry.slotName)
+			out[#out + 1] = { slot = entry.slotName, label = entry.label, item = opt(item and item.name) }
+		end
+	end
+	return out
+end
+
+function gemUtil.socketLimits(item)
+	local abyssal = 0
+	for _, socket in ipairs(item.sockets or {}) do
+		if socket.color == "A" then abyssal = abyssal + 1 end
+	end
+	return (item.base.socketLimit or 0) - abyssal, abyssal
+end
+
+-- SkillsTab's socketsLabel and optimiseSockets.enabled for the group's item.
+function gemUtil.itemSockets(group)
+	if IS_POE2 or group.source then return null end
+	local item = gemUtil.slotItem(group.slot)
+	if not item or not item.base then return null end
+	if not item.base.socketLimit then return { text = null, socketable = false, canOptimise = false } end
+	local free = gemUtil.socketLimits(item)
+	local canOptimise = false
+	for _, other in ipairs(build.skillsTab.socketGroupList) do
+		if other.slot == group.slot then
+			for _, gem in ipairs(other.gemList) do
+				if (gem.grantedEffect or (gem.gemData and gem.gemData.grantedEffect)) and free > 0 then
+					if not gem.matchesSocket then canOptimise = true end
+					free = free - 1
+				end
+			end
+		end
+	end
+	return { text = build.itemsTab:GetSocketDescriptionLine(item), socketable = true, canOptimise = canOptimise }
+end
+
+-- GemSelectControl:PopulateGemList with imbuedSelect.
+function gemUtil.imbuable(gemData)
+	local ge = gemData and gemData.grantedEffect
+	if not ge or ge.hideFromGemList or not ge.support then return false end
+	if (gemData.tagString or ""):match("Exceptional") or (ge.legacy and ge.plusVersionOf) then return false end
+	return not gemData.secondaryGrantedEffect or gemData.secondaryGrantedEffect.support == true
+end
+
+function gemUtil.imbuedFor(group)
+	if IS_POE2 or group.source then return null end
+	local tab = build.skillsTab
+	local name = group.imbuedSupport
+	local gem = name and tab:FindImbuedSupport(name)
+	local owned = group.slot and tab.imbuedSupportBySlot[group.slot]
+	return {
+		name = opt(gem and gem.name or name),
+		gemId = opt(gem and gem.id),
+		color = opt(gem and data.skillColorMap[gem.grantedEffect.color]),
+		editable = group.slot ~= nil and (not owned or name ~= nil),
+	}
+end
+
+-- One imbued support per item: the slot's flagged groups share it, so a reload rebuilds the same table.
+function gemUtil.setImbued(group, name)
+	for _, other in ipairs(build.skillsTab.socketGroupList) do
+		if other == group or (other.slot == group.slot and other.imbuedSupport and not other.source) then
+			other.imbuedSupport = name
+		end
+	end
+	build.skillsTab:RebuildImbuedSupportBySlot()
+end
+
+-- SkillsTab's groupSlot dropdown: the imbued support moves with the group unless the new item has one.
+function gemUtil.setGroupSlot(group, slotName)
+	if slotName == null or slotName == "" then slotName = nil end
+	if slotName then slotName = itemUtil.resolveSlotName(slotName) end
+	if slotName == group.slot then return end
+	if group.source then error("this group is granted by an item; its slot follows the item", 0) end
+	local slots = gemUtil.socketSlots()
+	if slotName and slots ~= null then
+		local listed = false
+		for _, entry in ipairs(slots) do
+			if entry.slot == slotName then listed = true end
+		end
+		if not listed then error(slotName .. " cannot hold socketed gems", 0) end
+	end
+	local tab = build.skillsTab
+	if group.imbuedSupport and (not slotName or tab.imbuedSupportBySlot[slotName]) then
+		group.imbuedSupport = nil
+	end
+	group.slot = slotName
+	if not IS_POE2 then tab:RebuildImbuedSupportBySlot() end
+end
+
 M.get_skills = function()
 	ensureBuild()
 	-- SkillsTab's slot.count.shown; local here because the main chunk is at LuaJIT's 200-local limit.
@@ -3669,6 +3771,9 @@ M.get_skills = function()
 			enabled = group.enabled ~= false,
 			includeInFullDPS = group.includeInFullDPS == true,
 			slot = opt(group.slot),
+			slotEnabled = group.slotEnabled ~= false,
+			itemSockets = gemUtil.itemSockets(group),
+			imbued = gemUtil.imbuedFor(group),
 			source = opt(group.source),
 			groupCount = group.source and math.max(tonumber(group.groupCount) or 1, 1) or null,
 			-- Set on groups a weapon, shield or other item grants: the skill
@@ -3715,6 +3820,7 @@ M.get_skills = function()
 		mainSocketGroup = opt(build.mainSocketGroup),
 		skillSets = sets,
 		activeSkillSet = opt(build.skillsTab.activeSkillSetId),
+		socketSlots = gemUtil.socketSlots(),
 	}
 end
 
@@ -3945,11 +4051,11 @@ M.gem_search = function(p)
 				or gemData.name:lower():find(q, 1, true) ~= nil
 				or (gemData.tagString or ""):lower():find(q, 1, true) ~= nil
 			local support = ge.support == true
-			if match and (p.onlySupports == nil or support == p.onlySupports) then
+			if match and (p.onlySupports == nil or support == p.onlySupports) and (not p.imbued or gemUtil.imbuable(gemData)) then
 				total = total + 1
 				local valid = true
 				if support and activeSkill then
-					local ok, s = pcall(calcLib.canGrantedEffectSupportActiveSkill, ge, activeSkill)
+					local ok, s = pcall(calcLib.canGrantedEffectSupportActiveSkill, ge, activeSkill, p.imbued == true)
 					valid = (ok and s) and true or false
 				end
 				local row = {
@@ -4276,7 +4382,7 @@ end
 M.add_socket_group = function(p)
 	ensureBuild()
 	local group = { label = (p and p.label) or "", enabled = true, gemList = {} }
-	if p and p.slot then group.slot = p.slot end
+	if p and p.slot then gemUtil.setGroupSlot(group, p.slot) end
 	table.insert(build.skillsTab.socketGroupList, group)
 	if not build.mainSocketGroup or build.mainSocketGroup == 0 then
 		build.mainSocketGroup = #build.skillsTab.socketGroupList
@@ -4318,11 +4424,66 @@ M.set_socket_group = function(p)
 	if p.enabled ~= nil then group.enabled = p.enabled end
 	if p.includeInFullDPS ~= nil then group.includeInFullDPS = p.includeInFullDPS end
 	if p.label ~= nil then group.label = p.label end
-	if p.slot ~= nil then group.slot = (p.slot ~= "" and p.slot) or nil end
+	if p.slot ~= nil then gemUtil.setGroupSlot(group, p.slot) end
 	if p.mainActiveSkill ~= nil then calcsSelection.setMainActiveSkill(group, tonumber(p.mainActiveSkill)) end
 	if p.groupCount ~= nil then group.groupCount = math.max(tonumber(p.groupCount) or 1, 1) end
 	build.skillsTab:ProcessSocketGroup(group)
 	build.skillsTab:AddUndoState()
+	refresh()
+	return M.get_skills()
+end
+
+M.set_imbued_support = function(p)
+	ensureBuild()
+	if IS_POE2 then error("imbued supports are a PoE1 mechanic", 0) end
+	p = p or {}
+	local group = requireGroup(p.index, p.skill)
+	local info = gemUtil.imbuedFor(group)
+	if info == null then error("this group is granted by an item and cannot take an imbued support", 0) end
+	if not group.slot then error("choose the item this group is socketed in first", 0) end
+	if not info.editable then error(group.slot .. " already has an imbued support; an item holds only one", 0) end
+	local name
+	if p.gemId ~= nil and p.gemId ~= null and p.gemId ~= "" then
+		local gem = data.gems[p.gemId] or build.skillsTab:FindImbuedSupport(tostring(p.gemId))
+		if not gemUtil.imbuable(gem) then error(tostring(p.gemId) .. " cannot be an imbued support", 0) end
+		name = gem.name
+	end
+	gemUtil.setImbued(group, name)
+	build.skillsTab:AddUndoState()
+	refresh()
+	return M.get_skills()
+end
+
+-- SkillsTab's optimiseSockets button.
+M.optimise_sockets = function(p)
+	ensureBuild()
+	if IS_POE2 then error("PoE2 items have no gem sockets", 0) end
+	p = p or {}
+	local group = requireGroup(p.index, p.skill)
+	local item = gemUtil.slotItem(group.slot)
+	if not item or not item.base or not item.base.socketLimit then error("this group's item cannot have sockets", 0) end
+	build.itemsTab:AddUndoState()
+	local free, abyssal = gemUtil.socketLimits(item)
+	local colours = { "R", "G", "B" }
+	local groupCount = 0
+	item.sockets = {}
+	for _, other in ipairs(build.skillsTab.socketGroupList) do
+		if other.slot == group.slot then
+			for _, gem in ipairs(other.gemList) do
+				local ge = gem.grantedEffect or (gem.gemData and gem.gemData.grantedEffect)
+				if ge and free > 0 then
+					table.insert(item.sockets, { color = ge.color and colours[ge.color] or "W", group = groupCount })
+					free = free - 1
+				end
+			end
+			groupCount = groupCount + 1
+		end
+	end
+	for _ = 1, abyssal do
+		groupCount = groupCount + 1
+		table.insert(item.sockets, { color = "A", group = groupCount })
+	end
+	item:BuildAndParseRaw()
 	refresh()
 	return M.get_skills()
 end
@@ -4536,6 +4697,9 @@ M.list_valid_supports = function(p)
 		return { supports = results }
 	end
 	local level = build.characterLevel or 1
+	local imbued = p.imbued == true
+	if imbued and IS_POE2 then error("imbued supports are a PoE1 mechanic", 0) end
+	if imbued and p.sortByDps then error("sort_by_dps scores socketed supports; try an imbued support with set_imbued_support and read its delta", 0) end
 	-- Scoring appends each candidate to the group and reruns the calc, so the
 	-- delta is what that support would add on top of what is socketed now. The
 	-- calc reports the main skill's damage, so the group is made main for the
@@ -4563,8 +4727,8 @@ M.list_valid_supports = function(p)
 	local limit = tonumber(p.limit) or 0
 	for gemId, gemData in pairs(data.gems) do
 		local hidden = not IS_POE2 and gemData.grantedEffect and gemData.grantedEffect.legacy and not build.skillsTab.showLegacyGems
-		if gemData.grantedEffect and gemData.grantedEffect.support and not hidden then
-			local ok, supports = pcall(calcLib.canGrantedEffectSupportActiveSkill, gemData.grantedEffect, activeSkill)
+		if gemData.grantedEffect and gemData.grantedEffect.support and not hidden and (not imbued or gemUtil.imbuable(gemData)) then
+			local ok, supports = pcall(calcLib.canGrantedEffectSupportActiveSkill, gemData.grantedEffect, activeSkill, imbued)
 			if ok and supports then
 				local tier = gemData.Tier and gemData.Tier > 0 and gemData.Tier or nil
 				local reqLevel = gemUtil.gemReqLevel(tier, gemData)

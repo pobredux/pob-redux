@@ -750,6 +750,31 @@ fn adapt_for_poe1(defs: &mut Vec<ToolDef>) {
         open_world: false,
         slow: false,
     });
+    let group = || json!({ "index": prop("integer", "1-based socket group index (see get_skills)"), "skill": prop("string", "Name of the group's active skill, instead of index") });
+    let mut imbued_schema = group();
+    imbued_schema["gem_id"] = prop("string", "Support gem id from list_valid_supports with imbued true; omit to remove the imbued support");
+    defs.push(ToolDef {
+        name: "set_imbued_support",
+        description: "Set or remove the imbued support of the item a socket group is socketed in, like the Skills tab's Imbued support picker. The group needs a `slot` first (set_socket_group). An item holds one imbued support, at gem level 1, and it supports the groups in that item that carry it (get_skills `imbued`). Find candidates with list_valid_supports and imbued true.".into(),
+        schema: obj(imbued_schema, &[]),
+        output_schema: Some(write_output()),
+        read_only: false,
+        destructive: false,
+        idempotent: true,
+        open_world: false,
+        slow: false,
+    });
+    defs.push(ToolDef {
+        name: "optimise_sockets",
+        description: "Recolour the sockets of the item a socket group is socketed in so each socket matches the colour of the gem in it, group by group in get_skills order, like the Skills tab's Optimise sockets button. Abyssal sockets stay. get_skills `itemSockets.canOptimise` says whether any socket is the wrong colour.".into(),
+        schema: obj(group(), &[]),
+        output_schema: Some(write_output()),
+        read_only: false,
+        destructive: false,
+        idempotent: true,
+        open_world: false,
+        slow: false,
+    });
     let timeless_jewel = || json!({ "type": "string", "enum": ["Glorious Vanity", "Lethal Pride", "Brutal Restraint", "Militant Faith", "Elegant Hubris", "Heroic Tragedy"], "description": "Timeless jewel" });
     defs.push(ToolDef {
         name: "list_timeless_options",
@@ -819,6 +844,10 @@ fn adapt_for_poe1(defs: &mut Vec<ToolDef>) {
                 }
             }
             "select_class" => props["secondary_ascend_class_id"] = prop("integer", "Bloodline id from list_classes' secondaryAscendancies (0 for none)"),
+            "add_socket_group" | "set_socket_group" => {
+                props["slot"] = prop("string", "Item the group's gems are socketed in, from get_skills' socketSlots, or empty string for none. Gems get that item's socketed-gem modifiers; an imbued support moves with the group unless the new item has one");
+            }
+            "list_valid_supports" => props["imbued"] = prop("boolean", "List the supports that can be this group's imbued support (set_imbued_support) instead"),
             "craft_rare" => {
                 if let Some(p) = props.as_object_mut() {
                     p.remove("runes");
@@ -1652,8 +1681,14 @@ pub(crate) fn run_tool(ctx: &ToolContext, name: &str, args: &JsonObject) -> Resu
                 "skill": arg_str(args, "skill"),
                 "sortByDps": arg_bool(args, "sort_by_dps"),
                 "limit": arg_i64(args, "limit")?,
+                "imbued": arg_bool(args, "imbued"),
             }),
         )?),
+        "set_imbued_support" => stats(ctx.call(
+            "set_imbued_support",
+            json!({ "index": arg_i64(args, "index")?, "skill": arg_str(args, "skill"), "gemId": arg_str(args, "gem_id") }),
+        )?),
+        "optimise_sockets" => stats(ctx.call("optimise_sockets", json!({ "index": arg_i64(args, "index")?, "skill": arg_str(args, "skill") }))?),
         // Config
         "list_config_options" => read(ctx.call("list_config_options", Value::Null)?),
         "get_config" => read(ctx.call("get_config", Value::Null)?),
@@ -1695,7 +1730,7 @@ mod tests {
     #[test]
     fn poe1_registry_speaks_poe1() {
         let d = defs(Game::Poe1);
-        assert_eq!(d.len(), 84, "PoE1 tool count changed");
+        assert_eq!(d.len(), 86, "PoE1 tool count changed");
         for (name, _) in POE1_TEXT {
             assert!(d.iter().any(|t| t.name == *name), "POE1_TEXT names {name}, which is not a tool");
         }

@@ -906,6 +906,12 @@ export interface SocketGroup {
   enabled: boolean;
   includeInFullDPS: boolean;
   slot: string | null;
+  /** False when the group sits in the inactive weapon set, which PoB skips. */
+  slotEnabled: boolean;
+  /** PoE1: the socket line of the item in `slot`; null in PoE2, for granted groups, or with no item there. */
+  itemSockets: { text: string | null; socketable: boolean; canOptimise: boolean } | null;
+  /** PoE1: the item's imbued support as it applies to this group; null in PoE2 and for granted groups. */
+  imbued: { name: string | null; gemId: string | null; color: string | null; editable: boolean } | null;
   source: string | null;
   /** How many copies of an item-granted group apply; null when the player socketed it. */
   groupCount: number | null;
@@ -931,6 +937,8 @@ export interface Skills {
   mainSocketGroup: number | null;
   skillSets: SkillSetInfo[];
   activeSkillSet: number | null;
+  /** PoE1: PoB's "Socketed in" choices with the item equipped in each; null in PoE2. */
+  socketSlots: { slot: string; label: string; item: string | null }[] | null;
 }
 
 export interface GemSearchRow {
@@ -1874,7 +1882,7 @@ export const engine = {
     call<Skills>("add_gem", { groupIndex, gemId, level, quality }),
   removeGem: (groupIndex: number, gemIndex: number) => call<Skills>("remove_gem", { groupIndex, gemIndex }),
   moveGem: (groupIndex: number, from: number, to: number) => call<Skills>("move_gem", { groupIndex, from, to }),
-  gemSearch: (opts: { groupIndex?: number; query?: string; onlySupports?: boolean; limit?: number; sortByDps?: boolean }) =>
+  gemSearch: (opts: { groupIndex?: number; query?: string; onlySupports?: boolean; limit?: number; sortByDps?: boolean; imbued?: boolean }) =>
     call<{ gems: GemSearchRow[]; total: number; truncated: boolean; baseDps: number | null }>("gem_search", opts),
   getSkillsOptions: () => call<SkillsOptions>("get_skills_options"),
   setSkillsOptions: (patch: Partial<SkillsOptions>) => call<SkillsOptions>("set_skills_options", patch),
@@ -1895,6 +1903,9 @@ export const engine = {
   deleteSkillSet: (id: number) => call<Skills>("delete_skill_set", { id }),
   setSocketGroup: (index: number, patch: Partial<Pick<SocketGroup, "enabled" | "includeInFullDPS" | "label" | "slot" | "mainActiveSkill" | "groupCount">>) =>
     call<Skills>("set_socket_group", { index, ...patch }),
+  /** PoE1: pass no gemId to remove it. */
+  setImbuedSupport: (index: number, gemId?: string) => call<Skills>("set_imbued_support", { index, gemId }),
+  optimiseSockets: (index: number) => call<Skills>("optimise_sockets", { index }),
   setGem: (
     groupIndex: number,
     gemIndex: number,
