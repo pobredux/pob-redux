@@ -1352,6 +1352,8 @@
   "tree_granted_unknown": "아이템",
   "tree_click_removes": "클릭 시 {count}개 제거",
   "tree_click_to_remove": "클릭하여 제거",
+  "tree_keywords_hint": "Alt를 누르고 있으면 키워드 설명을 볼 수 있습니다",
+  "tree_keywords_pin_hint": "키워드를 클릭하면 고정됩니다",
   "tree_right_click_switch": " · 우클릭하여 전환",
   "tree_right_click_effect": " · 우클릭하여 효과 변경",
   "tree_point_cost": [

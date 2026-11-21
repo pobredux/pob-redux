@@ -3,6 +3,8 @@
   import type { NodeCompare } from "$lib/engine.svelte";
   import type { TNode } from "$lib/tree/model";
   import PobText from "$lib/components/PobText.svelte";
+  import KeywordText from "$lib/components/KeywordText.svelte";
+  import type { TreeKeywords } from "$lib/tree/keywords";
   import { keycaps } from "$lib/keys";
   import { wheelScroll } from "$lib/tooltip-scroll";
   import { m } from "$lib/paraglide/messages";
@@ -21,6 +23,12 @@
     recipe = null,
     blocked = null,
     diff = null,
+    keywords = null,
+    interactive = false,
+    hint = null,
+    onpeek,
+    onleave,
+    onpin,
     foot,
   }: {
     node: TNode;
@@ -37,12 +45,21 @@
     recipe?: { word: string; name: string; url: string | null }[] | null;
     blocked?: string | null;
     diff?: NodeCompare | null;
+    keywords?: TreeKeywords | null;
+    /** Takes the pointer, so its keyword links can be hovered. */
+    interactive?: boolean;
+    hint?: string | null;
+    onpeek?: (id: string, el: HTMLElement) => void;
+    onleave?: () => void;
+    onpin?: (id: string, el: HTMLElement) => void;
     /** Left side of the footer; the node id sits right. */
     foot?: Snippet;
   } = $props();
 </script>
 
-<div class="tip" class:fixed bind:this={el} use:wheelScroll={[node, diff]} data-scroll-hint={m.tooltip_scroll_hint({ key: keycaps("Mod")[0] })} style:left={`${left}px`} style:top={`${top}px`}>
+{#snippet line(s: string)}{@const linked = keywords?.lines[s]}{#if linked && keywords}<KeywordText text={linked} keywords={keywords.keywords} {onpeek} {onleave} {onpin} />{:else}{s}{/if}{/snippet}
+
+<div class="tip" class:fixed class:interactive bind:this={el} use:wheelScroll={[node, diff]} data-scroll-hint={m.tooltip_scroll_hint({ key: keycaps("Mod")[0] })} style:left={`${left}px`} style:top={`${top}px`}>
   <div class="tip-head">
     <span class="tip-name" class:key={node.kind === "keystone"} class:notable={node.kind === "notable"}>{override?.name ?? node.name}</span>
     <span class="label">{node.asc ?? node.kind}</span>
@@ -61,11 +78,11 @@
   {/if}
   {#each override?.stats?.length ? override.stats : node.stats as s}
     {@const nc = notCalc.size > 0 && s.split("\n").some((l) => notCalc.has(l))}
-    <div class="tip-stat" class:nc>{s}{#if nc}<span class="ncnote">{` ${m.not_calculated()}`}</span>{/if}</div>
+    <div class="tip-stat" class:nc>{@render line(s)}{#if nc}<span class="ncnote">{` ${m.not_calculated()}`}</span>{/if}</div>
   {/each}
   {#if node.masteryEffects && showMastery}
     {#each node.masteryEffects as e (e.effect)}
-      <div class="tip-stat dim">{e.stats.join(" / ")}</div>
+      <div class="tip-stat dim">{#each e.stats as s, i (i)}{#if i > 0}{" / "}{/if}{@render line(s)}{/each}</div>
     {/each}
   {/if}
   {#if node.flavour}
@@ -92,6 +109,9 @@
         {/each}
       {/if}
     </div>
+  {/if}
+  {#if hint}
+    <div class="tip-hint">{hint}</div>
   {/if}
   <div class="tip-foot num">
     {@render foot?.()}
@@ -127,6 +147,14 @@
     color: var(--fg-1);
     font-size: 11px;
     text-align: center;
+  }
+  .tip.interactive {
+    pointer-events: auto;
+  }
+  .tip-hint {
+    margin-top: 8px;
+    color: var(--fg-2);
+    font-size: var(--fs-xs);
   }
   .tip.fixed {
     position: fixed;

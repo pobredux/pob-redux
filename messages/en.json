@@ -1355,6 +1355,8 @@
   "tree_granted_unknown": "an item",
   "tree_click_removes": "click removes {count}",
   "tree_click_to_remove": "click to remove",
+  "tree_keywords_hint": "Hold Alt to read keywords",
+  "tree_keywords_pin_hint": "Click a keyword to pin it",
   "tree_right_click_switch": " · right-click to switch",
   "tree_right_click_effect": " · right-click to change effect",
   "tree_point_cost": [

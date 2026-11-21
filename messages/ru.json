@@ -1382,6 +1382,8 @@
   "tree_granted_unknown": "предметом",
   "tree_click_removes": "клик снимет {count}",
   "tree_click_to_remove": "клик — снять",
+  "tree_keywords_hint": "Удерживайте Alt, чтобы читать ключевые слова",
+  "tree_keywords_pin_hint": "Нажмите на ключевое слово, чтобы закрепить его",
   "tree_right_click_switch": " · правый клик — сменить",
   "tree_right_click_effect": " · правый клик — сменить эффект",
   "tree_point_cost": [

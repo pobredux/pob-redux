@@ -244,7 +244,7 @@ fn main() -> Result<()> {
         // Connector art (*.png) is not copied: the renderer strokes lines and arcs.
         for entry in fs::read_dir(tree_root.join(version))?.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            if entry.path().is_file() && (name.ends_with(".lua") || name == "tree.json") {
+            if entry.path().is_file() && (name.ends_with(".lua") || name == "tree.json" || name == "keywords.json") {
                 let rel = rel_dir.join(&name);
                 copy_one(&entry.path(), &dest.join(&rel), &mut stats)?;
                 wanted.insert(rel);

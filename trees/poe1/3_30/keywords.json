@@ -1,0 +1,142 @@
+{
+  "keywords": {
+    "BifurcatedCrit": {
+      "definition": "Critical Strike chance is rolled twice when determining if a Critical Strike should occur:\nIf either roll succeeds the hit will be a regular Critical Strike, and if both rolls succeed the amount of extra damage dealt by the Critical Strike will be doubled. This is equivalent to doubling the amount by which the Critical Strike Multiplier exceeds 100 for that Hit.\n\nIf a modifier makes your Critical Strike Chance Lucky or Unlucky, that luck will apply individually to each of the critical strike chance rolls.\n\nEffects which cause Hits to Always be Critical Strikes prevent Bifurcation - those hits do not roll the chance, so cannot roll it twice.",
+      "term": "Bifurcated Critical Strikes"
+    },
+    "Blind": {
+      "definition": "Being Blinded causes 20% less Accuracy Rating and Evasion Rating",
+      "term": "Blind"
+    },
+    "BrineCharges": {
+      "definition": "You gain 4% of Physical Damage as extra Cold Damage and as extra Lightning Damage per Brine Charge.\n\nMaximum Brine Charges is equal to Maximum Endurance Charges",
+      "term": "Brine Charges"
+    },
+    "CrabTotem": {
+      "definition": "Supports Spell skills. Instead of casting that Spell, you will summon a Crab that casts the Spell for you. Crabs created this way are not Minions, but are considered to be Totems.\n\nCrab Totems cannot use Channelling, Triggered, Cooldown or Vaal Spells, nor Skills used by things other than you, such as Traps, Mines or other proxies.",
+      "term": "Crab Totem"
+    },
+    "DamageFaster": {
+      "definition": "Ailments which deal Damage faster will deal the same total damage over a shorter duration",
+      "term": "Faster Ailment Damage"
+    },
+    "Draugurflame": {
+      "definition": "Draugurflames burn enemies within 3 metres of you, dealing Fire Damage equal to 15% of the Damage per second of the strongest Ignite you've inflicted in the past 8 seconds. This damage cannot be modified.",
+      "term": "Draugurflame"
+    },
+    "Onslaught": {
+      "definition": "Onslaught grants 20% increased Attack, Cast, and Movement Speed",
+      "term": "Onslaught"
+    },
+    "Poison": {
+      "definition": "Poison deals Chaos Damage over time, based on the base Physical and Chaos Damage of the Skill. Multiple instances of Poison stack",
+      "term": "Poison"
+    },
+    "SpiritInfusion": {
+      "definition": "Each stack of Spirit Infusion grants 15% faster start of Energy Shield Recharge, Channelling Spells deal 5% more Damage and Channelling Spells have 10% more Cost. Maximum of 10 stacks. You lose one stack every 0.5 seconds if you have not gained a stack in the past 4 seconds.",
+      "term": "Spirit Infusion"
+    },
+    "TransfigurationOfBody": {
+      "definition": "Increases and Reductions to Maximum Life also apply to Attack Damage at 30% of their value",
+      "term": "Transfiguration of Body"
+    },
+    "TransfigurationOfMind": {
+      "definition": "Increases and Reductions to Maximum Mana also apply to Damage at 30% of their value",
+      "term": "Transfiguration of Mind"
+    },
+    "TransfigurationOfSoul": {
+      "definition": "Increases and Reductions to Maximum Energy Shield also apply to Spell Damage at 30% of their value",
+      "term": "Transfiguration of Soul"
+    },
+    "Withered": {
+      "definition": "Withered is a Debuff which applies 6% increased Chaos Damage Taken, and can be inflicted up to 15 times",
+      "term": "Withered"
+    }
+  },
+  "lines": {
+    "10% chance to Blind Enemies on Hit": "10% chance to [Blind] Enemies on Hit",
+    "10% chance to Blind Enemies on Hit with Attacks": "10% chance to [Blind] Enemies on Hit with Attacks",
+    "10% chance to Blind Enemies within 6 metres when you use an Elemental Skill": "10% chance to [Blind] Enemies within 6 metres when you use an Elemental Skill",
+    "10% chance to gain Onslaught for 4 seconds on Kill": "10% chance to gain [Onslaught] for 4 seconds on Kill",
+    "100% chance to Avoid Blind": "100% chance to Avoid [Blind]",
+    "100% increased Blind duration": "100% increased [Blind] duration",
+    "15% increased Blind Effect": "15% increased [Blind] Effect",
+    "15% increased Effect of Onslaught on you": "15% increased Effect of [Onslaught] on you",
+    "15% reduced Damage taken from Blinded Enemies": "15% reduced Damage taken from [Blind|Blinded] Enemies",
+    "20% chance to Blind Enemies on Hit with Attacks": "20% chance to [Blind] Enemies on Hit with Attacks",
+    "20% chance to Blind Enemies with Off Hand Hits": "20% chance to [Blind] Enemies with Off Hand Hits",
+    "20% chance to gain Onslaught for 4 seconds on Kill": "20% chance to gain [Onslaught] for 4 seconds on Kill",
+    "20% increased Blind Effect": "20% increased [Blind] Effect",
+    "25% chance to Blind Enemies on Hit": "25% chance to [Blind] Enemies on Hit",
+    "25% chance to Blind with Hits against Bleeding Enemies": "25% chance to [Blind] with Hits against Bleeding Enemies",
+    "25% chance to Trigger Level 20 Summon Elemental Relic when you or Allies within 6 metres Kill an Enemy, or Hit a Rare or Unique Enemy": "25% chance to Trigger Level 20 [SummonElementalRelic|Summon Elemental Relic] when you or Allies within 6 metres Kill an Enemy, or Hit a Rare or Unique Enemy",
+    "25% increased Critical Strike Chance against Blinded Enemies": "25% increased Critical Strike Chance against [Blind|Blinded] Enemies",
+    "30% increased Armour and Evasion Rating during Onslaught": "30% increased Armour and Evasion Rating during [Onslaught]",
+    "30% increased Effect of Onslaught on you": "30% increased Effect of [Onslaught] on you",
+    "40% increased Blind Effect": "40% increased [Blind] Effect",
+    "40% increased Blind duration": "40% increased [Blind] duration",
+    "40% increased Effect of Onslaught on you": "40% increased Effect of [Onslaught] on you",
+    "5% chance to Blind Enemies on Hit": "5% chance to [Blind] Enemies on Hit",
+    "50% chance to gain a Brine Charge instead of an Endurance Charge": "50% chance to gain a [BrineCharges|Brine Charge] instead of an Endurance Charge",
+    "50% increased Critical Strike Chance against Blinded Enemies": "50% increased Critical Strike Chance against [Blind|Blinded] Enemies",
+    "60% increased Critical Strike Chance against Blinded Enemies": "60% increased Critical Strike Chance against [Blind|Blinded] Enemies",
+    "Bleeding you inflict deals Damage 15% Faster": "Bleeding you inflict deals Damage 15% [DamageFaster|Faster]",
+    "Bleeding you inflict deals Damage 5% Faster": "Bleeding you inflict deals Damage 5% [DamageFaster|Faster]",
+    "Blind Enemies on Hit": "[Blind] Enemies on Hit",
+    "Cannot be Blinded": "Cannot be [Blind|Blinded]",
+    "Damaging Ailments deal damage 10% Faster": "Damaging Ailments deal damage 10% [DamageFaster|Faster]",
+    "Damaging Ailments deal damage 15% Faster": "Damaging Ailments deal damage 15% [DamageFaster|Faster]",
+    "Damaging Ailments deal damage 5% Faster": "Damaging Ailments deal damage 5% [DamageFaster|Faster]",
+    "Draugurflames burn enemies around you for 8 seconds after you Ignite a target": "[Draugurflame|Draugurflames] burn enemies around you for 8 seconds after you Ignite a target",
+    "Enemies near your Marked Enemy are Blinded": "Enemies near your Marked Enemy are [Blind|Blinded]",
+    "Enemies within 3.5 metres are Blinded": "Enemies within 3.5 metres are [Blind|Blinded]",
+    "Every second, inflict Withered on Enemies within 6 metres for 15 seconds": "Every second, inflict [Withered] on Enemies within 6 metres for 15 seconds",
+    "Gain Spirit Infusion every 0.5 seconds while Channelling a Spell": "Gain [SpiritInfusion|Spirit Infusion] every 0.5 seconds while Channelling a Spell",
+    "Grants Embrace Madness": "Grants [EmbraceMadness|Embrace Madness]",
+    "Grants Level 1 Detonate Mines": "Grants Level 1 [TriggeredDetonateMines|Detonate Mines]",
+    "Grants Level 20 Affliction": "Grants Level 20 [Affliction]",
+    "Grants Level 20 Barkskin": "Grants Level 20 [Barkskin]",
+    "Grants Level 20 Misty Reflection": "Grants Level 20 [MistyReflection|Misty Reflection]",
+    "Grants Level 20 Pacify": "Grants Level 20 [Pacify]",
+    "Grants Level 20 Penance Mark": "Grants Level 20 [PenanceMark|Penance Mark]",
+    "Grants Level 20 Ravenous": "Grants Level 20 [Ravenous]",
+    "Grants Level 20 Starfall": "Grants Level 20 [TriggeredStarfall|Starfall]",
+    "Grants Level 20 Summon Bone Feeders": "Grants Level 20 [SummonAbyssalConstructs|Summon Bone Feeders]",
+    "Grants Level 20 Summon Dark Effigy": "Grants Level 20 [SummonDarkEffigy|Summon Dark Effigy]",
+    "Grants Level 20 Summon Elemental Relic": "Grants Level 20 [SummonElementalRelic|Summon Elemental Relic]",
+    "Grants Level 20 Summon Sentinel of Radiance": "Grants Level 20 [SummonSentinelOfRadiance|Summon Sentinel of Radiance]",
+    "Grants Level 20 Summon Spectral Tiger": "Grants Level 20 [SummonSpectralTiger|Summon Spectral Tiger]",
+    "Grants Level 20 Summon Triggerbots": "Grants Level 20 [SummonTriggerbots|Summon Triggerbots]",
+    "Grants Level 20 Surging Torrent": "Grants Level 20 [BrineTorrent|Surging Torrent]",
+    "Grants Level 20 Unbound Avatar": "Grants Level 20 [AilmentBearer|Unbound Avatar]",
+    "Grants Level 20 Ward Shatter": "Grants Level 20 [WardShatter|Ward Shatter]",
+    "Grants Level 25 Envy": "Grants Level 25 [Envy]",
+    "Grants Level 30 Assassin's Mark": "Grants Level 30 [AssassinsMarkTriggeredAssassin|Assassin's Mark]",
+    "Grants Level 30 Lightning Bolt": "Grants Level 30 [LightningBolt|Lightning Bolt]",
+    "Grants Primal Aegis": "Grants [PrimalAegis|Primal Aegis]",
+    "Ignites you inflict deal Damage 15% Faster": "Ignites you inflict deal Damage 15% [DamageFaster|Faster]",
+    "Ignites you inflict deal Damage 5% Faster": "Ignites you inflict deal Damage 5% [DamageFaster|Faster]",
+    "Ignites you inflict deal Damage 8% Faster": "Ignites you inflict deal Damage 8% [DamageFaster|Faster]",
+    "Minions affected by Affliction have Onslaught": "Minions affected by Affliction have [Onslaught]",
+    "Minions have 30% chance to gain Onslaught for 4 seconds on Kill": "Minions have 30% chance to gain [Onslaught] for 4 seconds on Kill",
+    "Non-Cursed Enemies you inflict Non-Aura Curses on are Blinded for 4 seconds": "Non-Cursed Enemies you inflict Non-Aura Curses on are [Blind|Blinded] for 4 seconds",
+    "Poisons you inflict deal Damage 20% Faster": "[Poison|Poisons] you inflict deal Damage 20% [DamageFaster|Faster]",
+    "Skills Supported by Spell Totem are Crab Totems": "Skills Supported by Spell Totem are [CrabTotem|Crab Totems]",
+    "Spell Critical Strike Chance Bifurcates": "Spell Critical Strike Chance [BifurcatedCrit|Bifurcates]",
+    "Transfiguration of Body": "[TransfigurationOfBody|Transfiguration of Body]",
+    "Transfiguration of Mind": "[TransfigurationOfMind|Transfiguration of Mind]",
+    "Transfiguration of Soul": "[TransfigurationOfSoul|Transfiguration of Soul]",
+    "Trigger Level 20 Starfall on Melee Critical Strike": "Trigger Level 20 [TriggeredStarfall|Starfall] on Melee Critical Strike",
+    "Trigger Level 20 Summon Spectral Tiger on Critical Strike": "Trigger Level 20 [SummonSpectralTiger|Summon Spectral Tiger] on Critical Strike",
+    "Trigger Level 20 Surging Torrent when you cast an Elemental Spell": "Trigger Level 20 [BrineTorrent|Surging Torrent] when you cast an Elemental Spell",
+    "Trigger Level 20 Ward Shatter when your Ward Breaks": "Trigger Level 20 [WardShatter|Ward Shatter] when your Ward Breaks",
+    "Trigger Level 30 Assassin's Mark on Attack Critical Strike against\na Rare or Unique Enemy and you have no Mark": "Trigger Level 30 [AssassinsMarkTriggeredAssassin|Assassin's Mark] on Attack Critical Strike against\na Rare or Unique Enemy and you have no Mark",
+    "Trigger Level 30 Lightning Bolt when you deal a Critical Strike": "Trigger Level 30 [LightningBolt|Lightning Bolt] when you deal a Critical Strike",
+    "Triggers Level 20 Primal Aegis when Allocated\nPrimal Aegis can take 75 Elemental Damage per Allocated Notable Passive Skill": "Triggers Level 20 [PrimalAegis|Primal Aegis] when Allocated\nPrimal Aegis can take 75 Elemental Damage per Allocated Notable Passive Skill",
+    "Triggers Level 20 Summon Bone Feeders when Allocated": "Triggers Level 20 [SummonAbyssalConstructs|Summon Bone Feeders] when Allocated",
+    "Triggers Level 20 Summon Triggerbots when Allocated": "Triggers Level 20 [SummonTriggerbots|Summon Triggerbots] when Allocated",
+    "When you Warcry, you and nearby Allies gain Onslaught for 4 seconds": "When you Warcry, you and nearby Allies gain [Onslaught] for 4 seconds",
+    "You have Onslaught if you've Summoned a Totem Recently": "You have [Onslaught] if you've Summoned a Totem Recently",
+    "You have Onslaught if you've changed Stance Recently": "You have [Onslaught] if you've changed Stance Recently"
+  }
+}

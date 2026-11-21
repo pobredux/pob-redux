@@ -1352,6 +1352,8 @@
   "tree_granted_unknown": "アイテム",
   "tree_click_removes": "クリックで {count} 個解除",
   "tree_click_to_remove": "クリックで解除",
+  "tree_keywords_hint": "Altを押し続けるとキーワードを読めます",
+  "tree_keywords_pin_hint": "キーワードをクリックすると固定できます",
   "tree_right_click_switch": " · 右クリックで切り替え",
   "tree_right_click_effect": " · 右クリックで効果を変更",
   "tree_point_cost": [

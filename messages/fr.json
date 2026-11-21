@@ -1352,6 +1352,8 @@
   "tree_granted_unknown": "un objet",
   "tree_click_removes": "cliquer retire {count}",
   "tree_click_to_remove": "cliquer pour retirer",
+  "tree_keywords_hint": "Maintenez Alt pour lire les mots-clés",
+  "tree_keywords_pin_hint": "Cliquez sur un mot-clé pour l’épingler",
   "tree_right_click_switch": " · clic droit pour changer",
   "tree_right_click_effect": " · clic droit pour changer l'effet",
   "tree_point_cost": [

@@ -117,6 +117,10 @@ export function readTreeJson(version: string): Promise<string> {
   return invoke<string>("read_tree_json", { version });
 }
 
+export function readTreeKeywords(version: string): Promise<string | null> {
+  return invoke<string | null>("read_tree_keywords", { version });
+}
+
 export function readTextFile(path: string): Promise<string> {
   return invoke<string>("read_text_file", { path });
 }

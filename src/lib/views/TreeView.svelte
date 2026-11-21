@@ -13,6 +13,8 @@
   import PobText from "$lib/components/PobText.svelte";
   import PobTooltip from "$lib/components/PobTooltip.svelte";
   import NodeTooltip from "$lib/components/NodeTooltip.svelte";
+  import KeywordPopup from "$lib/components/KeywordPopup.svelte";
+  import { loadKeywords, type TreeKeywords } from "$lib/tree/keywords";
   import { stripPobText } from "$lib/pobtext";
   import TimelessSearch from "$lib/components/TimelessSearch.svelte";
   import Kbd from "$lib/components/Kbd.svelte";
@@ -45,6 +47,17 @@
   let dpr = 1;
 
   let hover = $state<TNode | null>(null);
+  let keywords = $state<TreeKeywords | null>(null);
+  let keywordsFor = "";
+  let altHeld = false;
+  // While Alt is held the node tip stays put and takes the pointer, so its keyword links can be reached.
+  let held = $state<{ node: number; jewel: number; showJewel: boolean; top: number } | null>(null);
+  type KeywordPop = { key: number; id: string; x: number; y: number; up: boolean };
+  let peeks = $state<KeywordPop[]>([]);
+  let pins = $state<KeywordPop[]>([]);
+  let popKey = 0;
+  let peekTimer = 0;
+  let overCanvas = false;
   // The socketed jewel's item tooltip, shown under the node tip while its socket is hovered.
   let jewelTip = $state<Tooltip | null>(null);
   let tipEl = $state<HTMLDivElement | null>(null);
@@ -1803,11 +1816,55 @@
     drag = { sx: e.clientX, sy: e.clientY, cx0: cx, cy0: cy, moved: false, button: e.button };
   }
 
+  function tipTop() {
+    return Math.max(8, Math.min(mouse.y + 18, h - tipH - 8));
+  }
+
+  function holdTip() {
+    if (held || !hover || !keywords) return;
+    held = { ...tipPlacement, top: tipTop() };
+  }
+
+  function releaseTip() {
+    clearTimeout(peekTimer);
+    held = null;
+    peeks = [];
+    if (!overCanvas) setHover(null);
+  }
+
+  // Opens beside the whole tip or popup the link sits in, so the lines around the link stay reachable.
+  function popAt(id: string, el: HTMLElement): KeywordPop {
+    const word = el.getBoundingClientRect();
+    const around = (el.closest(".tip, .kwpop") ?? el).getBoundingClientRect();
+    const box = wrap!.getBoundingClientRect();
+    const above = around.top - box.top;
+    const up = above >= 220 || above > h - (around.bottom - box.top);
+    const x = Math.max(8, Math.min(word.left - box.left, w - 388));
+    return { key: ++popKey, id, x, y: up ? around.top - box.top - 6 : around.bottom - box.top + 6, up };
+  }
+
+  // A short delay, so crossing other links on the way to a popup does not replace it.
+  function peekKeyword(level: number, id: string, el: HTMLElement) {
+    clearTimeout(peekTimer);
+    if (!held || peeks[level]?.id === id) return;
+    peekTimer = window.setTimeout(() => {
+      if (held) peeks = [...peeks.slice(0, level), popAt(id, el)];
+    }, 120);
+  }
+
+  function cancelPeek() {
+    clearTimeout(peekTimer);
+  }
+
+  function pinKeyword(id: string, el: HTMLElement) {
+    if (!pins.some((p) => p.id === id)) pins = [...pins, popAt(id, el)];
+  }
+
   function setWeaponSet(mode: WeaponSetMode) {
     if (mode === ui.treeWeaponSet) return;
     ui.treeWeaponSet = mode;
     const n = hover;
-    if (n && !shiftDown) {
+    if (n && !shiftDown && !held) {
       hover = null;
       setHover(n);
     }
@@ -1815,7 +1872,7 @@
   }
 
   function setHover(n: TNode | null) {
-    if (n?.id === hover?.id) return;
+    if (held || n?.id === hover?.id) return;
     hover = n;
     hoverBlocked = null;
     if (shiftDown) {
@@ -1879,6 +1936,7 @@
       }
       return;
     }
+    overCanvas = true;
     const rect = canvas!.getBoundingClientRect();
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
@@ -1886,6 +1944,7 @@
     if (!index) return;
     const [wx, wy] = toWorld(sx, sy);
     setHover(index.nearest(wx, wy));
+    if (altHeld) holdTip();
   }
 
   async function extendTrace(n: TNode) {
@@ -1928,7 +1987,7 @@
     panning = false;
     if (wasClick) clearFocus();
     else invalidate();
-    if (!wasClick || !hover || build.busy > 0) return;
+    if (!wasClick || !hover || build.busy > 0 || held) return;
     const n = hover;
     if (button === 0 && shiftDown && trace.length) {
       const ids = trace;
@@ -1981,6 +2040,7 @@
   }
 
   function onLeave() {
+    overCanvas = false;
     setHover(null);
   }
 
@@ -1998,6 +2058,7 @@
     else if (e.key === "a") focusAscendancy();
     else if (e.key === "p") powerOn = !powerOn;
     else if (e.key === "r" && powerOn) showReport = !showReport;
+    else if (e.key === "Escape" && pins.length) pins = [];
     else if (e.key === "Escape" && focusNode !== null) clearFocus();
     else if (e.key === "d" && modKey(e)) ui.setTreeStatDiff(!ui.treeStatDiff);
     else if (e.key === "f" && !e.ctrlKey && !e.metaKey) fitAll();
@@ -2130,6 +2191,15 @@
     if (!v || (v === loadedVersion && art === loadedArt)) return;
     loadedVersion = v;
     loadedArt = art;
+    if (keywordsFor !== v) {
+      keywordsFor = v;
+      keywords = null;
+      pins = [];
+      releaseTip();
+      loadKeywords(v).then((k) => {
+        if (keywordsFor === v) keywords = k;
+      });
+    }
     (async () => {
       try {
         const [tree, radii, pstats] = await Promise.all([
@@ -2186,11 +2256,28 @@
     };
     window.addEventListener("keydown", onShift);
     window.addEventListener("keyup", onShift);
+    const onAlt = (e: KeyboardEvent) => {
+      if (e.key !== "Alt") return;
+      altHeld = e.type === "keydown";
+      if (altHeld) holdTip();
+      else releaseTip();
+    };
+    // Alt+Tab moves focus away before the keyup arrives.
+    const onBlur = () => {
+      altHeld = false;
+      releaseTip();
+    };
+    window.addEventListener("keydown", onAlt);
+    window.addEventListener("keyup", onAlt);
+    window.addEventListener("blur", onBlur);
     return () => {
       ro.disconnect();
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("keydown", onShift);
       window.removeEventListener("keyup", onShift);
+      window.removeEventListener("keydown", onAlt);
+      window.removeEventListener("keyup", onAlt);
+      window.removeEventListener("blur", onBlur);
       if (raf) cancelAnimationFrame(raf);
       if (spinTimer) clearTimeout(spinTimer);
       if (zoomTimer) clearTimeout(zoomTimer);
@@ -2499,11 +2586,19 @@
       {@const ov = overrides[String(hover.id)]}
       {@const socketed = hover.kind === "socket" ? sockets.get(hover.id) : undefined}
       {@const notCalc = new Set(build.tree?.unsupported?.[String(hover.id)] ?? [])}
+      {@const linked = keywords != null && [...(ov?.stats?.length ? ov.stats : hover.stats), ...(hover.masteryEffects ?? []).flatMap((e) => e.stats)].some((s) => keywords!.lines[s])}
+      {@const place = held ?? { ...tipPlacement, top: tipTop() }}
       <NodeTooltip
         node={hover}
         bind:el={tipEl}
-        left={tipPlacement.node}
-        top={Math.max(8, Math.min(mouse.y + 18, h - tipH - 8))}
+        left={place.node}
+        top={place.top}
+        {keywords}
+        interactive={held != null}
+        hint={linked ? (held ? m.tree_keywords_pin_hint() : m.tree_keywords_hint()) : null}
+        onpeek={(id, el) => peekKeyword(0, id, el)}
+        onleave={cancelPeek}
+        onpin={pinKeyword}
         override={ov}
         {socketed}
         grant={hoverGrant}
@@ -2531,10 +2626,36 @@
           {/if}
         {/snippet}
       </NodeTooltip>
-      {#if socketed && jewelTip && tipPlacement.showJewel}
+      {#if socketed && jewelTip && place.showJewel}
         {@const r = wrap?.getBoundingClientRect()}
-        <PobTooltip lines={jewelTip.lines} header={jewelTip.header} itemArt={jewelTip.itemArt} x={(r?.left ?? 0) + tipPlacement.jewel} y={(r?.top ?? 0) + Math.min(mouse.y + 18, h - 60)} width={jewelTipW} />
+        <PobTooltip lines={jewelTip.lines} header={jewelTip.header} itemArt={jewelTip.itemArt} x={(r?.left ?? 0) + place.jewel} y={(r?.top ?? 0) + (held ? held.top : Math.min(mouse.y + 18, h - 60))} width={jewelTipW} />
       {/if}
+    {/if}
+    {#if keywords}
+      {@const all = keywords.keywords}
+      {#each pins as p (p.key)}
+        <KeywordPopup
+          keyword={all[p.id]}
+          keywords={all}
+          x={p.x}
+          y={p.y}
+          area={{ w, h }}
+          up={p.up}
+          pinned
+          onpeek={(id, el) => peekKeyword(0, id, el)}
+          onleave={cancelPeek}
+          onpin={pinKeyword}
+          onclose={() => (pins = pins.filter((q) => q.key !== p.key))}
+          onmove={(x, y) => {
+            p.x = x;
+            p.y = y;
+            p.up = false;
+          }}
+        />
+      {/each}
+      {#each peeks as p, i (p.key)}
+        <KeywordPopup keyword={all[p.id]} keywords={all} x={p.x} y={p.y} area={{ w, h }} up={p.up} onpeek={(id, el) => peekKeyword(i + 1, id, el)} onleave={cancelPeek} onpin={pinKeyword} />
+      {/each}
     {/if}
   </div>
 </div>

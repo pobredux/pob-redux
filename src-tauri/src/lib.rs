@@ -437,6 +437,19 @@ fn read_tree_json(state: State<'_, AppState>, version: String) -> Result<String,
     std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))
 }
 
+#[tauri::command]
+fn read_tree_keywords(state: State<'_, AppState>, version: String) -> Result<Option<String>, String> {
+    if !version.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        return Err("invalid tree version".into());
+    }
+    let path = state.pob_root().join("TreeData").join(&version).join("keywords.json");
+    match std::fs::read_to_string(&path) {
+        Ok(text) => Ok(Some(text)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(format!("{}: {e}", path.display())),
+    }
+}
+
 #[derive(Serialize)]
 pub(crate) struct BuildEntry {
     pub(crate) path: String,
@@ -1329,6 +1342,7 @@ pub fn run() {
             tree_art::tree_art_retry,
             game_data::game_data_status,
             read_tree_json,
+            read_tree_keywords,
             list_builds,
             list_game_builds,
             read_text_file,

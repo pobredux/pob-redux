@@ -75,8 +75,12 @@ them. "Reset layout" restores the panels.
 - Mouse: click a node to allocate or remove it; hold Shift to trace a path; right-click an
   attribute node to pick Strength, Dexterity or Intelligence; right-click an allocated mastery to
   change its effect; hover a jewel socket to see its jewel and radius.
-- Keys: + and - zoom, h centres on the class, a on the ascendancy, f fits, / searches, Esc clears,
-  Ctrl+Z and Ctrl+Y undo and redo on this tab.
+- Keywords: underlined words in a node tooltip are the game's keywords. Hold Alt over a node to keep
+  its tooltip in place, then hover an underlined word to read the game's definition; definitions
+  link further. Click a word to pin its definition; pinned ones stay after Alt is released, drag
+  by their title, and close with their X or Esc. Only the current tree version of each game has them.
+- Keys: + and - zoom, h centres on the class, a on the ascendancy, f fits, / searches, Esc closes
+  pinned keywords, then clears; Ctrl+Z and Ctrl+Y undo and redo on this tab.
 - The toolbar can dock at the bottom. In PoE2, Settings, Appearance has "Ascendancy in the tree
   center".
 

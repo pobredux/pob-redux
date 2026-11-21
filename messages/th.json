@@ -1352,6 +1352,8 @@
   "tree_granted_unknown": "ไอเทม",
   "tree_click_removes": "คลิกเพื่อถอดออก {count} จุด",
   "tree_click_to_remove": "คลิกเพื่อถอดออก",
+  "tree_keywords_hint": "กด Alt ค้างไว้เพื่ออ่านคำสำคัญ",
+  "tree_keywords_pin_hint": "คลิกคำสำคัญเพื่อปักหมุด",
   "tree_right_click_switch": " · คลิกขวาเพื่อสลับ",
   "tree_right_click_effect": " · คลิกขวาเพื่อเปลี่ยนผล",
   "tree_point_cost": [
