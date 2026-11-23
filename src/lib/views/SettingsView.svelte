@@ -16,6 +16,9 @@
   import { tradeWindow } from "$lib/state/trade.svelte";
   import { chat } from "$lib/state/chat.svelte";
   import AssistantSettings from "$lib/components/AssistantSettings.svelte";
+  import SearchSelect from "$lib/components/SearchSelect.svelte";
+  import LocaleFlag from "$lib/components/LocaleFlag.svelte";
+  import Icon from "$lib/components/Icon.svelte";
   import { m } from "$lib/paraglide/messages";
 
   type Tone = "ok" | "warn" | "off" | undefined;
@@ -91,6 +94,14 @@
     ["system", m.settings_language_system({ language: LOCALE_LABEL[locale.system] })],
     ...LOCALES.map((l): [LocalePreference, string] => [l, LOCALE_LABEL[l]]),
   ]);
+  const languageNames = $derived.by(() => {
+    try {
+      return new Intl.DisplayNames([locale.current], { type: "language", languageDisplay: "standard" });
+    } catch {
+      return null;
+    }
+  });
+  const languageName = (tag: string) => languageNames?.of(tag);
   const scalePresets = [0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
   const scales = $derived(scalePresets.includes(ui.scale) ? scalePresets : [...scalePresets, ui.scale].sort((a, b) => a - b));
   const pct = (s: number) => `${Math.round(s * 100)}%`;
@@ -191,17 +202,24 @@
       {#if active === "appearance"}
         {@render head(m.settings_appearance(), m.settings_appearance_desc())}
         <div class="rows">
-          <label class="opt">
+          <div class="opt">
             <span>
               {m.settings_language()}
               <span class="hint">{m.settings_language_hint()}</span>
             </span>
-            <select class="select" value={locale.preference} onchange={(e) => locale.set((e.target as HTMLSelectElement).value as LocalePreference)}>
-              {#each languages as [id, label] (id)}
-                <option value={id}>{label}</option>
-              {/each}
-            </select>
-          </label>
+            <div class="langpick">
+              <SearchSelect
+                value={locale.preference}
+                options={languages.map(([value, label]) => ({ value, label, detail: value === "system" ? undefined : languageName(value) }))}
+                label={m.settings_language()}
+                onchange={(v) => locale.set(v as LocalePreference)}
+              >
+                {#snippet lead(id)}
+                  {#if id === "system"}<Icon name="globe" size={14} />{:else}<LocaleFlag locale={id} />{/if}
+                {/snippet}
+              </SearchSelect>
+            </div>
+          </div>
           <div class="opt themeopt">
             <span>
               {m.settings_theme()}
@@ -1010,6 +1028,9 @@
   .input.key,
   .input.addr {
     width: 180px;
+  }
+  .langpick {
+    width: 220px;
   }
   .input.model {
     width: 110px;

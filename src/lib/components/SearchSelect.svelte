@@ -2,15 +2,17 @@
   import { scrollHint } from "$lib/scroll-hint";
   import { tick, untrack, type Snippet } from "svelte";
   import { m } from "$lib/paraglide/messages";
+  import Icon from "$lib/components/Icon.svelte";
 
-  let { value, options, label, disabled = false, onchange, onhover, aside }: {
+  let { value, options, label, disabled = false, onchange, onhover, aside, lead }: {
     value: string;
-    options: { value: string; label: string; color?: string }[];
+    options: { value: string; label: string; color?: string; detail?: string }[];
     label: string;
     disabled?: boolean;
     onchange: (value: string) => void;
     onhover?: (value: string | null, anchor: HTMLElement | null) => void;
     aside?: Snippet<[string]>;
+    lead?: Snippet<[string]>;
   } = $props();
 
   const ASIDE_WIDTH = 260;
@@ -27,7 +29,7 @@
   // Every word has to appear somewhere, so "cold" finds "#% increased Cold Damage".
   const shown = $derived.by(() => {
     const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-    return words.length ? options.filter((o) => words.every((w) => o.label.toLowerCase().includes(w))) : options;
+    return words.length ? options.filter((o) => words.every((w) => `${o.label} ${o.detail ?? ""}`.toLowerCase().includes(w))) : options;
   });
 
   async function show(initial = "") {
@@ -106,6 +108,7 @@
   bind:this={trigger}
   type="button"
   class="select trigger"
+  class:led={lead}
   aria-label={label}
   aria-haspopup="listbox"
   aria-expanded={open}
@@ -115,7 +118,8 @@
   onclick={() => (open ? close() : show())}
   onkeydown={onTriggerKey}
 >
-  {current?.label ?? ""}
+  {#if lead && current}{@render lead(current.value)}{/if}
+  <span class="text">{current?.label ?? ""}</span>
 </button>
 {#if open}
   <div
@@ -147,14 +151,24 @@
             role="option"
             aria-selected={o.value === value}
             class="opt"
+            class:led={lead}
             class:hot={i === active}
             class:on={o.value === value}
             tabindex="-1"
             style:color={o.color}
             onpointerenter={() => hover(i)}
             onpointermove={() => (active = i)}
-            onclick={() => pick(o)}>{o.label}</button
+            onclick={() => pick(o)}
           >
+            {#if lead}
+              {@render lead(o.value)}
+              <span class="olabel">{o.label}</span>
+              {#if o.detail}<span class="detail">{o.detail}</span>{/if}
+              <span class="check">{#if o.value === value}<Icon name="check" size={11} />{/if}</span>
+            {:else}
+              {o.label}
+            {/if}
+          </button>
         {:else}
           <div class="none">{m.common_no_matches()}</div>
         {/each}
@@ -174,6 +188,37 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: var(--fs-xs);
+  }
+  .trigger.led,
+  .opt.led {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .trigger.led .text,
+  .opt.led .olabel {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .opt.led {
+    padding: 6px 8px;
+  }
+  .opt.led .olabel {
+    flex: 1;
+  }
+  .opt .detail {
+    color: var(--fg-2);
+    font-weight: 400;
+    white-space: nowrap;
+  }
+  .opt .check {
+    display: grid;
+    place-items: center;
+    width: 12px;
+    flex: none;
+    color: var(--fg-0);
   }
   .pop {
     position: fixed;
