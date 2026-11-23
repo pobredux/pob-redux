@@ -14,8 +14,9 @@ macOS.
   switching restarts the engine and asks first if the build has unsaved changes), the tabs,
   **Search** (Ctrl+K), the **Settings** gear (Ctrl+,), and the window buttons.
 - **Sidebar** on the left: build name (click to rename; a dot means unsaved, Ctrl+S saves), the
-  loadout dropdown and a menu with New, Copy, Rename and Delete loadout, the main-skill switcher,
-  then stat cards (Offence, Skill, Attributes, Resources, Mitigation, Resistances, Misc, Full DPS,
+  loadout dropdown and a menu with New, Copy, Rename and Delete loadout, the main-skill switcher
+  and, for a minion skill, the minion switcher (its last entry is **Manage spectres…** or **Manage
+  beasts…**), then stat cards (Offence, Skill, Attributes, Resources, Mitigation, Resistances, Misc, Full DPS,
   Warnings, Not counted). Cards collapse, can be dragged or moved with Alt+Up/Down, and "Reset
   order" restores them. Hover a stat for its breakdown; click to pin the breakdown.
 - **Status bar** at the bottom: engine state, worker count, PoB version, the MCP port when the
@@ -97,7 +98,11 @@ them. "Reset layout" restores the panels.
 The skill set dropdown and its actions, **New socket group** (Ctrl+N), **Copy group**, **Paste
 group**, default gem level and quality, a sort stat, and support filters. The left list holds the
 socket groups (set the main skill, reorder, right-click or Delete to remove). The right side edits
-the selected group: label, Full DPS and Enabled checkboxes, and the gem table. The gem adder
+the selected group: label, Full DPS and Enabled checkboxes, the skill's options (skill part, stages,
+minion, minion skill), and the gem table. For Raise Spectre (and Companion in PoE2) the **Minion**
+row has **Manage spectres…** (or **Manage beasts…**), which opens the build's library: add monsters
+from the left list, remove them from the right, then **Save**. A gem can only use a monster that is
+in the library. The gem adder
 ("Add a gem…") has a **DPS** button that scores each support for the selected skill. In PoE1 a row
 under the label sets **Socketed in** (the item the group's gems sit in, so they get its "socketed
 gems" modifiers), shows that item's sockets with an **Optimise sockets** button that recolours them

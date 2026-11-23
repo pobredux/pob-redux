@@ -11,6 +11,7 @@
   import Icon from "$lib/components/Icon.svelte";
   import ContextMenu from "$lib/components/ContextMenu.svelte";
   import MoreMenu, { type MenuItem } from "$lib/components/MoreMenu.svelte";
+  import MinionLibrary from "$lib/components/MinionLibrary.svelte";
   import { parsePobText, stripPobText } from "$lib/pobtext";
   import { slotLabel } from "$lib/pob-labels";
   import { isTextField } from "$lib/keys";
@@ -30,6 +31,7 @@
     });
   });
   const selSkill = $derived<SkillEntry | undefined>(sel?.skills.find((s) => s.index === (sel?.mainActiveSkill ?? 1)) ?? sel?.skills[0]);
+  let libraryKind = $state<"spectre" | "beast" | null>(null);
 
   let renamingSet = $state(false);
   let setDraft = $state("");
@@ -595,7 +597,26 @@
                 <input class="input sm num" type="number" min="1" value={selSkill.mineCount ?? ""} onchange={(e) => patchSkill({ mineCount: Number((e.target as HTMLInputElement).value) })} />
               </label>
             {/if}
-            {#if selSkill?.minions?.length}
+            {#if selSkill?.minionLibrary}
+              {@const kind = selSkill.minionLibrary}
+              <div class="fld">
+                <span class="label">{m.skills_minion()}</span>
+                <span class="fld-inline">
+                  {#if selSkill.minions?.length}
+                    <select class="select sm wide" aria-label={m.skills_minion()} value={selSkill.minion ?? selSkill.minions[0].id} onchange={(e) => patchSkill({ minionId: (e.target as HTMLSelectElement).value })}>
+                      {#each selSkill.minions as minion}
+                        <option value={minion.id}>{minion.name}</option>
+                      {/each}
+                    </select>
+                  {:else}
+                    <span class="dim small">{kind === "beast" ? m.sidebar_no_beasts() : m.sidebar_no_spectres()}</span>
+                  {/if}
+                  <button class="btn sm" title={kind === "beast" ? m.sidebar_manage_beasts_title() : m.sidebar_manage_spectres_title()} onclick={() => (libraryKind = kind)}>
+                    {kind === "beast" ? m.sidebar_manage_beasts() : m.sidebar_manage_spectres()}
+                  </button>
+                </span>
+              </div>
+            {:else if selSkill?.minions?.length}
               <label class="fld">
                 <span class="label">{m.skills_minion()}</span>
                 <select class="select sm wide" value={selSkill.minion ?? selSkill.minions[0].id} onchange={(e) => patchSkill({ minionId: (e.target as HTMLSelectElement).value })}>
@@ -746,6 +767,10 @@
 
   {#if menu}
     <ContextMenu x={menu.x} y={menu.y} label={m.skills_menu()} items={menu.items} onclose={() => (menu = null)} />
+  {/if}
+
+  {#if libraryKind}
+    <MinionLibrary kind={libraryKind} onclose={() => (libraryKind = null)} />
   {/if}
 
   {#if tip}
