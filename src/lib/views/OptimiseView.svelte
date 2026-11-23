@@ -7,6 +7,7 @@
   import { stripPobText } from "$lib/pobtext";
   import BuySimilarDialog from "$lib/components/BuySimilarDialog.svelte";
   import { m } from "$lib/paraglide/messages";
+  import { formatNumber } from "$lib/i18n/format";
 
   // Review: PoB's numbers plus the rule-based findings, refreshed with the build.
   let summary = $state<BuildSummary | null>(null);
@@ -65,11 +66,11 @@
   ]);
 
   const fmt = (v: number | undefined, pct = false) =>
-    v == null ? "" : pct ? `${Math.round(v)}%` : Math.round(v).toLocaleString();
+    v == null ? "" : pct ? `${Math.round(v)}%` : formatNumber(Math.round(v));
   const fmtDelta = (v: number | undefined, pct = false) => {
     if (v == null || Math.abs(v) < 0.5) return "";
     const n = Math.round(v);
-    return (n > 0 ? "+" : "") + (pct ? `${n}%` : n.toLocaleString());
+    return (n > 0 ? "+" : "") + (pct ? `${n}%` : formatNumber(n));
   };
   const deltaClass = (v: number | undefined) => (v == null || Math.abs(v) < 0.5 ? "" : v > 0 ? "up" : "down");
 
@@ -113,7 +114,7 @@
   });
 
   const unspent = $derived(summary ? Math.max(0, summary.pointsAvailableMax - summary.passivePointsSpent) : 0);
-  const fmtGain = (v: number) => (Math.abs(v) >= 100 ? Math.round(v).toLocaleString() : (Math.round(v * 10) / 10).toString());
+  const fmtGain = (v: number) => (Math.abs(v) >= 100 ? formatNumber(Math.round(v)) : (Math.round(v * 10) / 10).toString());
 </script>
 
 <div class="page">

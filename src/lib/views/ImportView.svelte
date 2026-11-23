@@ -52,6 +52,7 @@
   import Kbd from "$lib/components/Kbd.svelte";
   import { modKey } from "$lib/keys";
   import { m } from "$lib/paraglide/messages";
+  import { formatDate, formatDateTime } from "$lib/i18n/format";
 
   let { paths }: { paths: AppPaths | null } = $props();
 
@@ -853,10 +854,10 @@
 
   function fmtDate(t: number) {
     const d = new Date(t * 1000);
-    return d.toLocaleDateString(undefined, { year: "2-digit", month: "short", day: "numeric" });
+    return formatDate(d, { year: "2-digit", month: "short", day: "numeric" });
   }
   function fmtTime(ms: number) {
-    return new Date(ms).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    return formatDateTime(ms, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   }
 </script>
 

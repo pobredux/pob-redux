@@ -379,8 +379,8 @@
 }
 
 :root {
-  /* Geist carries Latin and Cyrillic only; the rest cover Japanese, Korean and Thai. */
-  --font-cjk: "Yu Gothic UI", "Meiryo", "Malgun Gothic", "Leelawadee UI", "Noto Sans CJK JP", "Noto Sans Thai", "Hiragino Sans", "Apple SD Gothic Neo", "Thonburi";
+  /* Yu Gothic UI draws shared glyphs such as 直, 骨, 次 in Japanese forms, so each CJK language gets its own chain below. */
+  --font-cjk: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Source Han Sans SC", "Noto Sans CJK SC", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans CJK KR", "Leelawadee UI", "Noto Sans Thai", "Thonburi", sans-serif;
   --font-ui: "Geist Variable", ui-sans-serif, system-ui, "Segoe UI", var(--font-cjk), sans-serif;
   --font-mono: "Geist Mono Variable", ui-monospace, "Cascadia Mono", Consolas, var(--font-cjk), monospace;
 
@@ -423,6 +423,43 @@ body {
 
 #app {
   height: 100%;
+}
+
+html:lang(ja) {
+  --font-cjk: "Yu Gothic UI", "Meiryo", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Noto Sans CJK JP", "Malgun Gothic", sans-serif;
+}
+
+html:lang(ko) {
+  --font-cjk: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", "Noto Sans CJK KR", "Yu Gothic UI", sans-serif;
+}
+
+html:lang(zh-TW),
+html:lang(zh-HK),
+html:lang(zh-MO) {
+  --font-cjk: "Microsoft JhengHei UI", "Microsoft JhengHei", "PingFang TC", "Hiragino Sans TC", "Noto Sans TC", "Source Han Sans TC", "Noto Sans CJK TC", sans-serif;
+}
+
+/* CJK glyphs fill the em box, so they need more leading than Latin at the same size. */
+html:lang(zh) body,
+html:lang(ja) body,
+html:lang(ko) body {
+  line-height: 1.5;
+}
+
+html:lang(zh) .label,
+html:lang(ja) .label,
+html:lang(ko) .label {
+  letter-spacing: 0.02em;
+}
+
+/* CJK has no spaces to break on, so a long label would widen a fixed column instead of wrapping. */
+html:lang(zh) .label,
+html:lang(zh) .dim,
+html:lang(ja) .label,
+html:lang(ja) .dim,
+html:lang(ko) .label,
+html:lang(ko) .dim {
+  overflow-wrap: break-word;
 }
 
 ::selection {
