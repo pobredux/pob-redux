@@ -20,6 +20,8 @@ export interface ProviderStatus {
   kind: ApiKind;
   base_url: string | null;
   default_base: string | null;
+  has_key: boolean;
+  key_hint: string | null;
   agent: AgentStatus | null;
   /** The command that signs the CLI in, run by the user in a terminal. */
   login: string | null;

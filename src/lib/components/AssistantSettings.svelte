@@ -5,10 +5,12 @@
   import { listen } from "@tauri-apps/api/event";
   import {
     cancelSignIn,
+    clearKey,
     installAgent,
     openTerminal,
     setAgentPath,
     setBase,
+    setKey,
     signInAgent,
     signOutAgent,
     uninstallAgent,
@@ -29,15 +31,25 @@
   let signingIn = $state<string | null>(null);
   let signInLink = $state<string | null>(null);
   let location = $state("");
+  let keyDraft = $state("");
   let filter = $state("");
   let copied = $state("");
   let now = $state(Date.now());
 
   const version = (v: string | null | undefined) => v?.match(/\d+(?:\.\d+)+/)?.[0] ?? "";
 
+  function host(url: string) {
+    try {
+      return new URL(url).host;
+    } catch {
+      return url;
+    }
+  }
+
   function status(x: ProviderStatus): { text: string; tone: "ok" | "warn" | "bad" } {
     const a = x.agent;
-    if (!a) return { text: m.assistant_status_local(), tone: "ok" };
+    if (!a && !x.base_url) return { text: m.assistant_status_no_address(), tone: "warn" };
+    if (!a) return { text: x.default_base ? m.assistant_status_local() : host(x.base_url!), tone: "ok" };
     if (!a.installed) return { text: m.assistant_status_missing(), tone: "bad" };
     if (a.error) return { text: m.assistant_status_broken(), tone: "bad" };
     if (a.signed_in === false) return { text: m.assistant_status_signed_out(), tone: "warn" };
@@ -63,6 +75,7 @@
     selected = id;
     filter = "";
     location = "";
+    keyDraft = "";
     error = null;
     const x = chat.providers.find((y) => y.id === id);
     if (x?.ready) void chat.loadCatalog(id);
@@ -157,9 +170,26 @@
     void run(async () => {
       if (x.agent) await setAgentPath(x.id, location);
       else await setBase(x.id, location);
-      await chat.refreshProviders(!!x.agent, x.agent ? x.id : undefined);
-      if (x.id === chat.provider) await chat.refreshModels();
       location = "";
+      if (x.agent) await chat.refreshProviders(true, x.id);
+      else await reconnect(x.id);
+      if (x.id === chat.provider) await chat.refreshModels();
+    });
+  }
+
+  async function reconnect(id: string) {
+    await chat.refreshProviders();
+    if (chat.providers.find((y) => y.id === id)?.ready) void chat.loadCatalog(id, true);
+    else delete chat.catalog[id];
+  }
+
+  function saveKey(x: ProviderStatus, remove = false) {
+    void run(async () => {
+      if (remove) await clearKey(x.id);
+      else await setKey(x.id, keyDraft);
+      keyDraft = "";
+      await reconnect(x.id);
+      if (x.id === chat.provider) await chat.refreshModels();
     });
   }
 
@@ -292,13 +322,41 @@
         <div class="opt">
           <span>
             {p.agent ? m.assistant_path() : m.assistant_address()}
-            <span class="hint">{p.agent ? m.provider_path_hint({ name: p.id }) : m.provider_base_hint({ base: p.default_base ?? "" })}</span>
+            <span class="hint">{p.agent ? m.provider_path_hint({ name: p.id }) : p.default_base ? m.provider_base_hint({ base: p.default_base }) : m.provider_server_hint()}</span>
           </span>
           <div class="acts">
-            <input class="input mono addr" bind:value={location} placeholder={p.agent ? m.provider_path_placeholder() : (p.base_url ?? "")} />
-            <button class="btn sm ghost" disabled={!location.trim() && !!p.agent} onclick={() => saveLocation(p)}>{m.common_save()}</button>
+            <input
+              class="input mono addr"
+              bind:value={location}
+              placeholder={p.agent ? m.provider_path_placeholder() : (p.base_url ?? "http://localhost:4000/v1")}
+              aria-label={p.agent ? m.assistant_path() : m.assistant_address()}
+              onkeydown={(e) => e.key === "Enter" && (location.trim() || !p.agent) && saveLocation(p)}
+            />
+            <button class={["btn", "sm", { ghost: p.agent || p.base_url }]} disabled={!location.trim() && (!!p.agent || !p.base_url)} onclick={() => saveLocation(p)}>{m.common_save()}</button>
           </div>
         </div>
+        {#if !p.agent}
+          <div class="opt">
+            <span>
+              {m.experimental_key()}
+              <span class={["hint", { mono: p.has_key }]}>{p.has_key ? `···${p.key_hint}` : m.provider_key_optional()}</span>
+            </span>
+            <div class="acts">
+              <input
+                class="input addr"
+                type="password"
+                bind:value={keyDraft}
+                placeholder={p.has_key ? m.provider_replace_key() : m.provider_paste_key()}
+                aria-label={m.experimental_key()}
+                onkeydown={(e) => e.key === "Enter" && keyDraft.trim() && saveKey(p)}
+              />
+              <button class="btn sm ghost" disabled={!keyDraft.trim()} onclick={() => saveKey(p)}>{m.common_save()}</button>
+              {#if p.has_key}
+                <button class="btn sm ghost" onclick={() => saveKey(p, true)}>{m.provider_remove()}</button>
+              {/if}
+            </div>
+          </div>
+        {/if}
       </div>
 
       <h3 class="sub">

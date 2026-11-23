@@ -275,6 +275,9 @@ function explainError(e: unknown, providerLabel: string): string {
   if (t.includes("fetch failed") || t.includes("connection") || t.includes("econnrefused")) {
     return `Could not reach ${providerLabel}. Check that it is running.`;
   }
+  if (t.includes("statuscode: 401") || t.includes("statuscode: 403")) {
+    return `${providerLabel} refused the request. Check the API key in Settings > Assistant.`;
+  }
   return String(e);
 }
 

@@ -1,14 +1,15 @@
 //! Providers, keys, and the request proxy for the in-app chat panel.
 //!
-//! Claude and Codex run through the user's own CLI (`agent`). Local Ollama is
-//! the one HTTP provider: the webview asks for a stream by provider id and
-//! path, and this module makes the request from Rust and pushes the response
-//! back in chunks.
+//! Claude and Codex run through the user's own CLI (`agent`). Ollama and any
+//! OpenAI-compatible server are the HTTP providers: the webview asks for a
+//! stream by provider id and path, and this module makes the request from Rust
+//! and pushes the response back in chunks.
 //!
-//! The credential store here holds the decision backends' keys and the
-//! pathofexile.com sign-in. They live in the OS credential store and are
-//! never sent to the webview. On Windows, a key that Credential Manager
-//! refuses goes to a DPAPI-encrypted file instead (`key_file`).
+//! The credential store here holds the decision backends' keys, the HTTP
+//! providers' optional keys and the pathofexile.com sign-in. They live in the
+//! OS credential store and are never sent to the webview. On Windows, a key
+//! that Credential Manager refuses goes to a DPAPI-encrypted file instead
+//! (`key_file`).
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -35,21 +36,29 @@ pub enum ApiKind {
 pub struct Provider {
     pub id: &'static str,
     pub label: &'static str,
-    pub default_base: &'static str,
+    /// None: the user has to give the address.
+    pub default_base: Option<&'static str>,
 }
 
-pub const PROVIDERS: &[Provider] = &[Provider {
-    id: "ollama-local",
-    label: "Ollama (Local)",
-    default_base: "http://localhost:11434/v1",
-}];
+pub const PROVIDERS: &[Provider] = &[
+    Provider {
+        id: "ollama-local",
+        label: "Ollama (Local)",
+        default_base: Some("http://localhost:11434/v1"),
+    },
+    Provider {
+        id: "openai-compatible",
+        label: "OpenAI-compatible",
+        default_base: None,
+    },
+];
 
 fn find(id: &str) -> Result<&'static Provider, String> {
     PROVIDERS.iter().find(|p| p.id == id).ok_or_else(|| format!("unknown provider {id}"))
 }
 
-/// Base URL overrides, for Ollama on another machine. Stored app-side (not
-/// secret); keys are kept apart from it.
+/// Base URLs the user set. Stored app-side (not secret); keys are kept apart
+/// from it.
 #[derive(Default)]
 pub struct AiState {
     bases: Mutex<HashMap<String, String>>,
@@ -78,18 +87,29 @@ fn write_bases(app: &AppHandle, bases: &HashMap<String, String>) -> Result<(), S
         .map_err(|e| e.to_string())
 }
 
-fn base_url(app: &AppHandle, p: &Provider) -> String {
+fn base_url(app: &AppHandle, p: &Provider) -> Option<String> {
     app.state::<AiState>()
         .bases
         .lock()
         .unwrap()
         .get(p.id)
         .cloned()
-        .unwrap_or_else(|| p.default_base.to_string())
+        .or_else(|| p.default_base.map(String::from))
+}
+
+fn require_base(app: &AppHandle, p: &Provider) -> Result<String, String> {
+    base_url(app, p).ok_or_else(|| format!("{} has no address yet. Set it in Settings > Assistant.", p.label))
+}
+
+fn with_key(app: &AppHandle, p: &Provider, req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+    match stored_key(app, p.id) {
+        Some(key) => req.bearer_auth(key),
+        None => req,
+    }
 }
 
 fn known(id: &str) -> Result<(), String> {
-    if crate::decide::BACKENDS.iter().any(|b| b.key_id == id) {
+    if crate::decide::BACKENDS.iter().any(|b| b.key_id == id) || PROVIDERS.iter().any(|p| p.id == id) {
         Ok(())
     } else {
         Err(format!("unknown key slot {id}"))
@@ -107,7 +127,7 @@ pub(crate) fn stored_key(app: &AppHandle, id: &str) -> Option<String> {
 }
 
 pub(crate) fn stored_keys(app: &AppHandle) -> Vec<String> {
-    let mut ids: Vec<&str> = crate::decide::BACKENDS.iter().map(|b| b.key_id).collect();
+    let mut ids: Vec<&str> = crate::decide::BACKENDS.iter().map(|b| b.key_id).chain(PROVIDERS.iter().map(|p| p.id)).collect();
     ids.sort_unstable();
     ids.dedup();
     ids.into_iter().filter_map(|id| stored_key(app, id)).collect()
@@ -196,6 +216,8 @@ pub struct ProviderStatus {
     /// HTTP providers only.
     base_url: Option<String>,
     default_base: Option<&'static str>,
+    has_key: bool,
+    key_hint: Option<String>,
     /// CLI providers only.
     agent: Option<AgentStatus>,
     login: Option<&'static str>,
@@ -221,6 +243,8 @@ pub async fn ai_providers(app: AppHandle, refresh: Option<bool>, only: Option<St
             kind: ApiKind::Agent,
             base_url: None,
             default_base: None,
+            has_key: false,
+            key_hint: None,
             ready: status.installed && status.error.is_none() && status.signed_in != Some(false),
             agent: Some(status),
             login: cli.login(),
@@ -229,18 +253,24 @@ pub async fn ai_providers(app: AppHandle, refresh: Option<bool>, only: Option<St
             install_command: cli.install_command(),
         }
     });
-    let http = PROVIDERS.iter().map(|p| ProviderStatus {
-        id: p.id,
-        label: p.label,
-        kind: ApiKind::OpenAiCompatible,
-        base_url: Some(base_url(&app, p)),
-        default_base: Some(p.default_base),
-        agent: None,
-        login: None,
-        install: None,
-        download: None,
-        install_command: None,
-        ready: true,
+    let http = PROVIDERS.iter().map(|p| {
+        let base = base_url(&app, p);
+        let key = stored_key(&app, p.id);
+        ProviderStatus {
+            id: p.id,
+            label: p.label,
+            kind: ApiKind::OpenAiCompatible,
+            ready: base.is_some(),
+            base_url: base,
+            default_base: p.default_base,
+            has_key: key.is_some(),
+            key_hint: key.as_deref().map(hint),
+            agent: None,
+            login: None,
+            install: None,
+            download: None,
+            install_command: None,
+        }
     });
     agents.chain(http).collect()
 }
@@ -320,7 +350,7 @@ pub fn ai_base_set(app: AppHandle, provider: String, base_url: String) -> Result
     let state = app.state::<AiState>();
     let snapshot = {
         let mut bases = state.bases.lock().unwrap();
-        if url.is_empty() || url == p.default_base {
+        if url.is_empty() || Some(url.as_str()) == p.default_base {
             bases.remove(p.id);
         } else {
             bases.insert(p.id.to_string(), url);
@@ -385,17 +415,18 @@ fn effort_capable(id: &str) -> bool {
 pub async fn ai_warm_model(app: AppHandle, provider: String, model: String) -> Result<u64, String> {
     let p = find(&provider)?;
     // The native API lives beside the OpenAI-compatible one, without /v1.
-    let base = base_url(&app, p);
+    let base = require_base(&app, p)?;
     let root = base.trim_end_matches('/').trim_end_matches("/v1").to_string();
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(180))
         .build()
         .map_err(|e| e.to_string())?;
     let t0 = std::time::Instant::now();
-    let res = client
+    let req = client
         .post(format!("{root}/api/generate"))
         .header("content-type", "application/json")
-        .body(serde_json::json!({ "model": model, "keep_alive": "30m" }).to_string())
+        .body(serde_json::json!({ "model": model, "keep_alive": "30m" }).to_string());
+    let res = with_key(&app, p, req)
         .send()
         .await
         .map_err(|e| format!("could not reach Ollama: {e}"))?;
@@ -412,14 +443,16 @@ pub async fn ai_models(app: AppHandle, provider: String) -> Result<Vec<ModelInfo
         return agent::models(&app, cli).await;
     }
     let p = find(&provider)?;
-    let base = base_url(&app, p);
+    let base = require_base(&app, p)?;
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(20))
         .build()
         .map_err(|e| e.to_string())?;
-    let res = client.get(format!("{base}/models")).send().await.map_err(|e| e.to_string())?;
-    if !res.status().is_success() {
-        return Err(format!("{} returned {}", p.label, res.status()));
+    let res = with_key(&app, p, client.get(format!("{base}/models"))).send().await.map_err(|e| e.to_string())?;
+    let status = res.status();
+    if !status.is_success() {
+        let fix = if matches!(status.as_u16(), 401 | 403) { " Check the API key in Settings > Assistant." } else { "" };
+        return Err(format!("{} returned {status}.{fix}", p.label));
     }
     let text = res.text().await.map_err(|e| e.to_string())?;
     let list: ModelList =
@@ -474,7 +507,7 @@ pub async fn ai_chat_stream(
     if !path.starts_with('/') || path.starts_with("//") || path.contains("://") || path.contains("..") {
         return Err(format!("bad path {path}"));
     }
-    let base = base_url(&app, p);
+    let base = require_base(&app, p)?;
 
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(600))
@@ -485,7 +518,7 @@ pub async fn ai_chat_stream(
     // carries the version segment. Collapse it if both do: the request would
     // otherwise 404 with nothing to say why.
     let url = format!("{base}{path}").replace("/v1/v1/", "/v1/");
-    let mut req = client.post(url).body(body);
+    let mut req = with_key(&app, p, client.post(url).body(body));
     for (name, value) in headers {
         if FORWARDABLE.contains(&name.to_ascii_lowercase().as_str()) {
             req = req.header(name, value);
@@ -540,28 +573,32 @@ mod tests {
     #[test]
     fn only_known_providers_resolve() {
         assert!(find("ollama-local").is_ok());
+        assert!(find("openai-compatible").is_ok());
         assert!(find("anthropic").is_err());
         assert!(find("evil.example.com").is_err());
         assert!(find("").is_err());
     }
 
     #[test]
-    fn every_provider_has_an_absolute_default_base() {
+    fn every_default_base_is_absolute() {
         for p in PROVIDERS {
-            assert!(
-                p.default_base.starts_with("http://") || p.default_base.starts_with("https://"),
-                "{} has a relative base",
-                p.id
-            );
-            assert!(!p.default_base.ends_with('/'), "{} base has a trailing slash", p.id);
+            let Some(base) = p.default_base else { continue };
+            assert!(base.starts_with("http://") || base.starts_with("https://"), "{} has a relative base", p.id);
+            assert!(!base.ends_with('/'), "{} base has a trailing slash", p.id);
         }
     }
 
     #[test]
-    fn key_slots_are_the_decision_backends_only() {
+    fn key_slots_are_the_decision_backends_and_http_providers() {
         assert!(super::known("typesafe").is_ok());
         assert!(super::known("openrouter").is_ok());
+        assert!(super::known("ollama-local").is_ok());
+        assert!(super::known("openai-compatible").is_ok());
         assert!(super::known("anthropic").is_err());
+        assert!(super::known("claude").is_err());
+        for p in PROVIDERS {
+            assert!(!crate::decide::BACKENDS.iter().any(|b| b.key_id == p.id), "{} shares a key slot with a decision backend", p.id);
+        }
     }
 
     #[test]

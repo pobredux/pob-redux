@@ -173,8 +173,10 @@ into this build; the Items pane has **Buy similar** and **Use theirs** per slot.
 - **Numbers and defaults**: thousands and decimal separators, default gem quality, default level
   for new builds, default affix roll.
 - **Assistant**: choose and set up the provider (Claude Code, Codex, GitHub Copilot, Cursor, Grok,
-  Kimi Code, OpenCode, Antigravity, or Ollama on this computer), sign in, pick models, and "Ask
-  before each change".
+  Kimi Code, OpenCode, Antigravity, Ollama on this computer, or OpenAI-compatible for a server such
+  as LiteLLM, llama-swap or LM Studio), sign in, pick models, and "Ask before each change". Ollama
+  and OpenAI-compatible have an Address and an optional API key; OpenAI-compatible needs an Address
+  (the base URL, usually ending in /v1) before it lists models.
 - **MCP server**: "Enable MCP server" and the port, with the address, token and ready-made commands
   for connecting a client.
 - **Experimental**: decision models, voice input (speech is turned into text on this computer),

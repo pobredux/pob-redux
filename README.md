@@ -89,7 +89,8 @@ An optional chat panel that answers questions about the open build and can chang
 both games; Path of Exile 1 support is new and marked beta. Open it from the chat icon in the status bar or with Ctrl+L. It runs
 through a coding agent on your computer, signed in to your own plan: Claude Code, Codex, GitHub Copilot, Cursor,
 Grok, Kimi Code, OpenCode or Google Antigravity (which the app downloads for you). It can also use a model
-you run with Ollama.
+you run with Ollama, or any OpenAI-compatible server such as LiteLLM, llama-swap or LM Studio, with an optional
+API key.
 
 Sign in once with the agent's own command (for example `claude auth login` or `codex login`); Antigravity signs in
 with Google from Settings > Assistant. The app never sees
