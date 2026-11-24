@@ -1,14 +1,25 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { build } from "$lib/state/build.svelte";
 import { game } from "$lib/state/game.svelte";
+import { locale } from "$lib/state/locale.svelte";
 import { m } from "$lib/paraglide/messages";
 
 const KEY = "pob-redux:voice";
+const DEFAULT_MODEL = "base.en";
+
+export interface VoiceModel {
+  id: string;
+  bytes: number;
+  english: boolean;
+  installed: boolean;
+}
 
 interface VoiceStatus {
-  installed: boolean;
-  bytes: number;
+  models: VoiceModel[];
+  languages: string[];
 }
+
+export const appSpeech = () => locale.current.split("-")[0].toLowerCase();
 
 /** Names from the open build, so Whisper spells them the way PoB does. */
 function vocabulary() {
@@ -28,6 +39,9 @@ function vocabulary() {
 
 class VoiceStore {
   enabled = $state(false);
+  model = $state(DEFAULT_MODEL);
+  /** A Whisper language code or "auto"; null follows the interface language. */
+  language = $state<string | null>(null);
   status = $state<VoiceStatus | null>(null);
   phase = $state<"idle" | "recording" | "transcribing">("idle");
   level = $state(0);
@@ -36,28 +50,58 @@ class VoiceStore {
   private started = false;
   private opening: Promise<unknown> = Promise.resolve();
 
+  get current(): VoiceModel | undefined {
+    return this.status?.models.find((x) => x.id === this.model);
+  }
+
   get ready() {
-    return this.enabled && !!this.status?.installed;
+    return this.enabled && !!this.current?.installed;
+  }
+
+  get speech() {
+    if (this.current?.english) return "en";
+    const lang = this.language ?? appSpeech();
+    return lang === "auto" || this.status?.languages.includes(lang) ? lang : "auto";
   }
 
   async init() {
     if (this.started) return;
     this.started = true;
     try {
-      this.enabled = JSON.parse(localStorage.getItem(KEY) ?? "{}").enabled === true;
+      const saved = JSON.parse(localStorage.getItem(KEY) ?? "{}");
+      this.enabled = saved.enabled === true;
+      if (typeof saved.model === "string") this.model = saved.model;
+      if (typeof saved.language === "string") this.language = saved.language;
     } catch {}
     await this.refresh();
+    if (this.status && !this.current) this.model = DEFAULT_MODEL;
   }
 
   async refresh() {
     this.status = await invoke<VoiceStatus>("voice_status").catch(() => null);
   }
 
+  private persist() {
+    try {
+      localStorage.setItem(KEY, JSON.stringify({ enabled: this.enabled, model: this.model, language: this.language }));
+    } catch {}
+  }
+
   setEnabled(on: boolean) {
     this.enabled = on;
-    try {
-      localStorage.setItem(KEY, JSON.stringify({ enabled: on }));
-    } catch {}
+    this.persist();
+  }
+
+  setModel(id: string) {
+    if (this.phase !== "idle" || this.progress !== null) return;
+    this.error = null;
+    this.model = id;
+    this.persist();
+  }
+
+  setLanguage(code: string | null) {
+    this.language = code;
+    this.persist();
   }
 
   async install() {
@@ -66,7 +110,7 @@ class VoiceStore {
     const channel = new Channel<{ done: number; total: number }>();
     channel.onmessage = (p) => (this.progress = Math.floor((p.done * 100) / p.total));
     try {
-      await invoke("voice_install", { onProgress: channel });
+      await invoke("voice_install", { model: this.model, onProgress: channel });
     } catch (e) {
       this.error = String(e);
     } finally {
@@ -78,7 +122,7 @@ class VoiceStore {
   async remove() {
     this.error = null;
     try {
-      await invoke("voice_remove");
+      await invoke("voice_remove", { model: this.model });
     } catch (e) {
       this.error = String(e);
     }
@@ -93,7 +137,7 @@ class VoiceStore {
     channel.onmessage = (l) => {
       if (this.phase === "recording") this.level = l;
     };
-    this.opening = invoke("voice_start", { onLevel: channel }).catch((e) => {
+    this.opening = invoke("voice_start", { model: this.model, onLevel: channel }).catch((e) => {
       this.phase = "idle";
       this.error = String(e);
     });
@@ -108,7 +152,7 @@ class VoiceStore {
     this.phase = "transcribing";
     this.level = 0;
     try {
-      const text = await invoke<string>("voice_stop", { prompt: vocabulary() });
+      const text = await invoke<string>("voice_stop", { model: this.model, language: this.speech, prompt: vocabulary() });
       if (!text) this.error = m.chat_voice_none();
       return text;
     } catch (e) {

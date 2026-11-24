@@ -12,7 +12,7 @@
   import { exportDiagnostics, openUrl, revealLogs } from "$lib/engine.svelte";
   import { locale, LOCALES, LOCALE_LABEL, type LocalePreference } from "$lib/state/locale.svelte";
   import { decider } from "$lib/state/decide.svelte";
-  import { voice } from "$lib/state/voice.svelte";
+  import { appSpeech, voice, type VoiceModel } from "$lib/state/voice.svelte";
   import { tradeWindow } from "$lib/state/trade.svelte";
   import { chat } from "$lib/state/chat.svelte";
   import AssistantSettings from "$lib/components/AssistantSettings.svelte";
@@ -102,6 +102,24 @@
     }
   });
   const languageName = (tag: string) => languageNames?.of(tag);
+  const WHISPER_NAMES: Record<string, string> = { tiny: "Tiny", base: "Base", small: "Small", "large-v3-turbo": "Large v3 Turbo" };
+  const modelSize = (x: VoiceModel | undefined) => m.voice_size({ size: Math.round((x?.bytes ?? 0) / 1e6) });
+  const modelLabel = (x: VoiceModel) =>
+    [`${WHISPER_NAMES[x.id.replace(/\.en$/, "")] ?? x.id}, ${x.english ? m.voice_english_only() : m.voice_any_language()}`, modelSize(x), x.installed ? m.voice_downloaded() : ""]
+      .filter(Boolean)
+      .join(" · ");
+  const speechLanguages = $derived([
+    { value: "auto", label: m.voice_language_auto() },
+    ...(voice.status?.languages ?? [])
+      .map((code) => {
+        let label = code;
+        try {
+          label = languageName(code) ?? code;
+        } catch {}
+        return { value: code, label, detail: code };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label, locale.current)),
+  ]);
   const scalePresets = [0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
   const scales = $derived(scalePresets.includes(ui.scale) ? scalePresets : [...scalePresets, ui.scale].sort((a, b) => a - b));
   const pct = (s: number) => `${Math.round(s * 100)}%`;
@@ -601,17 +619,42 @@
             <span>
               {m.voice_model()}
               <span class="hint">
-                {voice.status?.installed ? m.voice_model_ready() : m.voice_model_missing({ size: Math.round((voice.status?.bytes ?? 0) / 1e6) })}
+                {m.voice_model_hint()}
+                {voice.current?.installed ? m.voice_model_downloaded() : m.voice_model_download({ size: modelSize(voice.current) })}
               </span>
             </span>
-            {#if voice.progress !== null}
-              <span class="dim mono">{m.voice_downloading({ pct: voice.progress })}</span>
-            {:else if voice.status?.installed}
-              <button class="btn sm ghost" disabled={voice.phase !== "idle"} onclick={() => voice.remove()}>{m.provider_remove()}</button>
-            {:else}
-              <button class="btn sm" onclick={() => voice.install()}>{m.voice_download()}</button>
-            {/if}
+            <div class="row">
+              <select
+                class="select"
+                value={voice.model}
+                disabled={voice.phase !== "idle" || voice.progress !== null}
+                aria-label={m.voice_model()}
+                onchange={(e) => voice.setModel((e.target as HTMLSelectElement).value)}
+              >
+                {#each voice.status?.models ?? [] as x (x.id)}
+                  <option value={x.id}>{modelLabel(x)}</option>
+                {/each}
+              </select>
+              {#if voice.progress !== null}
+                <span class="dim mono">{m.voice_downloading({ pct: voice.progress })}</span>
+              {:else if voice.current?.installed}
+                <button class="btn sm ghost" disabled={voice.phase !== "idle"} onclick={() => voice.remove()}>{m.provider_remove()}</button>
+              {:else}
+                <button class="btn sm" disabled={!voice.current} onclick={() => voice.install()}>{m.voice_download()}</button>
+              {/if}
+            </div>
           </div>
+          {#if voice.current && !voice.current.english}
+            <div class="opt">
+              <span>
+                {m.voice_language()}
+                <span class="hint">{m.voice_language_hint()}</span>
+              </span>
+              <div class="langpick">
+                <SearchSelect value={voice.language ?? appSpeech()} options={speechLanguages} label={m.voice_language()} onchange={(v) => voice.setLanguage(v)} />
+              </div>
+            </div>
+          {/if}
           {#if voice.error}
             <div class="opt err mono">{voice.error}</div>
           {/if}

@@ -184,7 +184,8 @@ into this build; the Items pane has **Buy similar** and **Use theirs** per slot.
   (the base URL, usually ending in /v1) before it lists models.
 - **MCP server**: "Enable MCP server" and the port, with the address, token and ready-made commands
   for connecting a client.
-- **Experimental**: decision models, voice input (speech is turned into text on this computer),
+- **Experimental**: decision models, voice input (speech is turned into text on this computer, with
+  a choice of Whisper speech models and, for the multilingual ones, the language you speak),
   "Open trade searches in the app", and the Squire panel.
 - **Updates**: version, **Check for updates**, then Update and Restart. The app also checks once
   shortly after start.

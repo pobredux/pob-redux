@@ -14,18 +14,67 @@ use tauri::{AppHandle, Manager, State};
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
 struct Model {
+    id: &'static str,
     file: &'static str,
-    url: &'static str,
     bytes: u64,
     sha256: &'static str,
+    english: bool,
 }
 
-const MODEL: Model = Model {
-    file: "ggml-base.en.bin",
-    url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base.en.bin",
-    bytes: 147_964_211,
-    sha256: "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002",
-};
+const MODELS: &[Model] = &[
+    Model {
+        id: "tiny.en",
+        file: "ggml-tiny.en.bin",
+        bytes: 77_704_715,
+        sha256: "921e4cf8686fdd993dcd081a5da5b6c365bfde1162e72b08d75ac75289920b1f",
+        english: true,
+    },
+    Model {
+        id: "base.en",
+        file: "ggml-base.en.bin",
+        bytes: 147_964_211,
+        sha256: "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002",
+        english: true,
+    },
+    Model {
+        id: "small.en",
+        file: "ggml-small.en.bin",
+        bytes: 487_614_201,
+        sha256: "c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d",
+        english: true,
+    },
+    Model {
+        id: "base",
+        file: "ggml-base.bin",
+        bytes: 147_951_465,
+        sha256: "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
+        english: false,
+    },
+    Model {
+        id: "small",
+        file: "ggml-small.bin",
+        bytes: 487_601_967,
+        sha256: "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
+        english: false,
+    },
+    Model {
+        id: "large-v3-turbo",
+        file: "ggml-large-v3-turbo-q5_0.bin",
+        bytes: 574_041_195,
+        sha256: "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
+        english: false,
+    },
+];
+
+const MODEL_BASE: &str = "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1";
+
+fn find(id: &str) -> Result<&'static Model, String> {
+    MODELS.iter().find(|m| m.id == id).ok_or_else(|| format!("Unknown speech model: {id}"))
+}
+
+fn languages() -> impl Iterator<Item = &'static str> {
+    (0..=whisper_rs::get_lang_max_id()).filter_map(whisper_rs::get_lang_str)
+}
 
 const RATE: usize = 16_000;
 const MAX_SECONDS: usize = 120;
@@ -52,7 +101,7 @@ impl Recording {
 #[derive(Default)]
 pub struct VoiceState {
     recording: Mutex<Option<Recording>>,
-    model: Mutex<Option<Arc<WhisperContext>>>,
+    model: Mutex<Option<(&'static str, Arc<WhisperContext>)>>,
 }
 
 impl VoiceState {
@@ -63,9 +112,17 @@ impl VoiceState {
 }
 
 #[derive(Serialize)]
-pub struct VoiceStatus {
-    installed: bool,
+pub struct ModelStatus {
+    id: &'static str,
     bytes: u64,
+    english: bool,
+    installed: bool,
+}
+
+#[derive(Serialize)]
+pub struct VoiceStatus {
+    models: Vec<ModelStatus>,
+    languages: Vec<&'static str>,
 }
 
 #[derive(Serialize, Clone)]
@@ -74,22 +131,29 @@ pub struct Progress {
     total: u64,
 }
 
-fn model_path(app: &AppHandle) -> Result<PathBuf, String> {
-    Ok(app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("models").join(MODEL.file))
+fn model_path(app: &AppHandle, model: &Model) -> Result<PathBuf, String> {
+    Ok(app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("models").join(model.file))
 }
 
-fn installed(app: &AppHandle) -> bool {
-    model_path(app).ok().and_then(|p| std::fs::metadata(p).ok()).is_some_and(|m| m.len() == MODEL.bytes)
+fn installed(app: &AppHandle, model: &Model) -> bool {
+    model_path(app, model).ok().and_then(|p| std::fs::metadata(p).ok()).is_some_and(|m| m.len() == model.bytes)
 }
 
 #[tauri::command]
 pub fn voice_status(app: AppHandle) -> VoiceStatus {
-    VoiceStatus { installed: installed(&app), bytes: MODEL.bytes }
+    VoiceStatus {
+        models: MODELS
+            .iter()
+            .map(|m| ModelStatus { id: m.id, bytes: m.bytes, english: m.english, installed: installed(&app, m) })
+            .collect(),
+        languages: languages().collect(),
+    }
 }
 
 #[tauri::command]
-pub async fn voice_install(app: AppHandle, on_progress: Channel<Progress>) -> Result<(), String> {
-    let path = model_path(&app)?;
+pub async fn voice_install(app: AppHandle, model: String, on_progress: Channel<Progress>) -> Result<(), String> {
+    let model = find(&model)?;
+    let path = model_path(&app, model)?;
     let dir = path.parent().ok_or("no model folder")?;
     std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let part = path.with_extension("bin.part");
@@ -98,7 +162,8 @@ pub async fn voice_install(app: AppHandle, on_progress: Channel<Progress>) -> Re
         .user_agent(concat!("pob-redux/", env!("CARGO_PKG_VERSION")))
         .build()
         .map_err(|e| e.to_string())?;
-    let mut res = client.get(MODEL.url).send().await.map_err(|e| format!("could not reach Hugging Face: {e}"))?;
+    let url = format!("{MODEL_BASE}/{}", model.file);
+    let mut res = client.get(url).send().await.map_err(|e| format!("could not reach Hugging Face: {e}"))?;
     if !res.status().is_success() {
         return Err(format!("Hugging Face returned {}", res.status()));
     }
@@ -110,15 +175,15 @@ pub async fn voice_install(app: AppHandle, on_progress: Channel<Progress>) -> Re
         hash.update(&chunk);
         file.write_all(&chunk).map_err(|e| format!("{}: {e}", part.display()))?;
         done += chunk.len() as u64;
-        let pct = done * 100 / MODEL.bytes;
+        let pct = done * 100 / model.bytes;
         if pct != reported {
             reported = pct;
-            let _ = on_progress.send(Progress { done, total: MODEL.bytes });
+            let _ = on_progress.send(Progress { done, total: model.bytes });
         }
     }
     drop(file);
     let digest: String = hash.finalize().iter().map(|b| format!("{b:02x}")).collect();
-    if done != MODEL.bytes || digest != MODEL.sha256 {
+    if done != model.bytes || digest != model.sha256 {
         let _ = std::fs::remove_file(&part);
         return Err("The download does not match the published model, so it was deleted. Try again.".into());
     }
@@ -126,9 +191,15 @@ pub async fn voice_install(app: AppHandle, on_progress: Channel<Progress>) -> Re
 }
 
 #[tauri::command]
-pub fn voice_remove(app: AppHandle, state: State<'_, VoiceState>) -> Result<(), String> {
-    *state.model.lock().unwrap() = None;
-    let path = model_path(&app)?;
+pub fn voice_remove(app: AppHandle, state: State<'_, VoiceState>, model: String) -> Result<(), String> {
+    let model = find(&model)?;
+    {
+        let mut slot = state.model.lock().unwrap();
+        if slot.as_ref().is_some_and(|(id, _)| *id == model.id) {
+            *slot = None;
+        }
+    }
+    let path = model_path(&app, model)?;
     match std::fs::remove_file(&path) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -137,8 +208,9 @@ pub fn voice_remove(app: AppHandle, state: State<'_, VoiceState>) -> Result<(), 
 }
 
 #[tauri::command]
-pub fn voice_start(app: AppHandle, state: State<'_, VoiceState>, on_level: Channel<f32>) -> Result<(), String> {
-    if !installed(&app) {
+pub fn voice_start(app: AppHandle, state: State<'_, VoiceState>, model: String, on_level: Channel<f32>) -> Result<(), String> {
+    let model = find(&model)?;
+    if !installed(&app, model) {
         return Err("The speech model is not downloaded. Download it in Settings > Experimental.".into());
     }
     let mut slot = state.recording.lock().unwrap();
@@ -158,7 +230,7 @@ pub fn voice_start(app: AppHandle, state: State<'_, VoiceState>, on_level: Chann
     *slot = Some(Recording { stop, done });
     let handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        if let Err(e) = load_model(&handle) {
+        if let Err(e) = load_model(&handle, model) {
             log::warn!("voice: {e}");
         }
     });
@@ -166,16 +238,18 @@ pub fn voice_start(app: AppHandle, state: State<'_, VoiceState>, on_level: Chann
 }
 
 #[tauri::command]
-pub async fn voice_stop(app: AppHandle, prompt: String) -> Result<String, String> {
+pub async fn voice_stop(app: AppHandle, model: String, language: String, prompt: String) -> Result<String, String> {
+    let model = find(&model)?;
     let rec = app.state::<VoiceState>().recording.lock().unwrap().take().ok_or("Nothing is being recorded.")?;
+    let language = if model.english { "en" } else { languages().find(|l| *l == language).unwrap_or("auto") };
     tauri::async_runtime::spawn_blocking(move || -> Result<String, String> {
         let captured = rec.finish()?;
         let audio = resample(&captured.samples, captured.rate);
         let Some(span) = speech_span(&audio) else {
             return Ok(String::new());
         };
-        let ctx = load_model(&app)?;
-        transcribe(&ctx, &audio[span], &prompt)
+        let ctx = load_model(&app, model)?;
+        transcribe(&ctx, &audio[span], &prompt, language)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -296,16 +370,19 @@ fn speech_span(audio: &[f32]) -> Option<std::ops::Range<usize>> {
     Some(start..end)
 }
 
-fn load_model(app: &AppHandle) -> Result<Arc<WhisperContext>, String> {
+fn load_model(app: &AppHandle, model: &'static Model) -> Result<Arc<WhisperContext>, String> {
     let state = app.state::<VoiceState>();
     let mut slot = state.model.lock().unwrap();
-    if let Some(ctx) = slot.as_ref() {
-        return Ok(ctx.clone());
+    if let Some((id, ctx)) = slot.as_ref() {
+        if *id == model.id {
+            return Ok(ctx.clone());
+        }
     }
-    let path = model_path(app)?;
+    *slot = None;
+    let path = model_path(app, model)?;
     let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     let ctx = Arc::new(open_model(&bytes)?);
-    *slot = Some(ctx.clone());
+    *slot = Some((model.id, ctx.clone()));
     Ok(ctx)
 }
 
@@ -315,10 +392,10 @@ fn open_model(bytes: &[u8]) -> Result<WhisperContext, String> {
         .map_err(|e| format!("The speech model could not be loaded: {e}"))
 }
 
-fn transcribe(ctx: &WhisperContext, audio: &[f32], prompt: &str) -> Result<String, String> {
+fn transcribe(ctx: &WhisperContext, audio: &[f32], prompt: &str, language: &str) -> Result<String, String> {
     let mut state = ctx.create_state().map_err(|e| format!("The speech model could not start: {e}"))?;
     let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-    params.set_language(Some("en"));
+    params.set_language(Some(language));
     params.set_n_threads(std::thread::available_parallelism().map_or(4, |n| n.get()).clamp(1, 8) as i32);
     params.set_no_context(true);
     params.set_no_timestamps(true);
@@ -403,7 +480,7 @@ mod tests {
         assert!(!is_hallucination("Thank you, now equip Adonia's Ego."));
     }
 
-    /// `VOICE_MODEL=<ggml .bin> VOICE_WAV=<16-bit PCM .wav> cargo test -p pob-redux --lib voice -- --ignored --nocapture`
+    /// `VOICE_MODEL=<ggml .bin> VOICE_WAV=<16-bit PCM .wav> [VOICE_LANGUAGE=de|auto] cargo test -p pob-redux --lib voice -- --ignored --nocapture`
     #[test]
     #[ignore]
     fn transcribes_a_wav() {
@@ -432,8 +509,9 @@ mod tests {
         let audio = &audio[span];
         let ctx = open_model(&model).unwrap();
         let prompt = std::env::var("VOICE_PROMPT").unwrap_or_default();
+        let language = std::env::var("VOICE_LANGUAGE").unwrap_or_else(|_| "en".into());
         let started = std::time::Instant::now();
-        let text = transcribe(&ctx, audio, &prompt).unwrap();
+        let text = transcribe(&ctx, audio, &prompt, &language).unwrap();
         println!("{:.2}s audio in {:?}: {text}", audio.len() as f32 / RATE as f32, started.elapsed());
     }
 }
