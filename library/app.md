@@ -203,7 +203,8 @@ thread, Ctrl+Shift+[ and ] switch threads. Each reply is headed by the model tha
 composer has the model picker, reasoning effort, speed, and **Auto** or **Supervised**
 for changes; Supervised asks before each change. Every web lookup asks first. After a reply that
 changed the build, a bar shows the stat changes with **Keep** and **Undo**. Enter sends,
-Shift+Enter adds a line, "/" lists the tools.
+Shift+Enter adds a line, "/" lists the tools. With voice input on, the microphone button records;
+while it listens the box shows a live waveform, a timer and **Cancel** (Esc).
 
 ## Trade
 

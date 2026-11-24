@@ -6,6 +6,7 @@ import { m } from "$lib/paraglide/messages";
 
 const KEY = "pob-redux:voice";
 const DEFAULT_MODEL = "base.en";
+export const HISTORY = 240;
 
 export interface VoiceModel {
   id: string;
@@ -45,6 +46,8 @@ class VoiceStore {
   status = $state<VoiceStatus | null>(null);
   phase = $state<"idle" | "recording" | "transcribing">("idle");
   level = $state(0);
+  levels = $state<number[]>([]);
+  since = $state<number | null>(null);
   progress = $state<number | null>(null);
   error = $state<string | null>(null);
   private started = false;
@@ -133,9 +136,13 @@ class VoiceStore {
     if (this.phase !== "idle") return;
     this.error = null;
     this.phase = "recording";
+    this.levels = [];
+    this.since = Date.now();
     const channel = new Channel<number>();
     channel.onmessage = (l) => {
-      if (this.phase === "recording") this.level = l;
+      if (this.phase !== "recording") return;
+      this.level = l;
+      this.levels = [...this.levels.slice(1 - HISTORY), l];
     };
     this.opening = invoke("voice_start", { model: this.model, onLevel: channel }).catch((e) => {
       this.phase = "idle";

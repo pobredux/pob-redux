@@ -1,6 +1,6 @@
 <script lang="ts">
   import { scrollHint } from "$lib/scroll-hint";
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { chat, DEFAULT_WIDTH, experimentDelta, lookupSite, MAX_WIDTH, MIN_WIDTH, type ToolTurn } from "$lib/state/chat.svelte";
   import Icon from "$lib/components/Icon.svelte";
   import ModelPicker from "$lib/components/ModelPicker.svelte";
@@ -12,7 +12,8 @@
   import ThreadSidebar from "$lib/components/ThreadSidebar.svelte";
   import ProviderIcon from "$lib/components/ProviderIcon.svelte";
   import { game } from "$lib/state/game.svelte";
-  import { voice } from "$lib/state/voice.svelte";
+  import { HISTORY, voice } from "$lib/state/voice.svelte";
+  import Kbd from "$lib/components/Kbd.svelte";
   import { tradeWindow } from "$lib/state/trade.svelte";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
   import { m } from "$lib/paraglide/messages";
@@ -205,6 +206,13 @@
 
   onMount(() => void voice.init());
 
+  const loudness = (l: number) => Math.min(1, Math.sqrt(l) * 3);
+  let waveWidth = $state(0);
+  const wave = $derived.by(() => {
+    const n = Math.min(HISTORY, Math.max(8, Math.floor((waveWidth - 22) / 4)));
+    return Array.from({ length: n }, (_, i) => (voice.phase === "transcribing" ? 3 : 2 + loudness(voice.levels[voice.levels.length - n + i] ?? 0) * 16));
+  });
+
   $effect(() => {
     if (chat.busy) void voice.cancel();
   });
@@ -215,6 +223,7 @@
     if (!text) return;
     const cur = chat.input;
     chat.input = cur && !/\s$/.test(cur) ? `${cur} ${text}` : cur + text;
+    await tick();
     box?.focus();
   }
 
@@ -518,10 +527,24 @@
             {/each}
           </div>
         {/if}
+        {#if voice.phase !== "idle"}
+          <div class="listen" class:working={voice.phase === "transcribing"}>
+            <span class="wave" aria-hidden="true" bind:clientWidth={waveWidth}>
+              {#each wave as h, i (i)}<i style:height="{h}px" style:--i={i % 16}></i>{/each}
+            </span>
+            {#if voice.phase === "recording"}
+              {#if voice.since}<span class="ltime"><WorkingTimer since={voice.since} /></span>{/if}
+              <button class="btn sm ghost lcancel" onclick={() => voice.cancel()}>{m.common_cancel()} <Kbd keys="Esc" /></button>
+            {:else}
+              <span class="ltext" aria-live="polite">{m.chat_voice_working()}</span>
+            {/if}
+          </div>
+        {/if}
         <textarea
           bind:this={box}
           class="ta"
           rows="2"
+          hidden={voice.phase !== "idle"}
           placeholder={m.chat_placeholder()}
           bind:value={chat.input}
           onkeydown={onKeydown}
@@ -550,7 +573,7 @@
                 class="mic"
                 class:rec={voice.phase === "recording"}
                 class:wait={voice.phase === "transcribing"}
-                style:--lvl={Math.min(1, Math.sqrt(voice.level) * 3)}
+                style:--lvl={loudness(voice.level)}
                 onclick={toggleVoice}
                 disabled={voice.phase === "transcribing"}
                 aria-pressed={voice.phase === "recording"}
@@ -1015,6 +1038,60 @@
   }
   .composer:focus-within {
     border-color: var(--line-2);
+  }
+  .listen {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-sizing: border-box;
+    height: calc(3 * var(--fs-md) + 13px);
+    padding: 9px 8px 4px 10px;
+    font-size: var(--fs-xs);
+    color: var(--fg-1);
+  }
+  .wave {
+    display: flex;
+    flex: 1 1 0;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 2px;
+    min-width: 72px;
+    height: 28px;
+    padding: 0 12px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--bg-0);
+  }
+  .wave i {
+    flex: none;
+    width: 2px;
+    border-radius: 1px;
+    background: var(--fg-0);
+    transition: height 70ms linear;
+  }
+  .listen.working .wave i {
+    animation: pulse 1.2s ease-in-out infinite;
+    animation-delay: calc(var(--i) * 75ms);
+  }
+  .ltext {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ltime {
+    flex: none;
+    color: var(--fg-3);
+  }
+  .lcancel {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 6px;
+  }
+  .ta[hidden] {
+    display: none;
   }
   .ta {
     display: block;
