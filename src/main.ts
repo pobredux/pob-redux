@@ -12,7 +12,16 @@ import TabWindow from "./TabWindow.svelte";
 import { IS_ASSISTANT_WINDOW, IS_ITEM_WINDOW, TAB_VIEW } from "$lib/window";
 
 const logError = (message: string) => void invoke("log_frontend", { level: "error", message }).catch(() => {});
-window.addEventListener("error", (e) => logError(`${e.message} (${e.filename}:${e.lineno}:${e.colno})`));
+let observerLoops = 0;
+window.addEventListener("error", (e) => {
+  // One is a harmless deferred resize; dozens a second mean a layout flipping every frame.
+  if (e.message.startsWith("ResizeObserver loop")) {
+    if (++observerLoops === 30) logError("ResizeObserver loop: 30 warnings within 1 s, a layout is flipping every frame");
+    setTimeout(() => observerLoops--, 1000);
+    return;
+  }
+  logError(`${e.message} (${e.filename}:${e.lineno}:${e.colno})`);
+});
 window.addEventListener("unhandledrejection", (e) => {
   const r = e.reason;
   logError(`unhandled rejection: ${r instanceof Error ? (r.stack ?? r.message) : String(r)}`);
