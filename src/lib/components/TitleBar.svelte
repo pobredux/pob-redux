@@ -20,9 +20,8 @@
   let tabsEl = $state<HTMLDivElement | null>(null);
   let spacerEl = $state<HTMLDivElement | null>(null);
   let measureEl = $state<HTMLDivElement | null>(null);
-  let labelsWidth = $state(0);
-  let room = $state(0);
-  const compact = $derived(ui.tabIcons || labelsWidth > room);
+  let labelsFit = $state(true);
+  const compact = $derived(ui.tabIcons || !labelsFit);
 
   function openView(id: ViewId) {
     goTo(id);
@@ -164,9 +163,11 @@
       e.preventDefault();
     };
     tabsEl?.addEventListener("wheel", onWheel, { passive: false });
+    const width = (el: HTMLElement | null) => el?.getBoundingClientRect().width ?? 0;
     const fit = new ResizeObserver(() => {
-      labelsWidth = measureEl?.offsetWidth ?? 0;
-      room = (tabsEl?.clientWidth ?? 0) + (spacerEl?.clientWidth ?? 0);
+      const room = width(tabsEl) + width(spacerEl);
+      // The two layouts split the room differently, so without slack a borderline width flips them every frame.
+      labelsFit = width(measureEl) <= room - (labelsFit ? 0 : 1);
     });
     for (const el of [measureEl, tabsEl, spacerEl]) if (el) fit.observe(el);
     return () => {
