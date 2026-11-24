@@ -173,6 +173,7 @@ export function experimentDelta(e: Experiment): { label: string; pct: number; ab
 
 export const MIN_WIDTH = 320;
 export const MAX_WIDTH = 900;
+export const DEFAULT_WIDTH = 440;
 
 /** The prompt forbids em and en dashes; this is the backstop for the ones that slip through. */
 const plainDashes = (s: string) => s.replace(/(\d)\s*[—–]\s*(\d)/g, "$1-$2").replace(/\s*[—–]\s*/g, ", ");
@@ -248,7 +249,7 @@ export function lookupSite(turn: Pick<ToolTurn, "name" | "args">): string {
 
 export type Turn =
   /** `mark` is the history length before this message, so rewinding to it is exact. */
-  | { kind: "user"; text: string; mark: number }
+  | { kind: "user"; text: string; mark: number; to?: { provider: string; model: string } }
   | { kind: "assistant"; text: string }
   | ToolTurn;
 
@@ -326,7 +327,7 @@ class ChatStore {
   /** The run hit the step guard rather than finishing, so it can be resumed. */
   canContinue = $state(false);
   /** Panel width in px, dragged by the grip on its left edge. */
-  width = $state(400);
+  width = $state(DEFAULT_WIDTH);
   /** Skip the approval prompt for the rest of this conversation. */
   allowWrites = $state(false);
   /** Tools approved for the rest of this conversation, by name. */
@@ -1192,7 +1193,7 @@ class ChatStore {
     this.canContinue = false;
     const resumed = this.isAgent && !this.agent && this.canResume;
     const carried = this.isAgent && !this.agent && !resumed ? this.transcript() : "";
-    this.turns = [...this.turns, { kind: "user", text, mark: this.history.length }];
+    this.turns = [...this.turns, { kind: "user", text, mark: this.history.length, to: { provider: this.provider, model: this.model } }];
     if (this.isAgent) {
       await this.runAgent(text, carried, resumed);
       return;

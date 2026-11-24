@@ -194,8 +194,12 @@ into this build; the Items pane has **Buy similar** and **Use theirs** per slot.
 
 Opened with the status bar icon, Ctrl+L or Search. It sits on the right; drag its edge to resize,
 or **Pop out** to its own window. It runs on the user's own plan with the provider chosen in
-Settings, Assistant. The header has the thread list (search, pin, rename, delete) and a new-thread
-button. The composer has the model picker, reasoning effort, speed, and **Auto** or **Supervised**
+Settings, Assistant. A thread sidebar runs down the panel's left edge: a new-thread button and one
+coloured icon per thread, two letters from its title. The sidebar button at its top shows the thread titles
+with search, pin, rename and delete. In a wide panel or window the titles stay beside the chat; in a
+narrow one they open over it. Right-click a thread for Pin, Rename and Delete. Ctrl+N starts a
+thread, Ctrl+Shift+[ and ] switch threads. Each reply is headed by the model that wrote it. The
+composer has the model picker, reasoning effort, speed, and **Auto** or **Supervised**
 for changes; Supervised asks before each change. Every web lookup asks first. After a reply that
 changed the build, a bar shows the stat changes with **Keep** and **Undo**. Enter sends,
 Shift+Enter adds a line, "/" lists the tools.

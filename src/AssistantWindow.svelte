@@ -4,7 +4,6 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import "$lib/state/ui.svelte";
   import ChatPanel from "$lib/components/ChatPanel.svelte";
-  import ThreadList from "$lib/components/ThreadList.svelte";
   import Tooltip from "$lib/components/Tooltip.svelte";
   import LogoMark from "$lib/components/LogoMark.svelte";
   import Icon from "$lib/components/Icon.svelte";
@@ -16,8 +15,6 @@
 
   const win = getCurrentWindow();
   let ready = $state(false);
-  let width = $state(window.innerWidth);
-  const wide = $derived(width >= 760);
 
   onMount(() => {
     const offTips = tooltip.install();
@@ -57,8 +54,6 @@
   });
 </script>
 
-<svelte:window bind:innerWidth={width} />
-
 <div class="win">
   <header class="bar" data-tauri-drag-region>
     <LogoMark class="mark" />
@@ -77,10 +72,7 @@
   </header>
   {#if ready}
     <div class="body">
-      {#if wide}
-        <aside class="side"><ThreadList /></aside>
-      {/if}
-      <ChatPanel windowed threadsInline={wide} />
+      <ChatPanel windowed />
     </div>
   {/if}
   <Tooltip />
@@ -97,12 +89,6 @@
     flex: 1;
     min-height: 0;
     display: flex;
-  }
-  .side {
-    flex: none;
-    width: 270px;
-    border-right: 1px solid var(--line-1);
-    background: var(--bg-0);
   }
   .bar {
     flex: none;

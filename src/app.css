@@ -68,6 +68,8 @@
   --c-currency: oklch(74.1% 0.117 72);
   --c-author: oklch(79.0% 0.110 350);
   --c-class: oklch(78.0% 0.100 250);
+  --c-thread-l: 74%;
+  --c-thread-c: 0.110;
 
   --accent: var(--fg-0);
   --accent-fg: var(--bg-0);
@@ -129,6 +131,8 @@
   --c-currency: oklch(45.5% 0.087 68);
   --c-author: oklch(44.0% 0.075 195);
   --c-class: oklch(45.0% 0.150 262);
+  --c-thread-l: 47%;
+  --c-thread-c: 0.130;
 
   --accent: var(--fg-0);
   --accent-fg: var(--bg-0);
@@ -192,6 +196,8 @@
   --c-currency: oklch(76.6% 0.114 72);
   --c-author: oklch(81.0% 0.100 350);
   --c-class: oklch(80.0% 0.090 250);
+  --c-thread-l: 78%;
+  --c-thread-c: 0.095;
 
   --accent: oklch(80.0% 0.120 82);
   --accent-fg: oklch(20.0% 0.020 82);
@@ -364,6 +370,8 @@
   --c-currency: oklch(45.5% 0.087 68);
   --c-author: oklch(44.0% 0.075 195);
   --c-class: oklch(45.0% 0.150 262);
+  --c-thread-l: 47%;
+  --c-thread-c: 0.130;
 
   --accent: oklch(50.0% 0.125 232);
   --accent-fg: oklch(98.6% 0.004 235);

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { scrollHint } from "$lib/scroll-hint";
   import { onMount } from "svelte";
-  import { chat, experimentDelta, lookupSite, MAX_WIDTH, MIN_WIDTH, type ToolTurn } from "$lib/state/chat.svelte";
+  import { chat, DEFAULT_WIDTH, experimentDelta, lookupSite, MAX_WIDTH, MIN_WIDTH, type ToolTurn } from "$lib/state/chat.svelte";
   import Icon from "$lib/components/Icon.svelte";
   import ModelPicker from "$lib/components/ModelPicker.svelte";
   import TraitsPicker from "$lib/components/TraitsPicker.svelte";
@@ -9,21 +9,48 @@
   import ContextMeter from "$lib/components/ContextMeter.svelte";
   import WorkingTimer from "$lib/components/WorkingTimer.svelte";
   import Markdown from "$lib/components/Markdown.svelte";
-  import ThreadList from "$lib/components/ThreadList.svelte";
-  import { build } from "$lib/state/build.svelte";
+  import ThreadSidebar from "$lib/components/ThreadSidebar.svelte";
+  import ProviderIcon from "$lib/components/ProviderIcon.svelte";
   import { game } from "$lib/state/game.svelte";
   import { voice } from "$lib/state/voice.svelte";
   import { tradeWindow } from "$lib/state/trade.svelte";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
   import { m } from "$lib/paraglide/messages";
 
-  let { windowed = false, threadsInline = false }: { windowed?: boolean; threadsInline?: boolean } = $props();
+  let { windowed = false }: { windowed?: boolean } = $props();
 
-  let threadsOpen = $state(false);
-  let head = $state<HTMLDivElement>();
+  const SIDE_KEY = "pob-redux:thread-sidebar";
+  const ROOMY = 640;
+  let panelWidth = $state(0);
+  let sidewrap = $state<HTMLDivElement>();
+  let titlesShown = $state(readTitlesShown());
+  let peek = $state(false);
+  const roomy = $derived(panelWidth >= ROOMY);
+  const sideFull = $derived(roomy ? titlesShown : peek);
+  const floating = $derived(!roomy && peek);
 
-  function closeThreads(e: PointerEvent) {
-    if (threadsOpen && head && !head.parentElement?.querySelector(".tmenu")?.contains(e.target as Node) && !head.contains(e.target as Node)) threadsOpen = false;
+  function readTitlesShown() {
+    try {
+      return JSON.parse(localStorage.getItem(SIDE_KEY) ?? "{}")[windowed ? "windowed" : "docked"] !== false;
+    } catch {
+      return true;
+    }
+  }
+
+  function toggleSide() {
+    if (!roomy) {
+      peek = !peek;
+      return;
+    }
+    titlesShown = !titlesShown;
+    try {
+      const saved = JSON.parse(localStorage.getItem(SIDE_KEY) ?? "{}");
+      localStorage.setItem(SIDE_KEY, JSON.stringify({ ...saved, [windowed ? "windowed" : "docked"]: titlesShown }));
+    } catch {}
+  }
+
+  function closePeek(e: PointerEvent) {
+    if (floating && sidewrap && !sidewrap.contains(e.target as Node)) peek = false;
   }
 
   function onPanelKey(e: KeyboardEvent) {
@@ -196,8 +223,31 @@
       e.preventDefault();
       e.stopPropagation();
       void voice.cancel();
+    } else if (e.key === "Escape" && floating && !e.defaultPrevented) {
+      peek = false;
     }
   }
+
+  type Speaker = { provider: string; label: string };
+  function speaker(to: { provider: string; model: string } | undefined): Speaker {
+    const provider = to?.provider ?? (chat.thread.provider || chat.provider);
+    const model = to?.model ?? (chat.thread.model || chat.model);
+    const models = provider === chat.provider ? chat.models : (chat.catalog[provider]?.models ?? []);
+    return { provider, label: models.find((x) => x.id === model)?.label ?? chat.providers.find((p) => p.id === provider)?.label ?? model };
+  }
+
+  // A reply still waiting for its first output is keyed at turns.length.
+  const speakers = $derived.by(() => {
+    const out = new Map<number, Speaker>();
+    let to: { provider: string; model: string } | undefined;
+    for (let i = 0; i < chat.turns.length; i++) {
+      const t = chat.turns[i];
+      if (t.kind === "user") to = t.to;
+      else if (i === 0 || chat.turns[i - 1].kind === "user") out.set(i, speaker(to));
+    }
+    if (chat.busy && chat.turns.at(-1)?.kind === "user") out.set(chat.turns.length, speaker(to));
+    return out;
+  });
 
   const summary = (t: ToolTurn) => {
     const a = t.args as Record<string, unknown> | null;
@@ -248,10 +298,14 @@
   };
 </script>
 
-<svelte:window onkeydown={onWindowKey} onpointerdown={closeThreads} />
+{#snippet who(s: Speaker)}
+  <div class="who"><ProviderIcon id={s.provider} size={12} /><span>{s.label}</span></div>
+{/snippet}
+
+<svelte:window onkeydown={onWindowKey} onpointerdown={closePeek} />
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<aside class="chat" class:windowed style:width={windowed ? null : `${chat.width}px`} onkeydown={onPanelKey}>
+<aside class="chat" class:windowed bind:clientWidth={panelWidth} style:width={windowed ? null : `${chat.width}px`} onkeydown={onPanelKey}>
   {#if !windowed}<div
     class="grip"
     class:dragging
@@ -264,285 +318,270 @@
     tabindex="0"
     onpointerdown={startResize}
     onkeydown={gripKey}
-    ondblclick={() => chat.setWidth(400, true)}
+    ondblclick={() => chat.setWidth(DEFAULT_WIDTH, true)}
     title={m.chat_resize_title()}
   ></div>{/if}
-  <div class="head" bind:this={head}>
-    <span class="title">
-      {#if threadsInline}
-        <span class="tname">{chat.thread.title || m.threads_new()}</span>
-      {:else}
-        <button class="tpick" class:on={threadsOpen} aria-expanded={threadsOpen} aria-haspopup="true" title={m.threads_menu_title()} onclick={() => (threadsOpen = !threadsOpen)}>
-          <span class="tname">{chat.thread.title || m.threads_new()}</span>
-          <Icon name="caret-down" size={11} />
-        </button>
-      {/if}
-      {#if game.isPoe1}<span class="beta" title={m.chat_poe1_beta_title()}>{m.chat_poe1_beta()}</span>{/if}
-    </span>
-    <div class="acts">
-      <button
-        class="icon fresh"
-        onclick={() => chat.startThread()}
-        disabled={chat.busy}
-        title={m.threads_new_title()}
-        aria-label={m.threads_new()}
-      >
-        <Icon name="plus-square" size={17} />
-      </button>
-      <button
-        class="icon"
-        title={m.chat_providers_title()}
-        aria-label={m.chat_provider_settings()}
-        onclick={() => chat.openSettings()}
-      >
-        <Icon name="gear" size={17} />
-      </button>
-      {#if !windowed}
-        <button class="icon" onclick={() => chat.popOut()} disabled={chat.busy} title={m.chat_pop_out_title()} aria-label={m.chat_pop_out()}>
-          <Icon name="arrow-square-out" size={17} />
-        </button>
-        <button class="icon close" onclick={() => chat.toggle()} title={m.chat_hide_title()} aria-label={m.chat_hide()}>
-          <Icon name="x-square" size={17} />
-        </button>
-      {/if}
-    </div>
+  <div class="sidewrap" class:floating bind:this={sidewrap}>
+    <ThreadSidebar full={sideFull} {floating} ontoggle={toggleSide} onpick={() => (peek = false)} />
   </div>
-  {#if threadsOpen && !threadsInline}
-    <div class="tmenu">
-      <ThreadList autofocus onpick={() => (threadsOpen = false)} />
-    </div>
-  {/if}
-
-  {#if chat.experiment}
-    <div class="trying" class:warn={chat.undoWarning}>
-      <div class="trow">
-        <span class="tlabel">{m.chat_reply_changed()}</span>
-        {#if moved.length}
-          <span class="tdelta">
-            {#each moved.slice(0, 3) as d}
-              <span class={d.pct > 0 ? "up" : "down"}>{signed(d.pct, 1)}% {d.label}</span>
-            {/each}
-          </span>
-        {:else}
-          <span class="tdelta dim">{m.chat_nothing_changed()}</span>
+  <div class="main">
+    <div class="head">
+      <span class="title">
+        <span class="tname" title={chat.thread.title || m.threads_new()}>{chat.thread.title || m.threads_new()}</span>
+        {#if game.isPoe1}<span class="beta" title={m.chat_poe1_beta_title()}>{m.chat_poe1_beta()}</span>{/if}
+      </span>
+      <div class="acts">
+        <button
+          class="icon"
+          title={m.chat_providers_title()}
+          aria-label={m.chat_provider_settings()}
+          onclick={() => chat.openSettings()}
+        >
+          <Icon name="gear" size={17} />
+        </button>
+        {#if !windowed}
+          <button class="icon" onclick={() => chat.popOut()} disabled={chat.busy} title={m.chat_pop_out_title()} aria-label={m.chat_pop_out()}>
+            <Icon name="arrow-square-out" size={17} />
+          </button>
+          <button class="icon close" onclick={() => chat.toggle()} title={m.chat_hide_title()} aria-label={m.chat_hide()}>
+            <Icon name="x-square" size={17} />
+          </button>
         {/if}
-        <div class="grow"></div>
-        <button class="btn sm" disabled={chat.busy} onclick={() => chat.keepExperiment()}>{m.chat_keep()}</button>
-        <button class="btn sm ghost" disabled={chat.busy} onclick={() => chat.undoExperiment()}>{m.chat_undo()}</button>
       </div>
-      {#if chat.undoWarning}
-        <div class="trow sub">
-          <span>{chat.undoWarning}</span>
-          <div class="grow"></div>
-          <button class="btn sm" disabled={chat.busy} onclick={() => chat.undoExperiment(true)}>{m.chat_undo_anyway()}</button>
-          <button class="btn sm ghost" onclick={() => (chat.undoWarning = null)}>{m.common_cancel()}</button>
-        </div>
-      {/if}
     </div>
-  {/if}
 
-  {#if chat.checkedAt === null}
-    <div class="setup">
-      <p class="dim">{m.assistant_checking()}</p>
-    </div>
-  {:else if !chat.ready}
-    <div class="setup">
-      <div class="label">{m.chat_no_provider()}</div>
-      <p class="dim">{m.chat_no_provider_blurb()}</p>
-      <button class="btn sm" onclick={() => chat.openSettings()}>{m.chat_open_provider_settings()}</button>
-    </div>
-  {:else}
-    <div class="logwrap">
-    <div class="log scroll-hint" {@attach scrollHint} bind:this={scroller} onscroll={onScroll}>
-      {#each chat.turns as turn, i}
-        {#if turn.kind === "user"}
-          <button
-            class="turn user"
-            onclick={() => chat.rewindTo(i)}
-            disabled={chat.busy}
-            title={m.chat_edit_resend()}
-          >{turn.text}</button>
-        {:else if turn.kind === "assistant"}
-          <div class="botwrap">
-            <div class="turn bot"><Markdown text={turn.text} /></div>
-            {#each tradeLinks.get(i) ?? [] as [url, slot] (url)}
-              <button class="btn sm trade" onclick={() => tradeWindow.open(url)} title={url}>
-                <Icon name="magnifying-glass" size={12} />{m.chat_open_trade()}{slot ? ` · ${slot}` : ""}
+    {#if chat.experiment}
+      <div class="trying" class:warn={chat.undoWarning}>
+        <div class="trow">
+          <span class="tlabel">{m.chat_reply_changed()}</span>
+          {#if moved.length}
+            <span class="tdelta">
+              {#each moved.slice(0, 3) as d}
+                <span class={d.pct > 0 ? "up" : "down"}>{signed(d.pct, 1)}% {d.label}</span>
+              {/each}
+            </span>
+          {:else}
+            <span class="tdelta dim">{m.chat_nothing_changed()}</span>
+          {/if}
+          <div class="grow"></div>
+          <button class="btn sm" disabled={chat.busy} onclick={() => chat.keepExperiment()}>{m.chat_keep()}</button>
+          <button class="btn sm ghost" disabled={chat.busy} onclick={() => chat.undoExperiment()}>{m.chat_undo()}</button>
+        </div>
+        {#if chat.undoWarning}
+          <div class="trow sub">
+            <span>{chat.undoWarning}</span>
+            <div class="grow"></div>
+            <button class="btn sm" disabled={chat.busy} onclick={() => chat.undoExperiment(true)}>{m.chat_undo_anyway()}</button>
+            <button class="btn sm ghost" onclick={() => (chat.undoWarning = null)}>{m.common_cancel()}</button>
+          </div>
+        {/if}
+      </div>
+    {/if}
+
+    {#if chat.checkedAt === null}
+      <div class="setup">
+        <p class="dim">{m.assistant_checking()}</p>
+      </div>
+    {:else if !chat.ready}
+      <div class="setup">
+        <div class="label">{m.chat_no_provider()}</div>
+        <p class="dim">{m.chat_no_provider_blurb()}</p>
+        <button class="btn sm" onclick={() => chat.openSettings()}>{m.chat_open_provider_settings()}</button>
+      </div>
+    {:else}
+      <div class="logwrap">
+      <div class="log scroll-hint" {@attach scrollHint} bind:this={scroller} onscroll={onScroll}>
+        {#each chat.turns as turn, i}
+          {#if speakers.has(i)}{@render who(speakers.get(i)!)}{/if}
+          {#if turn.kind === "user"}
+            <button
+              class="turn user"
+              onclick={() => chat.rewindTo(i)}
+              disabled={chat.busy}
+              title={m.chat_edit_resend()}
+            >{turn.text}</button>
+          {:else if turn.kind === "assistant"}
+            <div class="botwrap">
+              <div class="turn bot"><Markdown text={turn.text} /></div>
+              {#each tradeLinks.get(i) ?? [] as [url, slot] (url)}
+                <button class="btn sm trade" onclick={() => tradeWindow.open(url)} title={url}>
+                  <Icon name="magnifying-glass" size={12} />{m.chat_open_trade()}{slot ? ` · ${slot}` : ""}
+                </button>
+              {/each}
+              <button
+                class="copy"
+                class:done={copied === i}
+                onclick={() => copyText(i, turn.text)}
+                title={copied === i ? "Copied" : "Copy this reply"}
+                aria-label={m.chat_copy_reply()}
+              >
+                <Icon name={copied === i ? "check" : "copy"} size={13} />
+              </button>
+            </div>
+          {:else}
+            <div class="tool" class:err={turn.status === "error"} class:recovered={recovered.has(turn.id)}>
+              <button class="tline" aria-expanded={!!expanded[turn.id]} onclick={() => (expanded[turn.id] = !expanded[turn.id])}>
+                <span class="ticon"><Icon name={turn.lookup ? "globe" : turn.readOnly ? "eye" : "pencil"} size={11} /></span>
+                <span class="tname">{turn.name}</span>
+                <span class="targs">{summary(turn)}</span>
+                <span class="tstat {turn.status}">{recovered.has(turn.id) ? m.chat_tool_recovered() : turn.status}</span>
+                <span class={["tcaret", { open: expanded[turn.id] }]}><Icon name="caret-right" size={9} /></span>
+              </button>
+              {#if expanded[turn.id]}
+                <div class="tbody">
+                  <div class="tlabel">{m.chat_tool_args()}</div>
+                  <pre>{pretty(turn.args ?? {})}</pre>
+                  {#if turn.result !== undefined}
+                    <div class="tlabel">{m.chat_tool_result()}</div>
+                    <pre>{pretty(turn.result)}</pre>
+                  {/if}
+                  {#if turn.error}
+                    <div class="tlabel">{m.chat_tool_error()}</div>
+                    <pre>{turn.error}</pre>
+                  {/if}
+                </div>
+              {/if}
+              {#if turn.status === "awaiting" && turn.lookup}
+                <div class="approve">
+                  <span>{m.chat_web_lookup({ site: lookupSite(turn) })}</span>
+                  <button class="btn sm" onclick={() => chat.resolveApproval(turn.id, true)}>{m.chat_allow()}</button>
+                  <button class="btn sm ghost" onclick={() => chat.resolveApproval(turn.id, true, true)}>{m.chat_allow_site()}</button>
+                  <button class="btn sm ghost" onclick={() => chat.resolveApproval(turn.id, false)}>{m.chat_skip()}</button>
+                </div>
+              {:else if turn.status === "awaiting"}
+                <div class="approve">
+                  <span>{m.chat_changes_build()}</span>
+                  <button class="btn sm" onclick={() => chat.resolveApproval(turn.id, true)}>{m.chat_run()}</button>
+                  <button class="btn sm ghost" onclick={() => chat.resolveApproval(turn.id, true, true)}>{m.chat_always()}</button>
+                  <button class="btn sm ghost" onclick={() => chat.resolveApproval(turn.id, false)}>{m.chat_skip()}</button>
+                  <label class="always"><input type="checkbox" bind:checked={chat.allowWrites} /> {m.chat_allow_all()}</label>
+                </div>
+              {/if}
+              {#if turn.error && !expanded[turn.id]}<div class="terr">{errorHead(turn.error)}</div>{/if}
+            </div>
+          {/if}
+        {/each}
+        {#if chat.busy}
+          {#if speakers.has(chat.turns.length)}{@render who(speakers.get(chat.turns.length)!)}{/if}
+          <div class="dim thinking" aria-live="polite">
+            <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            {m.chat_working()}
+            {#if chat.startedAt}<WorkingTimer since={chat.startedAt} />{/if}
+          </div>
+        {/if}
+        {#if chat.notice}
+          <div class="failed">
+            <div class="notice">{chat.notice}</div>
+            <div class="failacts">
+              {#if chat.canContinue}
+                <button class="btn sm ghost" onclick={() => chat.continueRun()} disabled={chat.busy}>{m.chat_continue()}</button>
+              {/if}
+              <button class="btn sm ghost" onclick={copyDetails} title={m.chat_copy_details_run_title()}>{detailsCopied ? m.common_copied() : m.chat_copy_details()}</button>
+            </div>
+          </div>
+        {/if}
+        {#if chat.error}
+          <div class="failed">
+            <div class="terr">{chat.error}</div>
+            <div class="failacts">
+              <button class="btn sm ghost" onclick={() => chat.retryLast()} disabled={chat.busy}>{m.chat_try_again()}</button>
+              <button class="btn sm ghost" onclick={copyDetails} title={m.chat_copy_details_error_title()}>{detailsCopied ? m.common_copied() : m.chat_copy_details()}</button>
+              <button class="btn sm ghost" onclick={() => chat.revealLog().catch((e) => (chat.error = String(e)))} title={m.chat_open_log_title()}>{m.chat_open_log()}</button>
+            </div>
+          </div>
+        {/if}
+        {#if !chat.turns.length && !chat.busy}
+          <div class="dim empty">
+            <div class="egs">
+              <button class="eg" onclick={() => { chat.input = m.chat_eg_ehp_prompt(); chat.send(); }}>{m.chat_eg_ehp()}</button>
+              <button class="eg" onclick={() => { chat.input = m.chat_eg_defences_prompt(); chat.send(); }}>{m.chat_eg_defences()}</button>
+              <button class="eg" onclick={() => { chat.input = m.chat_eg_resists_prompt(); chat.send(); }}>{m.chat_eg_resists()}</button>
+            </div>
+          </div>
+        {/if}
+      </div>
+      {#if !stuck}
+        <button class="toend" onclick={toEnd}><Icon name="arrow-down" size={11} /> {m.chat_scroll_end()}</button>
+      {/if}
+      </div>
+
+      <div class="composer">
+        {#if slashHits.length}
+          <div class="slash scroll-hint" {@attach scrollHint}>
+            <div class="slabel">Built-in tools · {chat.toolNames.length} available</div>
+            {#each slashHits as t, i}
+              <button class="srow" class:sel={i === slashIndex} onclick={() => pickTool(t.name)}>
+                <span class="sname">{t.name}</span>
+                <span class="skind" class:ro={t.read_only}>{t.read_only ? "read" : "write"}</span>
+                <span class="sdesc">{t.description}</span>
               </button>
             {/each}
-            <button
-              class="copy"
-              class:done={copied === i}
-              onclick={() => copyText(i, turn.text)}
-              title={copied === i ? "Copied" : "Copy this reply"}
-              aria-label={m.chat_copy_reply()}
-            >
-              <Icon name={copied === i ? "check" : "copy"} size={13} />
-            </button>
-          </div>
-        {:else}
-          <div class="tool" class:err={turn.status === "error"} class:recovered={recovered.has(turn.id)}>
-            <button class="tline" aria-expanded={!!expanded[turn.id]} onclick={() => (expanded[turn.id] = !expanded[turn.id])}>
-              <span class="ticon"><Icon name={turn.lookup ? "globe" : turn.readOnly ? "eye" : "pencil"} size={11} /></span>
-              <span class="tname">{turn.name}</span>
-              <span class="targs">{summary(turn)}</span>
-              <span class="tstat {turn.status}">{recovered.has(turn.id) ? m.chat_tool_recovered() : turn.status}</span>
-              <span class={["tcaret", { open: expanded[turn.id] }]}><Icon name="caret-right" size={9} /></span>
-            </button>
-            {#if expanded[turn.id]}
-              <div class="tbody">
-                <div class="tlabel">{m.chat_tool_args()}</div>
-                <pre>{pretty(turn.args ?? {})}</pre>
-                {#if turn.result !== undefined}
-                  <div class="tlabel">{m.chat_tool_result()}</div>
-                  <pre>{pretty(turn.result)}</pre>
-                {/if}
-                {#if turn.error}
-                  <div class="tlabel">{m.chat_tool_error()}</div>
-                  <pre>{turn.error}</pre>
-                {/if}
-              </div>
-            {/if}
-            {#if turn.status === "awaiting" && turn.lookup}
-              <div class="approve">
-                <span>{m.chat_web_lookup({ site: lookupSite(turn) })}</span>
-                <button class="btn sm" onclick={() => chat.resolveApproval(turn.id, true)}>{m.chat_allow()}</button>
-                <button class="btn sm ghost" onclick={() => chat.resolveApproval(turn.id, true, true)}>{m.chat_allow_site()}</button>
-                <button class="btn sm ghost" onclick={() => chat.resolveApproval(turn.id, false)}>{m.chat_skip()}</button>
-              </div>
-            {:else if turn.status === "awaiting"}
-              <div class="approve">
-                <span>{m.chat_changes_build()}</span>
-                <button class="btn sm" onclick={() => chat.resolveApproval(turn.id, true)}>{m.chat_run()}</button>
-                <button class="btn sm ghost" onclick={() => chat.resolveApproval(turn.id, true, true)}>{m.chat_always()}</button>
-                <button class="btn sm ghost" onclick={() => chat.resolveApproval(turn.id, false)}>{m.chat_skip()}</button>
-                <label class="always"><input type="checkbox" bind:checked={chat.allowWrites} /> {m.chat_allow_all()}</label>
-              </div>
-            {/if}
-            {#if turn.error && !expanded[turn.id]}<div class="terr">{errorHead(turn.error)}</div>{/if}
           </div>
         {/if}
-      {/each}
-      {#if chat.busy}
-        <div class="dim thinking" aria-live="polite">
-          <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
-          {m.chat_working()}
-          {#if chat.startedAt}<WorkingTimer since={chat.startedAt} />{/if}
-        </div>
-      {/if}
-      {#if chat.notice}
-        <div class="failed">
-          <div class="notice">{chat.notice}</div>
-          <div class="failacts">
-            {#if chat.canContinue}
-              <button class="btn sm ghost" onclick={() => chat.continueRun()} disabled={chat.busy}>{m.chat_continue()}</button>
+        <textarea
+          bind:this={box}
+          class="ta"
+          rows="2"
+          placeholder={m.chat_placeholder()}
+          bind:value={chat.input}
+          onkeydown={onKeydown}
+          onfocus={() => chat.touch()}
+          disabled={chat.busy}
+        ></textarea>
+        <div class="bar">
+          <div class="left">
+            <ModelPicker />
+            {#if chat.supportsEffort || chat.supportsFast}
+              <span class="sep"></span>
+              <TraitsPicker />
             {/if}
-            <button class="btn sm ghost" onclick={copyDetails} title={m.chat_copy_details_run_title()}>{detailsCopied ? m.common_copied() : m.chat_copy_details()}</button>
-          </div>
-        </div>
-      {/if}
-      {#if chat.error}
-        <div class="failed">
-          <div class="terr">{chat.error}</div>
-          <div class="failacts">
-            <button class="btn sm ghost" onclick={() => chat.retryLast()} disabled={chat.busy}>{m.chat_try_again()}</button>
-            <button class="btn sm ghost" onclick={copyDetails} title={m.chat_copy_details_error_title()}>{detailsCopied ? m.common_copied() : m.chat_copy_details()}</button>
-            <button class="btn sm ghost" onclick={() => chat.revealLog().catch((e) => (chat.error = String(e)))} title={m.chat_open_log_title()}>{m.chat_open_log()}</button>
-          </div>
-        </div>
-      {/if}
-      {#if !chat.turns.length && !chat.busy}
-        <div class="dim empty">
-          <div class="egs">
-            <button class="eg" onclick={() => { chat.input = m.chat_eg_ehp_prompt(); chat.send(); }}>{m.chat_eg_ehp()}</button>
-            <button class="eg" onclick={() => { chat.input = m.chat_eg_defences_prompt(); chat.send(); }}>{m.chat_eg_defences()}</button>
-            <button class="eg" onclick={() => { chat.input = m.chat_eg_resists_prompt(); chat.send(); }}>{m.chat_eg_resists()}</button>
-          </div>
-        </div>
-      {/if}
-    </div>
-    {#if !stuck}
-      <button class="toend" onclick={toEnd}><Icon name="arrow-down" size={11} /> {m.chat_scroll_end()}</button>
-    {/if}
-    </div>
-
-    <div class="composer">
-      {#if slashHits.length}
-        <div class="slash scroll-hint" {@attach scrollHint}>
-          <div class="slabel">Built-in tools · {chat.toolNames.length} available</div>
-          {#each slashHits as t, i}
-            <button class="srow" class:sel={i === slashIndex} onclick={() => pickTool(t.name)}>
-              <span class="sname">{t.name}</span>
-              <span class="skind" class:ro={t.read_only}>{t.read_only ? "read" : "write"}</span>
-              <span class="sdesc">{t.description}</span>
-            </button>
-          {/each}
-        </div>
-      {/if}
-      <textarea
-        bind:this={box}
-        class="ta"
-        rows="2"
-        placeholder={m.chat_placeholder()}
-        bind:value={chat.input}
-        onkeydown={onKeydown}
-        onfocus={() => chat.touch()}
-        disabled={chat.busy}
-      ></textarea>
-      <div class="bar">
-        <div class="left">
-          <ModelPicker />
-          {#if chat.supportsEffort || chat.supportsFast}
             <span class="sep"></span>
-            <TraitsPicker />
-          {/if}
-          <span class="sep"></span>
-          <ChangesPicker />
+            <ChangesPicker />
+          </div>
+          <div class="right">
+            {#if chat.needsWarm && chat.warmNote}
+              <span class="warm {chat.warm}" title={chat.warmDetail || m.chat_warm_title()}>
+                <span class="wdot"></span>{chat.warmNote}
+              </span>
+            {/if}
+            <ContextMeter />
+            {#if voice.ready && !chat.busy}
+              <button
+                class="mic"
+                class:rec={voice.phase === "recording"}
+                class:wait={voice.phase === "transcribing"}
+                style:--lvl={Math.min(1, Math.sqrt(voice.level) * 3)}
+                onclick={toggleVoice}
+                disabled={voice.phase === "transcribing"}
+                aria-pressed={voice.phase === "recording"}
+                title={voice.phase === "recording" ? m.chat_voice_stop() : voice.phase === "transcribing" ? m.chat_voice_working() : m.chat_voice_start()}
+                aria-label={voice.phase === "recording" ? m.chat_voice_stop() : m.chat_voice_start()}
+              >
+                <Icon name={voice.phase === "recording" ? "stop" : "microphone"} size={voice.phase === "recording" ? 12 : 14} />
+              </button>
+            {/if}
+            {#if chat.busy}
+              <button class="send stop" onclick={() => chat.stop()} title={m.chat_stop()} aria-label={m.chat_stop()}>
+                <Icon name="stop" size={12} />
+              </button>
+            {:else}
+              <button class="send" onclick={() => chat.send()} disabled={!chat.input.trim() || chat.warm === "loading" || chat.warm === "priming"} title={chat.warm === "loading" || chat.warm === "priming" ? m.chat_waiting_model() : m.chat_send()} aria-label={m.chat_send()}>
+                <Icon name="arrow-up" size={13} />
+              </button>
+            {/if}
+          </div>
         </div>
-        <div class="right">
-          {#if chat.needsWarm && chat.warmNote}
-            <span class="warm {chat.warm}" title={chat.warmDetail || m.chat_warm_title()}>
-              <span class="wdot"></span>{chat.warmNote}
-            </span>
-          {/if}
-          <ContextMeter />
-          {#if voice.ready && !chat.busy}
-            <button
-              class="mic"
-              class:rec={voice.phase === "recording"}
-              class:wait={voice.phase === "transcribing"}
-              style:--lvl={Math.min(1, Math.sqrt(voice.level) * 3)}
-              onclick={toggleVoice}
-              disabled={voice.phase === "transcribing"}
-              aria-pressed={voice.phase === "recording"}
-              title={voice.phase === "recording" ? m.chat_voice_stop() : voice.phase === "transcribing" ? m.chat_voice_working() : m.chat_voice_start()}
-              aria-label={voice.phase === "recording" ? m.chat_voice_stop() : m.chat_voice_start()}
-            >
-              <Icon name={voice.phase === "recording" ? "stop" : "microphone"} size={voice.phase === "recording" ? 12 : 14} />
-            </button>
-          {/if}
-          {#if chat.busy}
-            <button class="send stop" onclick={() => chat.stop()} title={m.chat_stop()} aria-label={m.chat_stop()}>
-              <Icon name="stop" size={12} />
-            </button>
-          {:else}
-            <button class="send" onclick={() => chat.send()} disabled={!chat.input.trim() || chat.warm === "loading" || chat.warm === "priming"} title={chat.warm === "loading" || chat.warm === "priming" ? m.chat_waiting_model() : m.chat_send()} aria-label={m.chat_send()}>
-              <Icon name="arrow-up" size={13} />
-            </button>
-          {/if}
-        </div>
+        {#if chat.modelsError}<div class="terr small">{chat.modelsError}</div>{/if}
+        {#if voice.error}<div class="terr small">{voice.error}</div>{/if}
       </div>
-      {#if chat.modelsError}<div class="terr small">{chat.modelsError}</div>{/if}
-      {#if voice.error}<div class="terr small">{voice.error}</div>{/if}
-    </div>
-  {/if}
+    {/if}
+  </div>
 </aside>
 
 <style>
   .chat {
     position: relative;
     display: flex;
-    flex-direction: column;
     flex: none;
     border-left: 1px solid var(--line-1);
     background: var(--bg-1);
@@ -552,6 +591,23 @@
     flex: 1;
     min-height: 0;
     border-left: 0;
+  }
+  .sidewrap {
+    position: relative;
+    display: flex;
+    flex: none;
+    min-height: 0;
+    border-right: 1px solid var(--line-1);
+  }
+  .sidewrap.floating {
+    width: 44px;
+  }
+  .main {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
   }
   /* Sits over the border, wider than it looks so it is easy to grab. */
   .grip {
@@ -594,29 +650,6 @@
     gap: 6px;
     min-width: 0;
   }
-  .tpick {
-    appearance: none;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-    max-width: 100%;
-    padding: 3px 6px;
-    margin-left: -6px;
-    border: 0;
-    border-radius: var(--r-1);
-    background: none;
-    color: var(--fg-0);
-    font: inherit;
-  }
-  .tpick:hover,
-  .tpick.on {
-    background: var(--bg-hover);
-  }
-  .tpick :global(svg) {
-    flex: none;
-    color: var(--fg-2);
-  }
   .tname {
     min-width: 0;
     overflow: hidden;
@@ -625,19 +658,6 @@
     color: var(--fg-0);
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-  .tmenu {
-    position: absolute;
-    top: 44px;
-    left: 8px;
-    right: 8px;
-    z-index: 30;
-    height: min(440px, 70%);
-    border: 1px solid var(--line-2);
-    border-radius: var(--r-2);
-    background: var(--bg-1);
-    box-shadow: var(--shadow-pop);
-    overflow: hidden;
   }
   .beta {
     padding: 0 5px;
@@ -665,13 +685,8 @@
     background: var(--bg-hover);
     color: var(--fg-0);
   }
-  /* Both hovers reuse existing tokens; no new colours. Red reads as the
-     closing action, blue as the one that starts something. */
   .icon.close:hover:not(:disabled) {
     color: var(--bad);
-  }
-  .icon.fresh:hover:not(:disabled) {
-    color: var(--focus);
   }
   .icon:disabled {
     opacity: var(--fade-off);
@@ -729,18 +744,30 @@
   /* A button so it is reachable by keyboard, styled as the message bubble. */
   .user {
     align-self: flex-end;
-    max-width: 88%;
-    background: var(--bg-3);
-    border: 1px solid var(--line-1);
-    border-radius: var(--r-2);
-    padding: 6px 9px;
+    max-width: 85%;
+    margin-top: 8px;
+    background: var(--bg-active);
+    border: 1px solid var(--line-2);
+    border-radius: var(--r-2) var(--r-2) var(--r-1) var(--r-2);
+    padding: 6px 10px;
     font: inherit;
-    color: inherit;
+    color: var(--fg-0);
     text-align: left;
     cursor: var(--cursor-pointer, pointer);
   }
+  .user:first-child {
+    margin-top: 0;
+  }
   .user:hover:not(:disabled) {
-    background: var(--bg-active);
+    background: color-mix(in oklab, var(--bg-active), var(--fg-0) 7%);
+  }
+  .who {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 2px 0 -4px;
+    color: var(--fg-2);
+    font-size: var(--fs-xs);
   }
   .user:focus-visible {
     border-color: var(--focus);
