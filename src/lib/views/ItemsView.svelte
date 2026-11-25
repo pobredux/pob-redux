@@ -24,7 +24,7 @@
   import { itemWindow } from "$lib/state/item-window.svelte";
   import { createScrollHold } from "$lib/scroll-hold";
   import { removeTemplate, saveTemplate, SHARED_ITEMS_CHANGED } from "$lib/shared-items";
-  import { modKey } from "$lib/keys";
+  import { modKey, shortcutKey } from "$lib/keys";
   import Kbd from "$lib/components/Kbd.svelte";
   import { game } from "$lib/state/game.svelte";
   import EquipmentGrid from "$lib/components/EquipmentGrid.svelte";
@@ -624,7 +624,7 @@
   let dbSearchEl = $state<HTMLInputElement>();
   function onKey(e: KeyboardEvent) {
     if (e.defaultPrevented) return;
-    if (modKey(e) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "f" && !editOpen && !craftOpen && !traderOpen && buySimilarFor == null && !document.querySelector('[aria-modal="true"]')) {
+    if (modKey(e) && !e.shiftKey && !e.altKey && shortcutKey(e).toLowerCase() === "f" && !editOpen && !craftOpen && !traderOpen && buySimilarFor == null && !document.querySelector('[aria-modal="true"]')) {
       e.preventDefault();
       dbSearchEl?.focus();
       dbSearchEl?.select();
@@ -634,12 +634,12 @@
     if (target instanceof Element && target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="dialog"]')) return;
     if (document.querySelector('[aria-modal="true"]')) return;
     if (editOpen || craftOpen || traderOpen || buySimilarFor != null || confirm.current) return;
-    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "v") {
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && shortcutKey(e).toLowerCase() === "v") {
       e.preventDefault();
       if (!e.repeat) void pasteItem();
       return;
     }
-    if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "d" && statDiff !== null) {
+    if (e.ctrlKey && !e.shiftKey && !e.altKey && shortcutKey(e).toLowerCase() === "d" && statDiff !== null) {
       e.preventDefault();
       void setStatDiff(!statDiff);
     }

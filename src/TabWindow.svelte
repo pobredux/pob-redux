@@ -15,7 +15,7 @@
   import { itemWindow } from "$lib/state/item-window.svelte";
   import { followOtherWindows, rememberBounds, tabList } from "$lib/state/tabs.svelte";
   import { tooltip } from "$lib/state/tooltip.svelte";
-  import { isTextField, modKey } from "$lib/keys";
+  import { isTextField, modKey, shortcutKey } from "$lib/keys";
   import { TAB_VIEW } from "$lib/window";
   import { m } from "$lib/paraglide/messages";
 
@@ -51,7 +51,7 @@
 
   function onKey(e: KeyboardEvent) {
     if (!modKey(e) || e.altKey) return;
-    const key = e.key.toLowerCase();
+    const key = shortcutKey(e).toLowerCase();
     if (key === "s") {
       e.preventDefault();
       void emitTo("main", "tab:command", e.shiftKey ? "save-as" : "save");

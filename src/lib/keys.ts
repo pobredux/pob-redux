@@ -5,6 +5,25 @@ export function modKey(e: KeyboardEvent | MouseEvent): boolean {
   return isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
 }
 
+const US_PUNCTUATION: Record<string, [string, string]> = {
+  BracketLeft: ["[", "{"],
+  BracketRight: ["]", "}"],
+  Semicolon: [";", ":"],
+  Quote: ["'", '"'],
+  Comma: [",", "<"],
+  Period: [".", ">"],
+  Slash: ["/", "?"],
+  Backquote: ["`", "~"],
+};
+
+/** `e.key`, except that a key typing a non-Latin character (Cyrillic, Greek) reads as the US key in its place. */
+export function shortcutKey(e: KeyboardEvent): string {
+  if (e.key.length !== 1 || e.key.charCodeAt(0) < 128) return e.key;
+  const letter = /^Key([A-Z])$/.exec(e.code)?.[1];
+  if (letter) return e.shiftKey ? letter : letter.toLowerCase();
+  return US_PUNCTUATION[e.code]?.[e.shiftKey ? 1 : 0] ?? e.key;
+}
+
 const NON_TEXT_INPUTS = new Set(["checkbox", "radio", "button", "submit", "reset", "range", "color", "file", "image"]);
 
 export function isTextField(target: EventTarget | null): boolean {

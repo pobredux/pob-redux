@@ -8,7 +8,7 @@
   import { engine, type CalcEffect, type CalcRow, type CalcSection, type CalcSkillSelection, type CalcSubSection } from "$lib/engine.svelte";
   import { build } from "$lib/state/build.svelte";
   import { ui } from "$lib/state/ui.svelte";
-  import { modKey } from "$lib/keys";
+  import { modKey, shortcutKey } from "$lib/keys";
   import Kbd from "$lib/components/Kbd.svelte";
   import { game } from "$lib/state/game.svelte";
   import { statusEffectArtUrls } from "$lib/item-art";
@@ -33,7 +33,7 @@
   const rowShown = (sec: CalcSection, sub: CalcSubSection, row: CalcRow) => !needle || sectionHit(sec) || hit(sub.label) || hit(row.label);
 
   function onKey(e: KeyboardEvent) {
-    if (modKey(e) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "f") {
+    if (modKey(e) && !e.shiftKey && !e.altKey && shortcutKey(e).toLowerCase() === "f") {
       e.preventDefault();
       searchEl?.focus();
       searchEl?.select();

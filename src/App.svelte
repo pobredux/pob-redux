@@ -12,7 +12,7 @@
   import { tooltip } from "$lib/state/tooltip.svelte";
   import ChatPanel from "$lib/components/ChatPanel.svelte";
   import CommandPalette from "$lib/components/CommandPalette.svelte";
-  import { modKey } from "$lib/keys";
+  import { modKey, shortcutKey } from "$lib/keys";
   import UpdateBanner from "$lib/components/UpdateBanner.svelte";
   import LogoMark from "$lib/components/LogoMark.svelte";
   import { engine } from "$lib/engine.svelte";
@@ -60,7 +60,7 @@
     // Single-letter keys belong to the tree view.
     const onKey = (e: KeyboardEvent) => {
       if (!modKey(e) || e.shiftKey || e.altKey) return;
-      const key = e.key.toLowerCase();
+      const key = shortcutKey(e).toLowerCase();
       if (key === "k" && status?.state === "ready") {
         e.preventDefault();
         ui.paletteOpen = !ui.paletteOpen;

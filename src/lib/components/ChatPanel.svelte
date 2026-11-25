@@ -1,5 +1,6 @@
 <script lang="ts">
   import { scrollHint } from "$lib/scroll-hint";
+  import { shortcutKey } from "$lib/keys";
   import { onMount, tick } from "svelte";
   import { chat, DEFAULT_WIDTH, experimentDelta, lookupSite, MAX_WIDTH, MIN_WIDTH, type ToolTurn } from "$lib/state/chat.svelte";
   import Icon from "$lib/components/Icon.svelte";
@@ -57,7 +58,7 @@
 
   function onPanelKey(e: KeyboardEvent) {
     if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
-    if (!e.shiftKey && e.key.toLowerCase() === "n") {
+    if (!e.shiftKey && shortcutKey(e).toLowerCase() === "n") {
       e.preventDefault();
       void chat.startThread();
     } else if (e.shiftKey && (e.code === "BracketLeft" || e.code === "BracketRight")) {

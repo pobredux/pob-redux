@@ -6,7 +6,7 @@
   import { stripPobText } from "$lib/pobtext";
   import { untrack } from "svelte";
   import { ui } from "$lib/state/ui.svelte";
-  import { modKey } from "$lib/keys";
+  import { modKey, shortcutKey } from "$lib/keys";
   import Kbd from "$lib/components/Kbd.svelte";
   import { m } from "$lib/paraglide/messages";
   import { configLabel } from "$lib/pob-labels";
@@ -174,7 +174,7 @@
 
   let filterEl = $state<HTMLInputElement>();
   function onKey(e: KeyboardEvent) {
-    if (modKey(e) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "f") {
+    if (modKey(e) && !e.shiftKey && !e.altKey && shortcutKey(e).toLowerCase() === "f") {
       e.preventDefault();
       filterEl?.focus();
       filterEl?.select();

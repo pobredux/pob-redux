@@ -10,7 +10,7 @@
   import ContextMenu from "$lib/components/ContextMenu.svelte";
   import type { MenuItem } from "$lib/components/MoreMenu.svelte";
   import { goTo, tabList, tabs as tabWindows, tearable } from "$lib/state/tabs.svelte";
-  import { isTextField } from "$lib/keys";
+  import { isTextField, shortcutKey } from "$lib/keys";
   import { m } from "$lib/paraglide/messages";
 
   import LogoMark from "$lib/components/LogoMark.svelte";
@@ -103,54 +103,55 @@
     win.isMaximized().then((v) => (maximized = v));
     const un = win.onResized(async () => (maximized = await win.isMaximized()));
     const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey && !e.altKey && e.key === "Tab") {
+      const key = shortcutKey(e);
+      if (e.ctrlKey && !e.altKey && key === "Tab") {
         const open = tabs.filter((t) => (build.loaded || t.id === "import") && !tabWindows.isTorn(t.id));
         const at = Math.max(0, open.findIndex((t) => t.id === build.view));
         openView(open[(at + (e.shiftKey ? -1 : 1) + open.length) % open.length].id);
         e.preventDefault();
         return;
       }
-      if (e.ctrlKey && e.shiftKey && !e.altKey && e.key.toLowerCase() === "s") {
+      if (e.ctrlKey && e.shiftKey && !e.altKey && key.toLowerCase() === "s") {
         void build.saveAs();
         e.preventDefault();
         return;
       }
       if (e.ctrlKey && !e.shiftKey && !e.altKey) {
-        if (e.key === "s") {
+        if (key === "s") {
           void build.save();
           e.preventDefault();
         }
-        const t = tabs.find((t) => t.key === e.key);
+        const t = tabs.find((t) => t.key === key);
         if (t && build.loaded) {
           openView(t.id);
           e.preventDefault();
         }
         const treeUndo = build.view === "tree" && !appOptions.open && !isTextField(e.target);
-        if (e.key === "z" && treeUndo) {
+        if (key === "z" && treeUndo) {
           build.undo();
           e.preventDefault();
         }
-        if (e.key === "y" && treeUndo) {
+        if (key === "y" && treeUndo) {
           build.redo();
           e.preventDefault();
         }
-        if (e.key === "b") {
+        if (key === "b") {
           ui.toggleSidebar();
           e.preventDefault();
         }
-        if (e.key === ",") {
+        if (key === ",") {
           appOptions.open = !appOptions.open;
           e.preventDefault();
         }
-        if (e.key === "=" || e.key === "+") {
+        if (key === "=" || key === "+") {
           ui.stepScale(1);
           e.preventDefault();
         }
-        if (e.key === "-") {
+        if (key === "-") {
           ui.stepScale(-1);
           e.preventDefault();
         }
-        if (e.key === "0") {
+        if (key === "0") {
           ui.setScale(1);
           e.preventDefault();
         }

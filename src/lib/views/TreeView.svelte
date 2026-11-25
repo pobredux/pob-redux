@@ -20,7 +20,7 @@
   import Kbd from "$lib/components/Kbd.svelte";
   import Icon from "$lib/components/Icon.svelte";
   import MoreMenu, { type MenuItem } from "$lib/components/MoreMenu.svelte";
-  import { modKey } from "$lib/keys";
+  import { modKey, shortcutKey } from "$lib/keys";
   import { m } from "$lib/paraglide/messages";
   import { recipeArt } from "$lib/item-art";
 
@@ -2055,17 +2055,18 @@
   function onKey(e: KeyboardEvent) {
     const t = e.target as HTMLElement | null;
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT")) return;
-    if (e.key === "+" || e.key === "=" || e.key === "PageUp") zoomBy(e.shiftKey ? 2.2 : 1.3);
-    else if (e.key === "-" || e.key === "PageDown") zoomBy(e.shiftKey ? 1 / 2.2 : 1 / 1.3);
-    else if (e.key === "Home" || e.key === "h") focusClass();
-    else if (e.key === "a") focusAscendancy();
-    else if (e.key === "p") powerOn = !powerOn;
-    else if (e.key === "r" && powerOn) showReport = !showReport;
-    else if (e.key === "Escape" && pins.length) pins = [];
-    else if (e.key === "Escape" && focusNode !== null) clearFocus();
-    else if (e.key === "d" && modKey(e)) ui.setTreeStatDiff(!ui.treeStatDiff);
-    else if (e.key === "f" && !e.ctrlKey && !e.metaKey) fitAll();
-    else if (e.key === "/" || (e.key === "f" && modKey(e))) {
+    const key = shortcutKey(e);
+    if (key === "+" || key === "=" || key === "PageUp") zoomBy(e.shiftKey ? 2.2 : 1.3);
+    else if (key === "-" || key === "PageDown") zoomBy(e.shiftKey ? 1 / 2.2 : 1 / 1.3);
+    else if (key === "Home" || key === "h") focusClass();
+    else if (key === "a") focusAscendancy();
+    else if (key === "p") powerOn = !powerOn;
+    else if (key === "r" && powerOn) showReport = !showReport;
+    else if (key === "Escape" && pins.length) pins = [];
+    else if (key === "Escape" && focusNode !== null) clearFocus();
+    else if (key === "d" && modKey(e)) ui.setTreeStatDiff(!ui.treeStatDiff);
+    else if (key === "f" && !e.ctrlKey && !e.metaKey) fitAll();
+    else if (key === "/" || (key === "f" && modKey(e))) {
       e.preventDefault();
       searchEl?.focus();
     } else return;

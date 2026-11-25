@@ -14,7 +14,7 @@
   import MinionLibrary from "$lib/components/MinionLibrary.svelte";
   import { parsePobText, stripPobText } from "$lib/pobtext";
   import { slotLabel } from "$lib/pob-labels";
-  import { isTextField } from "$lib/keys";
+  import { isTextField, shortcutKey } from "$lib/keys";
   import { m } from "$lib/paraglide/messages";
 
   const groups = $derived(build.skills?.socketGroups ?? []);
@@ -233,7 +233,7 @@
     if (e.key === "Delete" && !e.ctrlKey && sel && !sel.source && listEl?.contains(document.activeElement)) {
       e.preventDefault();
       void removeGroup();
-    } else if (e.ctrlKey && e.key.toLowerCase() === "n" && !isTextField(e.target)) {
+    } else if (e.ctrlKey && shortcutKey(e).toLowerCase() === "n" && !isTextField(e.target)) {
       e.preventDefault();
       void addGroup();
     }

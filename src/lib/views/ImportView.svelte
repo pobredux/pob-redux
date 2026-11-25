@@ -50,7 +50,7 @@
   import Icon from "$lib/components/Icon.svelte";
   import ClassIcon from "$lib/components/ClassIcon.svelte";
   import Kbd from "$lib/components/Kbd.svelte";
-  import { modKey } from "$lib/keys";
+  import { modKey, shortcutKey } from "$lib/keys";
   import { m } from "$lib/paraglide/messages";
   import { formatDate, formatDateTime } from "$lib/i18n/format";
 
@@ -62,7 +62,7 @@
   let filter = $state("");
   let filterEl = $state<HTMLInputElement>();
   function onFindKey(e: KeyboardEvent) {
-    if (!modKey(e) || e.shiftKey || e.altKey || e.key.toLowerCase() !== "f" || document.querySelector('[aria-modal="true"]')) return;
+    if (!modKey(e) || e.shiftKey || e.altKey || shortcutKey(e).toLowerCase() !== "f" || document.querySelector('[aria-modal="true"]')) return;
     e.preventDefault();
     filterEl?.focus();
     filterEl?.select();
