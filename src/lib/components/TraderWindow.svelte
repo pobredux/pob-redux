@@ -73,6 +73,8 @@
     sort: TradeSort;
     pages: number;
     weights: TradeWeight[];
+    weightsOpen: boolean;
+    slotsOpen: boolean;
     corrupted: boolean;
     mirrored: boolean;
     maxPrice: number;
@@ -101,6 +103,8 @@
         { stat: "FullDPS", weightMult: 1 },
         { stat: "TotalEHP", weightMult: 0.5 },
       ],
+      weightsOpen: true,
+      slotsOpen: true,
       corrupted: true,
       mirrored: true,
       maxPrice: 0,
@@ -137,6 +141,8 @@
   let sort = $state<TradeSort>(saved.sort);
   let pages = $state(saved.pages);
   let weights = $state(saved.weights);
+  let weightsOpen = $state(saved.weightsOpen);
+  let slotsOpen = $state(saved.slotsOpen);
   let corrupted = $state(saved.corrupted);
   let mirrored = $state(saved.mirrored);
   let maxPrice = $state(saved.maxPrice);
@@ -252,7 +258,7 @@
 
   function remember() {
     const state: Saved = {
-      league, realm, status, sort, pages, weights, corrupted, mirrored, maxPrice, maxPriceType, maxLevel, sockets, links,
+      league, realm, status, sort, pages, weights, weightsOpen, slotsOpen, corrupted, mirrored, maxPrice, maxPriceType, maxLevel, sockets, links,
       jewelType, runeBehaviour, anointBehaviour, eldritch, enchantMode, scourge, talisman,
     };
     try {
@@ -333,6 +339,7 @@
   }
 
   onMount(() => {
+    if (focusSlot !== null) slotsOpen = true;
     void loadRows(false);
     engine.powerStats().then((r) => (powerStats = r.stats)).catch(() => {});
     engine.tradeStatusOptions().then((r) => (statuses = r.options)).catch(() => {});
@@ -508,6 +515,7 @@
   }
 
   async function all() {
+    slotsOpen = true;
     remember();
     runAll = true;
     cancel = false;
@@ -642,6 +650,24 @@
     tip = null;
   }
 
+  const statLabel = (stat: string) => (stat === "FullDPS" ? m.trader_full_dps() : (powerStats.find((s) => s.stat === stat)?.label ?? stat));
+  const weightList = $derived(weights.map((w) => `${statLabel(w.stat)} ${formatNumber(w.weightMult)}`).join(", "));
+
+  function toggleWeights() {
+    weightsOpen = !weightsOpen;
+    remember();
+  }
+
+  function toggleSlots() {
+    slotsOpen = !slotsOpen;
+    remember();
+  }
+
+  function addStat() {
+    weights = [...weights, { stat: "TotalEHP", weightMult: 0.5 }];
+    void weightsChanged();
+  }
+
   const signed = (value: number) => `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
   const tone = (change: number | null) => (change === null || change === 0 ? undefined : change > 0 ? "var(--ok)" : "var(--bad)");
   // PoB's power list negates these, so less damage taken counts as the gain.
@@ -703,7 +729,7 @@
 </script>
 
 <div class="modal">
-  <div class="panel dialog trdlg">
+  <div class="panel dialog trdlg" class:tall={slotsOpen}>
     <div class="head">
       <span class="label">{m.trader_title()}</span>
       <span class="dim small">{ggg.account ? m.trader_signed_in({ name: ggg.account.name }) : m.trader_subtitle()}</span>
@@ -794,78 +820,103 @@
         {/if}
       </div>
 
-      <div class="orow whead">
-        <span class="olabel"></span>
-        <span class="grow"></span>
-        <span class="cur">{m.trader_col_now()}</span>
-        <span class="wcol">{m.trader_col_weight()}</span>
-        <span class="x"></span>
-      </div>
-
-      {#each weights as w, i}
-        {@const was = before?.[w.stat] ?? null}
-        {@const now = values[w.stat] ?? null}
-        {@const gain = was !== null && now !== null && was !== now ? (lowerIsBetter(w.stat) ? was - now : now - was) : null}
-        <div class="orow">
-          <span class="olabel">{i === 0 ? m.trader_weigh_by() : ""}</span>
-          <select
-            class="select sm grow"
-            value={w.stat}
-            onchange={(e) => {
-              weights[i] = { ...w, stat: (e.target as HTMLSelectElement).value };
-              void weightsChanged();
-            }}
-          >
-            <option value="FullDPS">{m.trader_full_dps()}</option>
-            {#each powerStats as s (s.stat)}
-              <option value={s.stat}>{s.label}</option>
-            {/each}
-          </select>
-          <span class="cur num" title={gain === null ? m.trader_current_title() : m.trader_before_after_title()}>
-            {#if gain !== null}
-              <span class="dim">{fmt(was)} →</span>
-              <span style:color={tone(gain)}>{fmt(now)}</span>
-            {:else}
-              {fmt(now)}
-            {/if}
-          </span>
-          <input
-            class="input sm wnum"
-            type="number"
-            min="0"
-            max="10"
-            step="0.1"
-            value={w.weightMult}
-            title={m.trader_weight_title()}
-            onchange={(e) => {
-              weights[i] = { ...w, weightMult: Number((e.target as HTMLInputElement).value) };
-              void weightsChanged();
-            }}
-          />
-          {#if weights.length > 1}
-            <button
-              class="x"
-              onclick={() => {
-                weights = weights.filter((_, j) => j !== i);
-                void weightsChanged();
-              }}
-              title={m.common_remove()}>✕</button
-            >
-          {:else}
-            <span class="x"></span>
+      <div class="wbox">
+        <button
+          class="shead"
+          onclick={toggleWeights}
+          aria-expanded={weightsOpen}
+          title={weightsOpen ? m.trader_weights_hide_title() : m.trader_weights_show_title()}
+        >
+          <span class="htitle">{m.trader_weigh_by()}</span>
+          <span class="dim num">{weights.length}</span>
+          {#if !weightsOpen}
+            <span class="wline" title={weightList}>
+              {#each weights as w, i (i)}
+                <span class="chip">{statLabel(w.stat)} <span class="num">{formatNumber(w.weightMult)}</span></span>
+              {/each}
+            </span>
           {/if}
-        </div>
-      {/each}
+          <span class="hcaret" class:open={weightsOpen}><Icon name="caret-down" size={11} /></span>
+        </button>
+        {#if weightsOpen}
+          <div class="wbody">
+            <div class="wgrid whead">
+              {#each weights.length > 1 ? [0, 1] : [0] as col (col)}
+                <div class="wcell">
+                  <span class="grow"></span>
+                  <span class="cur">{m.trader_col_now()}</span>
+                  <span class="wcol">{m.trader_col_weight()}</span>
+                  <span class="x"></span>
+                </div>
+              {/each}
+            </div>
+            <div class="wgrid">
+              {#each weights as w, i}
+                {@const was = before?.[w.stat] ?? null}
+                {@const now = values[w.stat] ?? null}
+                {@const gain = was !== null && now !== null && was !== now ? (lowerIsBetter(w.stat) ? was - now : now - was) : null}
+                <div class="wcell">
+                  <select
+                    class="select sm grow"
+                    value={w.stat}
+                    onchange={(e) => {
+                      weights[i] = { ...w, stat: (e.target as HTMLSelectElement).value };
+                      void weightsChanged();
+                    }}
+                  >
+                    <option value="FullDPS">{m.trader_full_dps()}</option>
+                    {#each powerStats as s (s.stat)}
+                      <option value={s.stat}>{s.label}</option>
+                    {/each}
+                  </select>
+                  <span class="cur num" title={gain === null ? m.trader_current_title() : m.trader_before_after_title()}>
+                    {#if gain !== null}
+                      <span class="dim">{fmt(was)} →</span>
+                      <span style:color={tone(gain)}>{fmt(now)}</span>
+                    {:else}
+                      {fmt(now)}
+                    {/if}
+                  </span>
+                  <input
+                    class="input sm wnum"
+                    type="number"
+                    min="0"
+                    max="10"
+                    step="0.1"
+                    value={w.weightMult}
+                    title={m.trader_weight_title()}
+                    onchange={(e) => {
+                      weights[i] = { ...w, weightMult: Number((e.target as HTMLInputElement).value) };
+                      void weightsChanged();
+                    }}
+                  />
+                  {#if weights.length > 1}
+                    <button
+                      class="x"
+                      onclick={() => {
+                        weights = weights.filter((_, j) => j !== i);
+                        void weightsChanged();
+                      }}
+                      title={m.common_remove()}>✕</button
+                    >
+                  {:else}
+                    <span class="x"></span>
+                  {/if}
+                </div>
+              {/each}
+              <div class="wcell">
+                <button class="wadd grow" onclick={addStat}><Icon name="plus" size={12} />{m.trader_add_stat()}</button>
+                <span class="cur"></span>
+                <span class="wcol"></span>
+                <span class="x"></span>
+              </div>
+            </div>
+          </div>
+        {/if}
+      </div>
 
       <div class="orow wrap">
         <span class="olabel"></span>
-        <button
-          class="btn sm ghost"
-          onclick={() => {
-            weights = [...weights, { stat: "TotalEHP", weightMult: 0.5 }];
-            void weightsChanged();
-          }}>{m.trader_add_stat()}</button
-        >
         <label class="chk small"><input type="checkbox" bind:checked={corrupted} /> {m.trader_corrupted()}</label>
         <label class="chk small"><input type="checkbox" bind:checked={mirrored} /> {m.trader_mirrored()}</label>
         <span class="olabel wide">{m.trader_max_price()}</span>
@@ -926,13 +977,14 @@
       </div>
     </div>
 
-    <div class="side">
-      <div class="shead">
-        {m.trader_slots()}
+    <div class="side" class:open={slotsOpen}>
+      <button class="shead" onclick={toggleSlots} aria-expanded={slotsOpen} title={slotsOpen ? m.trader_slots_hide_title() : m.trader_slots_show_title()}>
+        <span class="htitle">{m.trader_slots()}</span>
         <span class="dim num">{rows.length}</span>
         {#if ready}<span class="dim small">{m.trader_with_search({ count: ready })}</span>{/if}
-      </div>
-      <div class="scroll scroll-hint" {@attach scrollHint}>
+        <span class="hcaret" class:open={slotsOpen}><Icon name="caret-down" size={11} /></span>
+      </button>
+      <div class="scroll scroll-hint" hidden={!slotsOpen} {@attach scrollHint}>
         {#each rows as r, index (r.key)}
           {#if r.special && !rows[index - 1]?.special}
             <div class="other dim small">{m.trader_other_trades()}</div>
@@ -1141,17 +1193,21 @@
     position: absolute;
     inset: 0;
     display: grid;
-    place-items: center;
+    place-items: start center;
+    padding: 12px 0;
     background: var(--backdrop);
     z-index: 6;
   }
   .trdlg {
     width: 980px;
-    max-height: 92vh;
+    max-height: 100%;
     padding: 16px 18px;
     display: flex;
     flex-direction: column;
     gap: 10px;
+  }
+  .trdlg.tall {
+    height: 100%;
   }
   .head {
     display: flex;
@@ -1172,7 +1228,8 @@
   .orow.wrap {
     flex-wrap: wrap;
   }
-  .orow .grow {
+  .orow .grow,
+  .wcell .grow {
     flex: 1;
     min-width: 0;
   }
@@ -1189,7 +1246,7 @@
     width: 70px;
     text-align: right;
   }
-  .orow .x,
+  .wcell .x,
   .frow .x {
     width: 18px;
     flex: none;
@@ -1199,36 +1256,76 @@
     font: inherit;
     cursor: var(--cursor-pointer, pointer);
   }
-  .orow button.x:hover,
+  .wcell button.x:hover,
   .frow button.x:hover {
     color: var(--bad);
   }
   .side {
     display: flex;
     flex-direction: column;
-    min-height: 0;
     border: 1px solid var(--line-1);
     border-radius: var(--r-2);
   }
+  .side.open {
+    flex: 1;
+    min-height: 80px;
+  }
   .shead {
+    width: 100%;
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 8px;
     padding: 6px 10px;
+    background: none;
+    border: 0;
+    border-radius: var(--r-2);
+    font: inherit;
     font-size: var(--fs-xs);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--fg-2);
+    text-align: left;
+    cursor: var(--cursor-pointer, pointer);
+  }
+  .shead[aria-expanded="true"] {
     border-bottom: 1px solid var(--line-0);
+    border-radius: var(--r-2) var(--r-2) 0 0;
+  }
+  .shead:hover {
+    background: var(--bg-hover);
+    color: var(--fg-1);
+  }
+  .shead:focus-visible {
+    outline: 1px solid var(--focus);
+    outline-offset: -1px;
   }
   .shead .small {
     margin-left: auto;
     text-transform: none;
     letter-spacing: 0;
   }
+  .shead .small + .hcaret {
+    margin-left: 0;
+  }
+  .htitle {
+    flex: none;
+    white-space: nowrap;
+  }
+  .hcaret {
+    flex: none;
+    display: grid;
+    place-items: center;
+    margin-left: auto;
+    color: var(--fg-3);
+    transition: transform 160ms ease;
+  }
+  .hcaret.open {
+    transform: rotate(180deg);
+  }
   .scroll {
+    flex: 1;
+    min-height: 0;
     overflow: auto;
-    height: 40vh;
   }
   .other {
     padding: 8px 10px 2px;
@@ -1290,8 +1387,65 @@
     color: var(--fg-2);
     white-space: nowrap;
   }
+  .wbox {
+    border: 1px solid var(--line-1);
+    border-radius: var(--r-2);
+  }
+  .wline {
+    min-width: 0;
+    margin-left: 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .wline .chip + .chip {
+    margin-left: 12px;
+  }
+  .wbody {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 6px 10px 10px;
+  }
   .whead {
     margin-bottom: -4px;
+  }
+  .wgrid {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 24px;
+  }
+  .wcell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .wadd {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    padding: 0 8px;
+    border: 1px dashed var(--line-2);
+    border-radius: var(--r-1);
+    background: none;
+    color: var(--fg-1);
+    font: inherit;
+    font-size: var(--fs-xs);
+    cursor: var(--cursor-pointer, pointer);
+  }
+  .wadd:hover {
+    border-color: var(--fg-3);
+    background: var(--bg-hover);
+    color: var(--fg-0);
+  }
+  .wadd:focus-visible {
+    outline: 1px solid var(--focus);
+    outline-offset: -1px;
   }
   .whead .cur,
   .wcol {

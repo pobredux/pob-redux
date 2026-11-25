@@ -111,7 +111,7 @@ to fit the gems, and picks the item's **Imbued support** (one per item; set Sock
 ### Items
 
 - Toolbar: item set dropdown, weapon set I or II, **Craft item…**, **New item from text**, **Paste
-  item** (Ctrl+V), **Trader…**, **Stat differences** (Ctrl+D).
+  item** (Ctrl+V), **Trader**, **Stat differences** (Ctrl+D).
 - Craft item… picks rarity, type and base. Hovering a base in the Base list shows its tooltip and
   what equipping it would change.
 - Column 1, Equipment: every slot with a picker; the magnifier is **Buy similar**; right-click a slot
@@ -214,13 +214,15 @@ is on, and each reply has a read-aloud button once the Phonon voice is downloade
 
 ## Trade
 
-- **Trader…** on the Items tab searches upgrades for every slot, weighted by the build. Live prices
+- **Trader** on the Items tab searches upgrades for every slot, weighted by the build. Live prices
   and whispers need **Sign in with Path of Exile** with trade permission; without it the Trader
   still builds the search links.
 - **Weight set** loads a set of stat weights: the starter sets Damage, Defence and Balanced, or
-  one saved with **Save as**. **Delete** removes a saved set. Saved sets are kept per game. Each
-  **Weigh by** row shows the build's current value of that stat under **Now**, and after **Import**
-  it shows the value before and after.
+  one saved with **Save as**. **Delete** removes a saved set. Saved sets are kept per game. The
+  **Weigh by** box lists the weights two per row; each shows the build's current value of that stat
+  under **Now**, and after **Import** the value before and after. **Add stat** is the last cell of
+  the box. Clicking the **Weigh by** or **Slots** header collapses that box to one line, and the
+  Trader remembers it. **Find all slots** opens the slot list again.
 - Each slot lists its top three listings with price, score and the change in every weighted
   stat; **Show N more** lists the rest. Clicking a listing's stat changes opens how each weight
   adds up to the score. Clicking the name picks the listing for the total. **Import** and
