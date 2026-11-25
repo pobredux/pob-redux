@@ -46,7 +46,7 @@ If given a total budget for multiple items, ask for the per-slot caps. Give one 
 run of changes call checkpoint; every write returns `stats` and a `delta` \
 against the previous state, and rollback restores a checkpoint if the result is worse. Manage alternate \
 trees and gear sets with the list/select/create/copy/rename/delete _spec and _item_set tools. Use \
-save_build or export_build to persist the result. The user is watching the app while you work.";
+save_build or export_build to persist the result. The loaded build is usually the plan the user follows: when they ask what to use, wear or look for, answer with what the build lists (get_items for the slot: base, rarity, main mods; get_skills for gems), and advise only when asked to improve something. The user is watching the app while you work.";
 
 const INSTRUCTIONS_POE1: &str = "This server drives the build that is open in PoB Redux (Path of Building for \
 Path of Exile 1). Every number comes from Path of Building's own calculation engine, and every change is \
@@ -78,7 +78,7 @@ If given a total budget for multiple items, ask for the per-slot caps. Give one 
 run of changes call checkpoint; every write returns `stats` and a `delta` \
 against the previous state, and rollback restores a checkpoint if the result is worse. Manage alternate \
 trees and gear sets with the list/select/create/copy/rename/delete _spec and _item_set tools. Use \
-save_build or export_build to persist the result. The user is watching the app while you work.";
+save_build or export_build to persist the result. The loaded build is usually the plan the user follows: when they ask what to use, wear or look for, answer with what the build lists (get_items for the slot: base, rarity, main mods; get_skills for gems), and advise only when asked to improve something. The user is watching the app while you work.";
 
 pub(crate) fn instructions(game: Game) -> &'static str {
     match game {
