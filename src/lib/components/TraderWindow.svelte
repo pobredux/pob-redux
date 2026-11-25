@@ -22,6 +22,8 @@
   import { ggg } from "$lib/state/ggg.svelte";
   import PobTooltip from "$lib/components/PobTooltip.svelte";
   import SearchSelect from "$lib/components/SearchSelect.svelte";
+  import Icon from "$lib/components/Icon.svelte";
+  import { formatNumber } from "$lib/i18n/format";
   import { m } from "$lib/paraglide/messages";
 
   let { onclose, focusSlot = null }: { onclose: () => void; focusSlot?: string | null } = $props();
@@ -42,6 +44,9 @@
     hint: string | null;
     results: TradeResult[] | null;
     picked: number;
+    more: boolean;
+    /** PoB's index of the listing whose score breakdown is open. */
+    open: number | null;
     equipSlot: string | null;
     nodeId: number | null;
     ringSlot: string | null;
@@ -174,6 +179,77 @@
   // PoB offers scourge mods only where they still exist.
   const scourgeLeague = $derived(league === "Standard" || league === "Hardcore");
 
+  interface WeightSet {
+    name: string;
+    weights: TradeWeight[];
+  }
+
+  const SETS_KEY = `pob-redux:trade-weight-sets:${game.current}`;
+
+  function loadSets(): WeightSet[] {
+    try {
+      const raw = localStorage.getItem(SETS_KEY);
+      if (raw) return JSON.parse(raw) as WeightSet[];
+    } catch {}
+    return [];
+  }
+
+  let userSets = $state(loadSets());
+  let naming = $state<string | null>(null);
+  const starterSets = $derived<WeightSet[]>([
+    { name: m.trader_set_damage(), weights: [{ stat: "FullDPS", weightMult: 1 }] },
+    { name: m.trader_set_defence(), weights: [{ stat: "TotalEHP", weightMult: 1 }] },
+    { name: m.trader_set_balanced(), weights: [{ stat: "FullDPS", weightMult: 1 }, { stat: "TotalEHP", weightMult: 0.5 }] },
+  ]);
+  const sameWeights = (a: TradeWeight[], b: TradeWeight[]) => a.length === b.length && a.every((w, i) => w.stat === b[i].stat && w.weightMult === b[i].weightMult);
+  const currentSet = $derived.by(() => {
+    const mine = userSets.find((s) => sameWeights(s.weights, activeWeights));
+    if (mine) return `u:${mine.name}`;
+    const starter = starterSets.findIndex((s) => sameWeights(s.weights, activeWeights));
+    return starter >= 0 ? `s:${starter}` : "";
+  });
+
+  function storeSets() {
+    try {
+      localStorage.setItem(SETS_KEY, JSON.stringify(userSets));
+    } catch {}
+  }
+
+  function useSet(id: string) {
+    const set = id.startsWith("s:") ? starterSets[Number(id.slice(2))] : userSets.find((s) => `u:${s.name}` === id);
+    if (!set) return;
+    weights = set.weights.map((w) => ({ ...w }));
+    void weightsChanged();
+  }
+
+  function saveSet() {
+    const name = naming?.trim();
+    if (!name) return;
+    const set = { name, weights: activeWeights.map((w) => ({ ...w })) };
+    userSets = [...userSets.filter((s) => s.name !== name), set].sort((a, b) => a.name.localeCompare(b.name));
+    storeSets();
+    naming = null;
+  }
+
+  function deleteSet() {
+    userSets = userSets.filter((s) => `u:${s.name}` !== currentSet);
+    storeSets();
+  }
+
+  let values = $state<Record<string, number | null>>({});
+  let before = $state<Record<string, number | null> | null>(null);
+  let valuesAsked = 0;
+
+  $effect(() => {
+    void build.rev;
+    const stats = [...new Set(weights.map((w) => w.stat))];
+    const asked = ++valuesAsked;
+    engine
+      .powerStatValues(stats)
+      .then((r) => asked === valuesAsked && (values = r.values))
+      .catch(() => {});
+  });
+
   function remember() {
     const state: Saved = {
       league, realm, status, sort, pages, weights, corrupted, mirrored, maxPrice, maxPriceType, maxLevel, sockets, links,
@@ -204,6 +280,8 @@
           hint: null,
           results: null,
           picked: 0,
+          more: false,
+          open: null,
           equipSlot: null,
           allMods: false,
           filtersOpen: false,
@@ -386,7 +464,7 @@
     const r = rows.find((row) => row.key === key);
     if (!r) return false;
     busyKey = key;
-    patch(key, { error: null, hint: null, results: null, picked: 0 });
+    patch(key, { error: null, hint: null, results: null, picked: 0, open: null });
     try {
       await engine.tradeSearchStart(queryOptions(r));
       for (let i = 0; i < 600; i++) {
@@ -420,7 +498,7 @@
     note = "";
     cancel = false;
     busyKey = key;
-    patch(key, { error: null, hint: null, results: null, picked: 0 });
+    patch(key, { error: null, hint: null, results: null, picked: 0, open: null });
     try {
       await withListings(r, { url: r.url.trim() });
     } finally {
@@ -502,12 +580,12 @@
     }
   }
 
-  async function importResult(r: Row) {
-    const result = r.results?.[r.picked];
-    if (!result) return;
+  async function importResult(r: Row, result: TradeResult) {
     const slot = r.equipSlot ?? r.slot ?? undefined;
+    const was = { ...values };
     const equipped = await build.run(() => engine.equipItemRaw(result.raw, slot));
     if (!equipped) return;
+    before = was;
     note = m.trader_imported({ name: equipped.itemName });
     await loadRows(true);
     await relist();
@@ -516,9 +594,7 @@
   const whispers = (result: TradeResult | undefined) => !!result?.whisper && result.priceType !== "~b/o";
 
   /** A listing with no whisper is bought on the trade site, so that opens a search for the one listing. */
-  async function contact(r: Row) {
-    const result = r.results?.[r.picked];
-    if (!result) return;
+  async function contact(r: Row, result: TradeResult) {
     try {
       if (whispers(result)) {
         await writeText(result.whisper ?? "");
@@ -547,13 +623,11 @@
     patch(r.key, kind === "required" ? { required: list } : { blocked: list });
   }
 
-  function showTip(e: MouseEvent, r: Row) {
-    const result = r.results?.[r.picked];
-    if (!result) return;
+  function showTip(e: MouseEvent, r: Row, result: TradeResult) {
     const key = `${r.key}/${result.index}`;
     tipFor = key;
     const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const room = box.left + RESULT_INDENT - 16;
+    const room = box.left - 16;
     const width = Math.min(540, Math.max(320, room));
     engine
       .itemTooltip({ raw: result.raw, slotName: r.equipSlot ?? r.slot ?? undefined })
@@ -569,12 +643,22 @@
   }
 
   const signed = (value: number) => `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
+  const tone = (change: number | null) => (change === null || change === 0 ? undefined : change > 0 ? "var(--ok)" : "var(--bad)");
+  // PoB's power list negates these, so less damage taken counts as the gain.
+  const lowerIsBetter = (stat: string) => stat.endsWith("TakenHit");
+  const weightTotal = (result: TradeResult) => result.stats.reduce((sum, s) => sum + s.weight, 0);
 
-  function label(result: TradeResult) {
-    return `${result.name} · ${result.amount} ${result.currency}${result.score === null ? "" : ` · ${signed(result.score)}`}`;
+  function fmt(value: number | null | undefined) {
+    if (value == null) return "–";
+    const size = Math.abs(value);
+    return formatNumber(value, { maximumFractionDigits: size >= 100 ? 0 : size >= 10 ? 1 : 2 });
   }
 
-  const breakdown = (result: TradeResult | undefined) => (result?.stats ?? []).map((s) => `${s.label} ${signed(s.change)}`).join(" · ");
+  const SHOWN = 3;
+
+  function shown(r: Row) {
+    return (r.results ?? []).map((result, i) => ({ result, i })).filter(({ i }) => r.more || i < SHOWN || i === r.picked);
+  }
 
   const sortLabel = $derived<Record<TradeSort, string>>({
     StatValue: m.trader_sort_value(),
@@ -672,7 +756,56 @@
         </div>
       {/if}
 
+      <div class="orow">
+        <span class="olabel">{m.trader_weight_set()}</span>
+        {#if naming !== null}
+          <!-- svelte-ignore a11y_autofocus -->
+          <input
+            class="input sm grow"
+            bind:value={naming}
+            placeholder={m.trader_set_name()}
+            autofocus
+            onkeydown={(e) => {
+              if (e.key === "Enter") saveSet();
+              if (e.key === "Escape") naming = null;
+            }}
+          />
+          <button class="btn sm" onclick={saveSet} disabled={!naming.trim()}>{m.common_save()}</button>
+          <button class="btn sm ghost" onclick={() => (naming = null)}>{m.common_cancel()}</button>
+        {:else}
+          <select class="select sm grow" value={currentSet} onchange={(e) => useSet((e.target as HTMLSelectElement).value)}>
+            {#if !currentSet}<option value="">{m.trader_set_custom()}</option>{/if}
+            <optgroup label={m.trader_sets_starter()}>
+              {#each starterSets as s, i (i)}<option value={`s:${i}`}>{s.name}</option>{/each}
+            </optgroup>
+            {#if userSets.length}
+              <optgroup label={m.trader_sets_saved()}>
+                {#each userSets as s (s.name)}<option value={`u:${s.name}`}>{s.name}</option>{/each}
+              </optgroup>
+            {/if}
+          </select>
+          <button
+            class="btn sm ghost"
+            onclick={() => (naming = currentSet.startsWith("u:") ? currentSet.slice(2) : "")}
+            disabled={!activeWeights.length}
+            title={m.trader_set_save_title()}>{m.trader_set_save()}</button
+          >
+          <button class="btn sm ghost" onclick={deleteSet} disabled={!currentSet.startsWith("u:")} title={m.trader_set_delete_title()}>{m.common_delete()}</button>
+        {/if}
+      </div>
+
+      <div class="orow whead">
+        <span class="olabel"></span>
+        <span class="grow"></span>
+        <span class="cur">{m.trader_col_now()}</span>
+        <span class="wcol">{m.trader_col_weight()}</span>
+        <span class="x"></span>
+      </div>
+
       {#each weights as w, i}
+        {@const was = before?.[w.stat] ?? null}
+        {@const now = values[w.stat] ?? null}
+        {@const gain = was !== null && now !== null && was !== now ? (lowerIsBetter(w.stat) ? was - now : now - was) : null}
         <div class="orow">
           <span class="olabel">{i === 0 ? m.trader_weigh_by() : ""}</span>
           <select
@@ -688,6 +821,14 @@
               <option value={s.stat}>{s.label}</option>
             {/each}
           </select>
+          <span class="cur num" title={gain === null ? m.trader_current_title() : m.trader_before_after_title()}>
+            {#if gain !== null}
+              <span class="dim">{fmt(was)} →</span>
+              <span style:color={tone(gain)}>{fmt(now)}</span>
+            {:else}
+              {fmt(now)}
+            {/if}
+          </span>
           <input
             class="input sm wnum"
             type="number"
@@ -893,28 +1034,52 @@
           {#if r.error}
             <div class="rrow small bad" style:padding-left={`${RESULT_INDENT}px`}>{r.error}</div>
           {:else if r.results?.length}
-            {@const pickedResult = r.results[r.picked]}
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="rrow" style:padding-left={`${RESULT_INDENT}px`} onmouseenter={(e) => showTip(e, r)} onmouseleave={hideTip}>
-              <select
-                class="select sm grow"
-                value={r.picked}
-                onchange={(e) => {
-                  hideTip();
-                  patch(r.key, { picked: Number((e.target as HTMLSelectElement).value) });
-                }}
-              >
-                {#each r.results as result, i (result.index)}
-                  <option value={i}>{label(result)}</option>
-                {/each}
-              </select>
-              {#if (pickedResult?.stats.length ?? 0) > 1}
-                <span class="dim small parts" title={breakdown(pickedResult)}>{breakdown(pickedResult)}</span>
+            <div class="lists" style:padding-left={`${RESULT_INDENT}px`}>
+              {#each shown(r) as { result, i } (result.index)}
+                {@const open = r.open === result.index}
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <div class="lrow" class:picked={i === r.picked} onmouseenter={(e) => showTip(e, r, result)} onmouseleave={hideTip}>
+                  <button class="lpick" onclick={() => patch(r.key, { picked: i })} title={m.trader_pick_title()}>
+                    <span class="lname" style:color={rarityColor[result.rarity ?? ""] ?? "var(--fg-1)"}>{result.name}</span>
+                    <span class="lprice num">{formatNumber(result.amount)} {result.currency}</span>
+                    <span class="lscore num" style:color={tone(result.score)} title={m.trader_score_title()}>{result.score === null ? "" : signed(result.score)}</span>
+                  </button>
+                  <button class="lstats" onclick={() => patch(r.key, { open: open ? null : result.index })} aria-expanded={open} title={m.trader_why_title()}>
+                    <span class="caret"><Icon name={open ? "caret-down" : "caret-right"} size={9} /></span>
+                    {#each result.stats as s, j (j)}
+                      <span class="chip">{s.label} <span class="num" style:color={tone(s.change)}>{signed(s.change)}</span></span>
+                    {/each}
+                  </button>
+                  <span class="lacts">
+                    <button class="btn sm" onclick={() => importResult(r, result)} disabled={build.busy > 0} title={m.trader_import_title()}>{m.trader_import()}</button>
+                    <button class="btn sm ghost contact" onclick={() => contact(r, result)} title={whispers(result) ? m.trader_whisper_title() : m.trader_listing_title()}>
+                      {whispers(result) ? m.trader_whisper() : m.trader_listing()}
+                    </button>
+                  </span>
+                </div>
+                {#if open}
+                  {@const sum = weightTotal(result)}
+                  <div class="why small">
+                    <span class="dim">{m.trader_why_stat()}</span>
+                    <span class="dim">{m.trader_why_change()}</span>
+                    <span class="dim">{m.trader_why_weight()}</span>
+                    <span class="dim">{m.trader_why_counts()}</span>
+                    {#each result.stats as s, j (j)}
+                      <span>{s.label}</span>
+                      <span class="num" style:color={tone(s.change)}>{signed(s.change)}</span>
+                      <span class="num">{formatNumber(s.weight)}</span>
+                      <span class="num">{sum > 0 ? signed((s.change * s.weight) / sum) : "–"}</span>
+                    {/each}
+                    <span class="wsum dim">{m.trader_why_note({ total: formatNumber(sum) })}</span>
+                    <span class="num" style:color={tone(result.score)}>{result.score === null ? "–" : signed(result.score)}</span>
+                  </div>
+                {/if}
+              {/each}
+              {#if r.results.length > SHOWN}
+                <button class="btn sm ghost more" onclick={() => patch(r.key, { more: !r.more })}>
+                  {r.more ? m.trader_fewer() : m.trader_more({ count: r.results.length - SHOWN })}
+                </button>
               {/if}
-              <button class="btn sm" onclick={() => importResult(r)} disabled={build.busy > 0} title={m.trader_import_title()}>{m.trader_import()}</button>
-              <button class="btn sm ghost contact" onclick={() => contact(r)} title={whispers(pickedResult) ? m.trader_whisper_title() : m.trader_listing_title()}>
-                {whispers(pickedResult) ? m.trader_whisper() : m.trader_listing()}
-              </button>
             </div>
             {#if r.hint}<div class="rrow dim small" style:padding-left={`${RESULT_INDENT}px`}>{r.hint}</div>{/if}
           {:else if r.hint}
@@ -1114,19 +1279,126 @@
     gap: 8px;
     padding: 0 10px 5px;
   }
-  .rrow .grow {
-    flex: 1;
-    min-width: 0;
-  }
   .rrow.bad {
     color: var(--bad);
   }
-  .parts {
-    max-width: 230px;
+  .cur {
     flex: none;
+    min-width: 72px;
+    text-align: right;
+    font-size: var(--fs-xs);
+    color: var(--fg-2);
+    white-space: nowrap;
+  }
+  .whead {
+    margin-bottom: -4px;
+  }
+  .whead .cur,
+  .wcol {
+    font-size: var(--fs-2xs);
+    color: var(--fg-3);
+  }
+  .wcol {
+    width: 70px;
+    flex: none;
+    text-align: center;
+  }
+  .lists {
+    display: flex;
+    flex-direction: column;
+    padding: 0 10px 6px;
+  }
+  .lrow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: var(--r-1);
+  }
+  .lrow:hover {
+    background: var(--bg-hover);
+  }
+  .lrow.picked {
+    background: var(--bg-active);
+  }
+  .lpick,
+  .lstats {
+    display: flex;
+    align-items: center;
+    background: none;
+    border: 0;
+    padding: 3px 4px;
+    font: inherit;
+    font-size: var(--fs-xs);
+    color: var(--fg-1);
+    text-align: left;
+    cursor: var(--cursor-pointer, pointer);
+  }
+  .lpick {
+    flex: none;
+    gap: 8px;
+  }
+  .lname {
+    width: 170px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .lprice {
+    width: 96px;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .lscore {
+    width: 58px;
+    text-align: right;
+  }
+  .lstats {
+    flex: 1;
+    min-width: 0;
+    flex-wrap: wrap;
+    gap: 2px 10px;
+    color: var(--fg-2);
+  }
+  .caret {
+    display: inline-flex;
+    color: var(--fg-3);
+  }
+  .chip {
+    white-space: nowrap;
+  }
+  .lacts {
+    display: flex;
+    flex: none;
+    gap: 6px;
+    opacity: 0;
+    transition: opacity 80ms linear;
+  }
+  .lrow:hover .lacts,
+  .lrow:focus-within .lacts,
+  .lrow.picked .lacts {
+    opacity: 1;
+  }
+  .why {
+    display: grid;
+    grid-template-columns: minmax(0, 200px) 64px 56px 72px;
+    gap: 2px 14px;
+    padding: 4px 4px 8px;
+  }
+  .why .num {
+    text-align: right;
+  }
+  .wsum {
+    grid-column: 1 / 4;
+    padding-top: 3px;
+    border-top: 1px solid var(--line-0);
+  }
+  .wsum + .num {
+    padding-top: 3px;
+    border-top: 1px solid var(--line-0);
+  }
+  .more {
+    align-self: flex-start;
+    margin-top: 2px;
   }
   .contact {
     width: 96px;

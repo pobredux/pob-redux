@@ -329,7 +329,7 @@ export interface TradeResult {
   weight: number;
   /** Weighted mean of `stats`, in percent. */
   score: number | null;
-  stats: { label: string; stat: string; change: number }[];
+  stats: { label: string; stat: string; change: number; weight: number }[];
 }
 
 export interface TradeLive {
@@ -1856,6 +1856,7 @@ export const engine = {
   socketNodes: (id: number, radiusIndex: number) =>
     call<{ id: number; radiusIndex: number | null; nodes: number[] }>("socket_nodes", { id, radiusIndex }),
   powerStats: () => call<{ stats: PowerStat[] }>("power_stats"),
+  powerStatValues: (stats: string[]) => call<{ values: Record<string, number | null> }>("power_stat_values", { stats }),
   treePower: (stat: string | null, maxDepth: number | null) => call<TreePower>("tree_power", { stat, maxDepth }),
   treePowerStart: (stat: string | null, maxDepth: number | null) =>
     call<{ done: boolean; progress: number }>("tree_power_start", { stat, maxDepth }),

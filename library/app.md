@@ -217,6 +217,14 @@ is on, and each reply has a read-aloud button once the Phonon voice is downloade
 - **Trader…** on the Items tab searches upgrades for every slot, weighted by the build. Live prices
   and whispers need **Sign in with Path of Exile** with trade permission; without it the Trader
   still builds the search links.
+- **Weight set** loads a set of stat weights: the starter sets Damage, Defence and Balanced, or
+  one saved with **Save as**. **Delete** removes a saved set. Saved sets are kept per game. Each
+  **Weigh by** row shows the build's current value of that stat under **Now**, and after **Import**
+  it shows the value before and after.
+- Each slot lists its top three listings with price, score and the change in every weighted
+  stat; **Show N more** lists the rest. Clicking a listing's stat changes opens how each weight
+  adds up to the score. Clicking the name picks the listing for the total. **Import** and
+  **Whisper** (or **Open listing**) act on that listing.
 - **Buy similar** (Items, Compare, item windows, and **Trade** on Optimize proposals) opens a
   dialog with league, listing status and the item's mods to tick, then **Open search**.
 - Searches open in the browser, or in an app window when Settings, Experimental, "Open trade

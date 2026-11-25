@@ -2283,6 +2283,19 @@ local function findPowerStat(stat)
 	return data.powerStatList[1]
 end
 
+-- Untransformed, so a damage-taken stat reads as the damage taken.
+M.power_stat_values = function(p)
+	ensureBuild()
+	local output = build.calcsTab.mainOutput
+	local values = {}
+	for _, stat in ipairs(type(p) == "table" and type(p.stats) == "table" and p.stats or {}) do
+		local s = findPowerStat(stat)
+		local v = s.stat == stat and tonumber(data.powerStatList.GetFromOutput(output, s, true)) or nil
+		values[stat] = (v and v == v and v > -math.huge and v < math.huge) and v or null
+	end
+	return { values = values }
+end
+
 local powerProgress = 0
 local powerStarted = 0
 
@@ -7222,7 +7235,7 @@ function itemUtil.liveStats(weights, base, evaluation)
 		end
 		if change ~= change then change = 0 end
 		change = math.max(-99999, math.min(99999, change))
-		stats[#stats + 1] = { label = statTable.label, stat = statTable.stat, change = change }
+		stats[#stats + 1] = { label = statTable.label, stat = statTable.stat, change = change, weight = statTable.weightMult }
 		weightSum = weightSum + statTable.weightMult
 		score = score + change * statTable.weightMult
 	end
