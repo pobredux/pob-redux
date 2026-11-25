@@ -1116,11 +1116,14 @@
       // PoB's DrawAsset: half extents are the sheet size × 1.33 tree units.
       const drawArt = (name: string, x: number, y: number, mirrored = false) => {
         const r = store.rect(name);
-        if (!r || !inView(x, y, Math.max(r.ow, r.oh * (mirrored ? 2 : 1)) * 1.33)) return;
+        if (!r) return;
+        // 3.30+ trees exported from the game files hold the full cluster ring under PoB's half-image name.
+        const half = mirrored && r.oh * 1.5 < r.ow;
+        if (!inView(x, y, Math.max(r.ow, r.oh * (half ? 2 : 1)) * 1.33)) return;
         const [sx, sy] = toScreen(x, y);
         const hw = r.ow * 1.33 * scale;
         const hh = r.oh * 1.33 * scale;
-        if (!mirrored) {
+        if (!half) {
           store.draw(ctx, name, sx, sy, hw, hh);
           return;
         }
