@@ -1,5 +1,6 @@
 <script lang="ts">
   import { scrollHint } from "$lib/scroll-hint";
+  import { keepScroll } from "$lib/view-memory";
   import { engine, type BuildSummary, type GearProposal, type SanityCheck, type SlotInfo } from "$lib/engine.svelte";
   import { build } from "$lib/state/build.svelte";
   import { game } from "$lib/state/game.svelte";
@@ -119,7 +120,7 @@
 
 <div class="page">
   <p class="disclaimer"><strong>{m.opt_disclaimer_title()}</strong> {m.opt_disclaimer()}</p>
-  <section class="col review scroll-hint" {@attach scrollHint}>
+  <section class="col review scroll-hint" {@attach scrollHint} {@attach keepScroll("optimise:review")}>
     <div class="head">
       <span class="title">{m.opt_review()}</span>
       {#if sanity}
@@ -158,7 +159,7 @@
     {/if}
   </section>
 
-  <section class="col gear scroll-hint" {@attach scrollHint}>
+  <section class="col gear scroll-hint" {@attach scrollHint} {@attach keepScroll("optimise:gear")}>
     <div class="head">
       <span class="title">{m.opt_gear()}</span>
     </div>

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { scrollHint } from "$lib/scroll-hint";
+  import { keepScroll } from "$lib/view-memory";
   import { tick } from "svelte";
   import { engine } from "$lib/engine.svelte";
   import { build } from "$lib/state/build.svelte";
@@ -81,9 +82,9 @@
     <button class="btn sm ghost" class:on={editing} aria-pressed={editing} title={m.notes_edit_title()} onclick={toggleEdit}>{m.notes_edit()}</button>
   </div>
   {#if editing}
-    <textarea class="notes selectable" bind:this={area} bind:value={text} oninput={onInput} placeholder={m.notes_placeholder()}></textarea>
+    <textarea class="notes selectable" {@attach keepScroll("notes:edit")} bind:this={area} bind:value={text} oninput={onInput} placeholder={m.notes_placeholder()}></textarea>
   {:else}
-    <div class="notes preview selectable scroll-hint" {@attach scrollHint}>
+    <div class="notes preview selectable scroll-hint" {@attach scrollHint} {@attach keepScroll("notes:preview")}>
       {#if text.trim()}<PobText text={text} />{:else}<span class="dim">{m.notes_empty()}</span>{/if}
     </div>
   {/if}

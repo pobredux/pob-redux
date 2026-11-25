@@ -1,5 +1,6 @@
 <script lang="ts">
   import { scrollHint } from "$lib/scroll-hint";
+  import { keepScroll } from "$lib/view-memory";
   import { tick } from "svelte";
   import { flip } from "svelte/animate";
   import { overviewLayout, type Column, type PanelId } from "$lib/state/overview-layout.svelte";
@@ -269,7 +270,7 @@
 {/snippet}
 
 {#if info}
-  <div class="page scroll-hint" {@attach scrollHint} class:sorting={dragging !== null} bind:this={pageEl}>
+  <div class="page scroll-hint" {@attach scrollHint} {@attach keepScroll("overview")} class:sorting={dragging !== null} bind:this={pageEl}>
     <div class="col" bind:this={colEls.left}>
       <section class="panel">
         <div class="hero">

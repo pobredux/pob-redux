@@ -1,5 +1,6 @@
 <script lang="ts">
   import { scrollHint } from "$lib/scroll-hint";
+  import { buildScope, keepScroll, recall, remember } from "$lib/view-memory";
   import { onDestroy, onMount, tick, untrack } from "svelte";
   import { listen } from "@tauri-apps/api/event";
   import { readText } from "@tauri-apps/plugin-clipboard-manager";
@@ -49,6 +50,9 @@
   let items = $state<ItemInfo[]>([]);
   let itemSets = $state<ItemSetInfo[]>([]);
   let selectedItem = $state<number | null>(null);
+  const memoryScope = buildScope();
+  let restoreItem = recall<number | null>("items:selected", memoryScope) ?? null;
+  onDestroy(() => remember("items:selected", memoryScope, selectedItem));
   let squire = $state<SquireState | null>(null);
   let doll = $state<"character" | "squire" | "wickerman">("character");
   const squireOffered = $derived(game.current === "poe2" && (ui.squirePreview || !!squire?.present));
@@ -444,6 +448,8 @@
       items = i.items;
       itemSets = sets.itemSets;
       squire = sq;
+      if (restoreItem != null && items.some((it) => it.id === restoreItem)) selectedItem = restoreItem;
+      restoreItem = null;
     });
     return () => { live = false; };
   });
@@ -968,7 +974,7 @@
         <p class="sqnote">{m.squire_note()}</p>
       </div>
       {:else}
-      <div class="scroll scroll-hint" {@attach scrollHint}>
+      <div class="scroll scroll-hint" {@attach scrollHint} {@attach keepScroll("items:equipment")}>
         <EquipmentGrid slots={characterSlots} {items} game={game.current} groups={build.skills?.socketGroups ?? []} selectedItem={shownItem}
           targetSlot={preview ? previewSlot : selectedItem == null ? dbSlot : null}
           onselect={(id) => selectItem(selectedItem === id ? null : id)}
@@ -997,7 +1003,7 @@
     <section class="col" bind:this={listCol}>
       {@render grip("list")}
       <div class="panel-head"><span class="label">{m.items_in_build()}</span><span class="dim num">{items.length}</span></div>
-      <div class="scroll scroll-hint" {@attach scrollHint}>
+      <div class="scroll scroll-hint" {@attach scrollHint} {@attach keepScroll("items:list")}>
         {#each items as it (it.id)}
           <div
             class="item"
@@ -1119,7 +1125,7 @@
           <button class="mini x" title={m.items_db_clear_slot()} aria-label={m.items_db_clear_slot()} onclick={() => (dbSlot = null)}>✕</button>
         </div>
       {/if}
-      <div class="scroll scroll-hint" {@attach scrollHint}>
+      <div class="scroll scroll-hint" {@attach scrollHint} {@attach keepScroll("items:side")}>
         {#if sharedTab}
           {#each sharedRows as it (it.index)}
             <div

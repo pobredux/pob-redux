@@ -1,5 +1,6 @@
 <script lang="ts">
   import { scrollHint } from "$lib/scroll-hint";
+  import { keepScroll } from "$lib/view-memory";
   import { tick, untrack } from "svelte";
   import { flip } from "svelte/animate";
   import { sortDrag } from "$lib/sortable";
@@ -463,7 +464,7 @@
   </div>
 
   <div class="body">
-      <div class="cards scroll-hint" {@attach scrollHint} class:sorting={sorting !== null} bind:this={cardsEl}>
+      <div class="cards scroll-hint" {@attach scrollHint} {@attach keepScroll("calcs")} class:sorting={sorting !== null} bind:this={cardsEl}>
         {#if effects.length > 0}
           <div class="effectbar" role="list">
             {#each effects as effect (`${effect.kind}:${effect.name}`)}

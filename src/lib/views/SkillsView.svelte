@@ -1,6 +1,7 @@
 <script lang="ts">
   import { scrollHint } from "$lib/scroll-hint";
-  import { untrack } from "svelte";
+  import { buildScope, keepScroll, recall, remember } from "$lib/view-memory";
+  import { onDestroy, untrack } from "svelte";
   import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
   import { engine, gemDpsParallel, type GemInfo, type GemSearchRow, type SkillEntry, type SkillsOptions, type SocketGroup, type Tooltip, type TooltipLine } from "$lib/engine.svelte";
   import { build } from "$lib/state/build.svelte";
@@ -20,7 +21,9 @@
   const groups = $derived(build.skills?.socketGroups ?? []);
   const skillSets = $derived(build.skills?.skillSets ?? []);
   const socketSlots = $derived(build.skills?.socketSlots ?? null);
-  let selectedIdx = $state(1);
+  const memoryScope = buildScope();
+  let selectedIdx = $state(recall<number>("skills:selected", memoryScope) ?? 1);
+  onDestroy(() => remember("skills:selected", memoryScope, selectedIdx));
   const sel = $derived<SocketGroup | undefined>(groups.find((g) => g.index === selectedIdx) ?? groups[0]);
   $effect(() => {
     const j = ui.jump;
@@ -424,7 +427,7 @@
   </div>
 
   <div class="cols">
-    <section class="col list scroll-hint" {@attach scrollHint} bind:this={listEl}>
+    <section class="col list scroll-hint" {@attach scrollHint} {@attach keepScroll("skills:list")} bind:this={listEl}>
       {#each groups as g (g.index)}
         {@const gmark = markOf(g)}
         {@const gslot = groupSlot(g)}
@@ -464,7 +467,7 @@
       </button>
     </section>
 
-    <section class="col detail scroll-hint" {@attach scrollHint}>
+    <section class="col detail scroll-hint" {@attach scrollHint} {@attach keepScroll("skills:detail")}>
       {#if sel}
         <div class="dhead">
           <input

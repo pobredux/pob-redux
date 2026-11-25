@@ -21,6 +21,7 @@
   import Icon from "$lib/components/Icon.svelte";
   import MoreMenu, { type MenuItem } from "$lib/components/MoreMenu.svelte";
   import { modKey, shortcutKey } from "$lib/keys";
+  import { buildScope, recall, remember } from "$lib/view-memory";
   import { m } from "$lib/paraglide/messages";
   import { recipeArt } from "$lib/item-art";
 
@@ -2189,6 +2190,8 @@
 
   let loadedVersion = "";
   let loadedArt = 0;
+  type TreeCamera = { version: string; spec: number | undefined; cx: number; cy: number; scale: number };
+  let resumeCamera = true;
   $effect(() => {
     const v = build.tree?.treeVersion;
     const art = treeArt.generation;
@@ -2232,7 +2235,16 @@
         }
         loadError = null;
         resize();
-        focusClass();
+        const cam = resumeCamera ? recall<TreeCamera>("tree:camera", buildScope()) : undefined;
+        resumeCamera = false;
+        if (cam && cam.version === v && cam.spec === activeSpec?.index) {
+          cx = cam.cx;
+          cy = cam.cy;
+          scale = cam.scale;
+          invalidate();
+        } else {
+          focusClass();
+        }
       } catch (e) {
         loadError = String(e);
       }
@@ -2275,6 +2287,7 @@
     window.addEventListener("keyup", onAlt);
     window.addEventListener("blur", onBlur);
     return () => {
+      if (model && !resumeCamera) remember("tree:camera", buildScope(), { version: loadedVersion, spec: activeSpec?.index, cx, cy, scale } satisfies TreeCamera);
       ro.disconnect();
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("keydown", onShift);

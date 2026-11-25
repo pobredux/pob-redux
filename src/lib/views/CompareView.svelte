@@ -1,5 +1,7 @@
 <script lang="ts">
   import { scrollHint } from "$lib/scroll-hint";
+  import { buildScope, keepScroll, recall, remember } from "$lib/view-memory";
+  import { onDestroy } from "svelte";
   import {
     engine,
     listBuilds,
@@ -32,8 +34,13 @@
 
   let entries = $state<CompareBuild[]>([]);
   let active = $state(0);
-  let pane = $state<Pane>("summary");
-  let onlyDiff = $state(true);
+  const memoryScope = buildScope();
+  let pane = $state<Pane>(recall<Pane>("compare:pane", memoryScope) ?? "summary");
+  let onlyDiff = $state(recall<boolean>("compare:onlyDiff", memoryScope) ?? true);
+  onDestroy(() => {
+    remember("compare:pane", memoryScope, pane);
+    remember("compare:onlyDiff", memoryScope, onlyDiff);
+  });
   let busy = $state(false);
   let note = $state("");
 
@@ -304,7 +311,7 @@
             <span class="tnum">{m.compare_col_change()}</span>
             <span class="tpct"></span>
           </div>
-          <div class="scroll scroll-hint" {@attach scrollHint}>
+          <div class="scroll scroll-hint" {@attach scrollHint} {@attach keepScroll("compare:summary")}>
             <!-- PoB's stat list repeats a stat under different skill flags, so position is part of the key. -->
             {#each summary.rows as r, i (r.stat + "#" + i)}
               <div class="srow">
@@ -359,7 +366,7 @@
           <span class="tside">{m.compare_col_theirs()}</span>
           <span class="tact"></span>
         </div>
-        <div class="scroll scroll-hint" {@attach scrollHint}>
+        <div class="scroll scroll-hint" {@attach scrollHint} {@attach keepScroll("compare:items")}>
           {#each items as r (r.slot)}
             <div class="srow">
               <span class="tlabel">{slotLabel(r.label ?? r.slot)}</span>
@@ -382,7 +389,7 @@
           <span class="tside">{m.compare_col_yours()}</span>
           <span class="tside">{m.compare_col_theirs()}</span>
         </div>
-        <div class="scroll scroll-hint" {@attach scrollHint}>
+        <div class="scroll scroll-hint" {@attach scrollHint} {@attach keepScroll("compare:skills")}>
           {#each skills as r (r.index)}
             <div class="srow tall">
               <span class="tlabel"><PobText text={r.mine?.label ?? r.theirs?.label ?? m.compare_group_fallback({ index: r.index })} /></span>
@@ -411,7 +418,7 @@
           <span class="tside">{m.compare_col_yours()}</span>
           <span class="tside">{m.compare_col_theirs()}</span>
         </div>
-        <div class="scroll scroll-hint" {@attach scrollHint}>
+        <div class="scroll scroll-hint" {@attach scrollHint} {@attach keepScroll("compare:config")}>
           {#each config as r (r.var)}
             <div class="srow">
               <span class="tlabel" title={r.var}>{r.label}</span>

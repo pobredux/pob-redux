@@ -1,5 +1,6 @@
 <script lang="ts">
   import { scrollHint } from "$lib/scroll-hint";
+  import { keepScroll } from "$lib/view-memory";
   import { engine, type ConfigOption, type ConfigState, type CustomModBlock } from "$lib/engine.svelte";
   import { build } from "$lib/state/build.svelte";
   import PobText from "$lib/components/PobText.svelte";
@@ -250,7 +251,7 @@
       {/if}
     </span>
   </div>
-  <div class="scroll scroll-hint" {@attach scrollHint}>
+  <div class="scroll scroll-hint" {@attach scrollHint} {@attach keepScroll("config")}>
     <section class="card custom">
       <button class="chead" aria-expanded={!collapsed.has("__custom")} onclick={() => toggle("__custom")}>
         <span class="caret" class:open={!collapsed.has("__custom")}>▸</span>

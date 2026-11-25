@@ -1,5 +1,6 @@
 <script lang="ts">
   import { scrollHint } from "$lib/scroll-hint";
+  import { keepScroll } from "$lib/view-memory";
   import { engine, fetchBuildCode, type PartyState, type PartyKind, type PartyBuff, type PartyMod } from "$lib/engine.svelte";
   import { build } from "$lib/state/build.svelte";
   import { buffLines, modLines, words } from "$lib/party-text";
@@ -126,7 +127,7 @@
       {m.party_advanced()}
     </label>
   </div>
-  <div class="scroll scroll-hint" {@attach scrollHint}>
+  <div class="scroll scroll-hint" {@attach scrollHint} {@attach keepScroll("party")}>
     {#if !party}
       <div class="dim small pad">{m.party_no_build()}</div>
     {:else}

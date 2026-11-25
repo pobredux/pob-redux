@@ -1,5 +1,6 @@
 <script lang="ts">
   import { scrollHint } from "$lib/scroll-hint";
+  import { keepScroll } from "$lib/view-memory";
   import { onMount } from "svelte";
   import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
   import { open, save } from "@tauri-apps/plugin-dialog";
@@ -961,7 +962,7 @@
       <button class="btn sm" onclick={() => (newFolder = "")}>{m.import_new_folder()}</button>
       <button class="btn sm primary" onclick={() => build.newBuild().then((r) => r && (ui.newBuildOpen = true))} disabled={build.busy > 0}>{m.import_new_build()}</button>
     </div>
-    <div class="list scroll-hint" {@attach scrollHint}>
+    <div class="list scroll-hint" {@attach scrollHint} {@attach keepScroll("builds", false)}>
       {#if welcome}
         <div class="welcome">
           <div class="whead">
