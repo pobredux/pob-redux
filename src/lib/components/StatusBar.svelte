@@ -3,6 +3,7 @@
   import { build } from "$lib/state/build.svelte";
   import { mcp } from "$lib/state/mcp.svelte";
   import { chat } from "$lib/state/chat.svelte";
+  import { handsfree } from "$lib/state/handsfree.svelte";
   import { appOptions } from "$lib/state/options.svelte";
   import Icon from "$lib/components/Icon.svelte";
   import { m } from "$lib/paraglide/messages";
@@ -77,6 +78,9 @@
   {/if}
   {#if build.info}
     <div class="seg dim"><span>{m.status_rev()}</span><span class="num">{build.info.rev}</span></div>
+  {/if}
+  {#if handsfree.listening}
+    <span class="seg dim wake" class:hot={handsfree.state === "capturing"} title={handsfree.state === "capturing" ? m.status_wake_capturing() : m.status_wake_title()}><Icon name="ear" size={13} /></span>
   {/if}
   <button
     class="seg iconbtn"
@@ -169,6 +173,9 @@
     max-width: 50vw;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  .wake.hot {
+    color: var(--ok);
   }
   .seg.on {
     color: var(--fg-0);

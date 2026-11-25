@@ -9,6 +9,7 @@
   import Icon from "$lib/components/Icon.svelte";
   import { tooltip } from "$lib/state/tooltip.svelte";
   import { chat } from "$lib/state/chat.svelte";
+  import { handsfree } from "$lib/state/handsfree.svelte";
   import { build } from "$lib/state/build.svelte";
   import { game } from "$lib/state/game.svelte";
   import { m } from "$lib/paraglide/messages";
@@ -45,6 +46,7 @@
       await game.init().catch(() => {});
       await build.mirror().catch(() => {});
       await chat.initWindow();
+      void handsfree.init();
       ready = true;
     })();
     return () => {

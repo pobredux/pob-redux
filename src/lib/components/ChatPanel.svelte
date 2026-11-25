@@ -13,6 +13,7 @@
   import ProviderIcon from "$lib/components/ProviderIcon.svelte";
   import { game } from "$lib/state/game.svelte";
   import { HISTORY, voice } from "$lib/state/voice.svelte";
+  import { handsfree } from "$lib/state/handsfree.svelte";
   import Kbd from "$lib/components/Kbd.svelte";
   import { tradeWindow } from "$lib/state/trade.svelte";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
@@ -217,7 +218,21 @@
     if (chat.busy) void voice.cancel();
   });
 
+  let reading = $state(-1);
+  async function readAloud(index: number, text: string) {
+    if (reading === index) {
+      handsfree.stopSpeaking();
+      reading = -1;
+      return;
+    }
+    if (handsfree.speaking) handsfree.stopSpeaking();
+    reading = index;
+    await handsfree.say(text);
+    if (reading === index) reading = -1;
+  }
+
   async function toggleVoice() {
+    if (voice.wake) return voice.cancel();
     if (voice.phase !== "recording") return voice.start();
     const text = await voice.stop();
     if (!text) return;
@@ -408,7 +423,7 @@
               onclick={() => chat.rewindTo(i)}
               disabled={chat.busy}
               title={m.chat_edit_resend()}
-            >{turn.text}</button>
+            >{#if turn.spoken}<span class="spoken" title={m.chat_spoken()}><Icon name="microphone" size={11} /></span>{/if}{turn.text}</button>
           {:else if turn.kind === "assistant"}
             <div class="botwrap">
               <div class="turn bot"><Markdown text={turn.text} /></div>
@@ -426,6 +441,17 @@
               >
                 <Icon name={copied === i ? "check" : "copy"} size={13} />
               </button>
+              {#if handsfree.tts?.installed}
+                <button
+                  class="copy say"
+                  class:done={reading === i}
+                  onclick={() => readAloud(i, turn.text)}
+                  title={reading === i ? m.chat_stop_reading() : m.chat_read_aloud()}
+                  aria-label={reading === i ? m.chat_stop_reading() : m.chat_read_aloud()}
+                >
+                  <Icon name={reading === i ? "stop" : "speaker-high"} size={12} />
+                </button>
+              {/if}
             </div>
           {:else}
             <div class="tool" class:err={turn.status === "error"} class:recovered={recovered.has(turn.id)}>
@@ -854,6 +880,15 @@
   }
   .copy.done {
     color: var(--ok);
+  }
+  .copy.say {
+    right: 26px;
+  }
+  .spoken {
+    display: inline-grid;
+    margin-right: 6px;
+    color: var(--fg-2);
+    vertical-align: -1px;
   }
   .tool {
     border-left: 2px solid var(--line-2);

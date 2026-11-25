@@ -185,7 +185,10 @@ into this build; the Items pane has **Buy similar** and **Use theirs** per slot.
 - **MCP server**: "Enable MCP server" and the port, with the address, token and ready-made commands
   for connecting a client.
 - **Experimental**: decision models, voice input (speech is turned into text on this computer, with
-  a choice of Whisper speech models and, for the multilingual ones, the language you speak),
+  a choice of Whisper speech models and, for the multilingual ones, the language you speak), the
+  "Hey Redux" **Wake word** with **Your voice** (a two-minute setup: say it eight times, read a
+  paragraph, say it three more), **Read answers aloud** with a downloadable Phonon voice and a
+  voice picker,
   "Open trade searches in the app", and the Squire panel.
 - **Updates**: version, **Check for updates**, then Update and Restart. The app also checks once
   shortly after start.
@@ -204,7 +207,10 @@ composer has the model picker, reasoning effort, speed, and **Auto** or **Superv
 for changes; Supervised asks before each change. Every web lookup asks first. After a reply that
 changed the build, a bar shows the stat changes with **Keep** and **Undo**. Enter sends,
 Shift+Enter adds a line, "/" lists the tools. With voice input on, the microphone button records;
-while it listens the box shows a live waveform, a timer and **Cancel** (Esc).
+while it listens the box shows a live waveform, a timer and **Cancel** (Esc). With the wake word on,
+"Hey Redux" and a question sends it hands-free, even with the game focused; the status bar shows an
+ear while it listens. Spoken questions get a short answer, read aloud when **Read answers aloud**
+is on, and each reply has a read-aloud button once the Phonon voice is downloaded.
 
 ## Trade
 

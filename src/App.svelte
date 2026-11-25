@@ -20,6 +20,7 @@
   import { app } from "$lib/state/app.svelte";
   import { build } from "$lib/state/build.svelte";
   import { chat } from "$lib/state/chat.svelte";
+  import { handsfree } from "$lib/state/handsfree.svelte";
   import { game, GAMES, GAME_LABEL } from "$lib/state/game.svelte";
   import { ui } from "$lib/state/ui.svelte";
   import { itemWindow } from "$lib/state/item-window.svelte";
@@ -74,6 +75,7 @@
     tabs.init();
     const following = followOtherWindows();
     void app.boot();
+    void handsfree.init();
     return () => {
       window.removeEventListener("keydown", onKey);
       offTooltips();

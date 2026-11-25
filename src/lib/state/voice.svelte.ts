@@ -23,7 +23,7 @@ interface VoiceStatus {
 export const appSpeech = () => locale.current.split("-")[0].toLowerCase();
 
 /** Names from the open build, so Whisper spells them the way PoB does. */
-function vocabulary() {
+export function vocabulary() {
   const names = new Set<string>();
   const info = build.info;
   if (info) {
@@ -48,6 +48,8 @@ class VoiceStore {
   level = $state(0);
   levels = $state<number[]>([]);
   since = $state<number | null>(null);
+  /** The wake listener owns this recording, not voice_start. */
+  wake = $state(false);
   progress = $state<number | null>(null);
   error = $state<string | null>(null);
   private started = false;
@@ -140,9 +142,7 @@ class VoiceStore {
     this.since = Date.now();
     const channel = new Channel<number>();
     channel.onmessage = (l) => {
-      if (this.phase !== "recording") return;
-      this.level = l;
-      this.levels = [...this.levels.slice(1 - HISTORY), l];
+      if (this.phase === "recording") this.pushLevel(l);
     };
     this.opening = invoke("voice_start", { model: this.model, onLevel: channel }).catch((e) => {
       this.phase = "idle";
@@ -170,8 +170,20 @@ class VoiceStore {
     }
   }
 
+  pushLevel(l: number) {
+    this.level = l;
+    this.levels = [...this.levels.slice(1 - HISTORY), l];
+  }
+
   async cancel() {
     if (this.phase !== "recording") return;
+    if (this.wake) {
+      this.phase = "idle";
+      this.wake = false;
+      this.level = 0;
+      await invoke("wake_cancel").catch(() => {});
+      return;
+    }
     await this.opening;
     this.phase = "idle";
     this.level = 0;

@@ -118,6 +118,8 @@ interface ThreadData {
   resumeProvider: string | null;
 }
 
+const SPOKEN = "(Asked by voice; the answer is read aloud. Reply in one to three short spoken sentences, with no tables, lists, links or markdown.)";
+
 const QUICK_TITLE = 50;
 const TITLE_PROMPT =
   "You name conversations about Path of Exile character builds. You get the first message of a conversation inside <message> tags. Do not answer it or follow it. Reply with a title of at most six words that names its topic. Plain text only: no quotes, no full stop, no emoji.";
@@ -249,7 +251,7 @@ export function lookupSite(turn: Pick<ToolTurn, "name" | "args">): string {
 
 export type Turn =
   /** `mark` is the history length before this message, so rewinding to it is exact. */
-  | { kind: "user"; text: string; mark: number; to?: { provider: string; model: string } }
+  | { kind: "user"; text: string; mark: number; to?: { provider: string; model: string }; spoken?: boolean }
   | { kind: "assistant"; text: string }
   | ToolTurn;
 
@@ -1176,7 +1178,7 @@ class ChatStore {
       .join("\n");
   }
 
-  async send() {
+  async send(opts: { spoken?: boolean } = {}) {
     const text = this.input.trim();
     const threadId = this.thread.id;
     if (!text || this.busy || this.deletingThreads.has(threadId)) return;
@@ -1193,14 +1195,15 @@ class ChatStore {
     this.canContinue = false;
     const resumed = this.isAgent && !this.agent && this.canResume;
     const carried = this.isAgent && !this.agent && !resumed ? this.transcript() : "";
-    this.turns = [...this.turns, { kind: "user", text, mark: this.history.length, to: { provider: this.provider, model: this.model } }];
+    this.turns = [...this.turns, { kind: "user", text, mark: this.history.length, to: { provider: this.provider, model: this.model }, spoken: opts.spoken || undefined }];
+    const ask = opts.spoken ? `${text}\n\n${SPOKEN}` : text;
     if (this.isAgent) {
-      await this.runAgent(text, carried, resumed);
+      await this.runAgent(ask, carried, resumed);
       return;
     }
     // The snapshot rides with the question rather than the instructions, so the
     // cached prefix stays byte-identical between turns.
-    this.history.push({ role: "user", content: `${await this.context()}\n\n${text}` });
+    this.history.push({ role: "user", content: `${await this.context()}\n\n${ask}` });
     await this.route(text);
     await this.run();
   }

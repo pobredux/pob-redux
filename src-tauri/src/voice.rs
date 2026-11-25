@@ -239,20 +239,32 @@ pub fn voice_start(app: AppHandle, state: State<'_, VoiceState>, model: String, 
 
 #[tauri::command]
 pub async fn voice_stop(app: AppHandle, model: String, language: String, prompt: String) -> Result<String, String> {
-    let model = find(&model)?;
+    find(&model)?;
     let rec = app.state::<VoiceState>().recording.lock().unwrap().take().ok_or("Nothing is being recorded.")?;
-    let language = if model.english { "en" } else { languages().find(|l| *l == language).unwrap_or("auto") };
     tauri::async_runtime::spawn_blocking(move || -> Result<String, String> {
         let captured = rec.finish()?;
-        let audio = resample(&captured.samples, captured.rate);
-        let Some(span) = speech_span(&audio) else {
-            return Ok(String::new());
-        };
-        let ctx = load_model(&app, model)?;
-        transcribe(&ctx, &audio[span], &prompt, language)
+        transcribe_clip(&app, &model, &language, &prompt, &resample(&captured.samples, captured.rate))
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// 16 kHz mono in, text out; "" when the clip holds no speech.
+pub(crate) fn transcribe_clip(app: &AppHandle, model: &str, language: &str, prompt: &str, audio: &[f32]) -> Result<String, String> {
+    let model = find(model)?;
+    if !installed(app, model) {
+        return Err("The speech model is not downloaded. Download it in Settings > Experimental.".into());
+    }
+    let language = if model.english { "en" } else { languages().find(|l| *l == language).unwrap_or("auto") };
+    let Some(span) = speech_span(audio) else {
+        return Ok(String::new());
+    };
+    let ctx = load_model(app, model)?;
+    transcribe(&ctx, &audio[span], prompt, language)
+}
+
+pub(crate) fn is_recording(app: &AppHandle) -> bool {
+    app.state::<VoiceState>().recording.lock().unwrap().is_some()
 }
 
 #[tauri::command]

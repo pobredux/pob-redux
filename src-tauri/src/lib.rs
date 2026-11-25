@@ -25,7 +25,9 @@ mod assistant;
 mod item_window;
 mod tab_window;
 mod threads;
+mod tts;
 mod voice;
+mod wake;
 mod web;
 
 use std::sync::Arc;
@@ -1303,6 +1305,8 @@ pub fn run() {
             });
             app.manage(decide::DecideState::new(&app.handle().clone()));
             app.manage(voice::VoiceState::new());
+            app.manage(wake::WakeState::default());
+            app.manage(tts::TtsState::default());
             app.manage(ggg::GggState::default());
             // POB_REDUX_MCP=<port> brings the MCP server up at launch (scripts, tests)
             if let Some(port) = std::env::var("POB_REDUX_MCP").ok().and_then(|v| v.parse::<u16>().ok()) {
@@ -1407,6 +1411,23 @@ pub fn run() {
             voice::voice_start,
             voice::voice_stop,
             voice::voice_cancel,
+            wake::wake_status,
+            wake::wake_start,
+            wake::wake_stop,
+            wake::wake_resume,
+            wake::wake_cancel,
+            wake::wake_setup_start,
+            wake::wake_setup_cancel,
+            wake::wake_setup_next,
+            wake::wake_setup_save,
+            wake::wake_profile_reset,
+            wake::wake_transcribe,
+            tts::tts_status,
+            tts::tts_install,
+            tts::tts_voice_install,
+            tts::tts_remove,
+            tts::tts_speak,
+            tts::tts_stop,
             trade::trade_window_open,
             assistant::assistant_window_open,
             assistant::assistant_window_close,

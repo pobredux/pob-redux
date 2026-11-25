@@ -16,6 +16,8 @@
   import { tradeWindow } from "$lib/state/trade.svelte";
   import { chat } from "$lib/state/chat.svelte";
   import AssistantSettings from "$lib/components/AssistantSettings.svelte";
+  import WakeSetup from "$lib/components/WakeSetup.svelte";
+  import { handsfree } from "$lib/state/handsfree.svelte";
   import SearchSelect from "$lib/components/SearchSelect.svelte";
   import LocaleFlag from "$lib/components/LocaleFlag.svelte";
   import Icon from "$lib/components/Icon.svelte";
@@ -102,6 +104,7 @@
     }
   });
   const languageName = (tag: string) => languageNames?.of(tag);
+  let wakeSetupOpen = $state(false);
   const WHISPER_NAMES: Record<string, string> = { tiny: "Tiny", base: "Base", small: "Small", "large-v3-turbo": "Large v3 Turbo" };
   const modelSize = (x: VoiceModel | undefined) => m.voice_size({ size: Math.round((x?.bytes ?? 0) / 1e6) });
   const modelLabel = (x: VoiceModel) =>
@@ -178,8 +181,9 @@
   onMount(() => {
     void decider.init();
     void voice.init();
+    void handsfree.refresh();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || document.querySelector('[role="alertdialog"]')) return;
+      if (e.key !== "Escape" || document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
       close();
     };
     window.addEventListener("keydown", onKey);
@@ -655,11 +659,73 @@
               </div>
             </div>
           {/if}
+          <label class="opt">
+            <span>
+              {m.wake_enable()}
+              <span class="hint">{m.wake_enable_hint()}</span>
+            </span>
+            <input class="switch" type="checkbox" role="switch" checked={handsfree.wake} onchange={(e) => handsfree.setWake((e.target as HTMLInputElement).checked)} />
+          </label>
+          <div class="opt">
+            <span>
+              {m.wake_profile()}
+              <span class="hint">{handsfree.profile ? m.wake_profile_set({ date: new Date(handsfree.profile * 1000).toLocaleDateString(locale.current) }) : m.wake_profile_none()}</span>
+            </span>
+            <div class="row">
+              {#if handsfree.profile}
+                <button class="btn sm ghost" onclick={() => handsfree.resetProfile()}>{m.wake_profile_reset()}</button>
+              {/if}
+              <button class="btn sm" disabled={!voice.current?.installed} onclick={() => (wakeSetupOpen = true)}>{handsfree.profile ? m.wake_profile_redo() : m.wake_profile_setup()}</button>
+            </div>
+          </div>
+          <label class="opt">
+            <span>
+              {m.tts_enable()}
+              <span class="hint">{m.tts_enable_hint()}</span>
+            </span>
+            <input class="switch" type="checkbox" role="switch" checked={handsfree.speak} onchange={(e) => handsfree.setSpeak((e.target as HTMLInputElement).checked)} />
+          </label>
+          <div class="opt">
+            <span>
+              {m.tts_voice()}
+              <span class="hint">{handsfree.tts?.installed ? m.tts_voice_ready() : m.tts_voice_missing({ size: m.voice_size({ size: Math.round((handsfree.tts?.bytes ?? 0) / 1e6) }) })}</span>
+            </span>
+            <div class="row">
+              <select class="select voicepick" value={handsfree.voiceId} disabled={!handsfree.tts?.installed} aria-label={m.tts_voice()} onchange={(e) => handsfree.setVoice((e.target as HTMLSelectElement).value)}>
+                <option value="default">{m.tts_default_voice()}</option>
+                {#each handsfree.tts?.voices ?? [] as v (v.id)}
+                  <option value={v.id}>{v.name}</option>
+                {/each}
+              </select>
+              <button
+                class="btn sm ghost sq"
+                disabled={!handsfree.tts?.installed || handsfree.switching}
+                title={handsfree.speaking ? m.chat_stop_reading() : m.tts_test()}
+                aria-label={handsfree.speaking ? m.chat_stop_reading() : m.tts_test()}
+                onclick={() => (handsfree.speaking ? handsfree.stopSpeaking() : handsfree.say(m.tts_test_line()))}
+              >
+                <Icon name={handsfree.speaking ? "stop" : "speaker-high"} size={13} />
+              </button>
+              <span class="ttsact">
+                {#if handsfree.tts?.installed}
+                  <button class="btn sm ghost" disabled={handsfree.speaking} onclick={() => handsfree.removeTts()}>{m.provider_remove()}</button>
+                {:else if handsfree.progress !== null}
+                  <span class="dim mono">{m.voice_downloading({ pct: handsfree.progress })}</span>
+                {:else}
+                  <button class="btn sm" onclick={() => handsfree.installTts()}>{m.voice_download()}</button>
+                {/if}
+              </span>
+            </div>
+          </div>
           {#if voice.error}
             <div class="opt err mono">{voice.error}</div>
           {/if}
+          {#if handsfree.error}
+            <div class="opt err mono">{handsfree.error}</div>
+          {/if}
         </div>
         <p class="note">{m.voice_privacy()}</p>
+        {#if wakeSetupOpen}<WakeSetup onclose={() => (wakeSetupOpen = false)} />{/if}
         <h2 class="label ghead">{m.tradewin_title()}</h2>
         <div class="rows">
           <label class="opt">
@@ -1121,6 +1187,18 @@
   .row > .dim {
     width: 84px;
     flex: none;
+  }
+  .voicepick {
+    width: 170px;
+  }
+  .sq {
+    display: inline-grid;
+    place-items: center;
+    width: 30px;
+    padding: 0;
+  }
+  .ttsact {
+    display: flex;
   }
   .row > code {
     flex: 1;
