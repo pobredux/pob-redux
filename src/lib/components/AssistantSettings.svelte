@@ -50,6 +50,7 @@
     const a = x.agent;
     if (!a && !x.base_url) return { text: m.assistant_status_no_address(), tone: "warn" };
     if (!a) return { text: x.default_base ? m.assistant_status_local() : host(x.base_url!), tone: "ok" };
+    if (!a.checked) return { text: m.status_off(), tone: "warn" };
     if (!a.installed) return { text: m.assistant_status_missing(), tone: "bad" };
     if (a.error) return { text: m.assistant_status_broken(), tone: "bad" };
     if (a.signed_in === false) return { text: m.assistant_status_signed_out(), tone: "warn" };
@@ -253,7 +254,9 @@
 
       <h3 class="sub">{m.assistant_setup()}</h3>
       <div class="rows">
-        {#if p.agent}
+        {#if p.agent && !p.agent.checked}
+          <div class="opt col"><span class="hint">{m.assistant_switched_off({ name: p.label })}</span></div>
+        {:else if p.agent}
           <div class="opt">
             <span>
               {m.assistant_program()}

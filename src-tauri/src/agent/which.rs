@@ -378,7 +378,7 @@ fn follow_shim(shim: &Path) -> Option<Launch> {
             continue;
         }
         let is_exe = target.extension().is_some_and(|e| e.eq_ignore_ascii_case("exe"));
-        if is_exe && target.file_stem().is_some_and(|s| s.eq_ignore_ascii_case("node")) {
+        if is_exe && (target.file_stem().is_some_and(|s| s.eq_ignore_ascii_case("node")) || windowed(&target)) {
             continue;
         }
         if is_exe {
@@ -392,6 +392,29 @@ fn follow_shim(shim: &Path) -> Option<Launch> {
     None
 }
 
+/// A desktop app can share a CLI's name (OpenCode's is `OpenCode.exe`), and starting it opens its window.
+#[cfg(windows)]
+fn windowed(exe: &Path) -> bool {
+    use std::io::{Read, Seek, SeekFrom};
+    const GUI_SUBSYSTEM: u16 = 2;
+    let read = || -> std::io::Result<bool> {
+        let mut f = std::fs::File::open(exe)?;
+        let mut offset = [0u8; 4];
+        f.seek(SeekFrom::Start(0x3c))?;
+        f.read_exact(&mut offset)?;
+        let mut header = [0u8; 94];
+        f.seek(SeekFrom::Start(u32::from_le_bytes(offset).into()))?;
+        f.read_exact(&mut header)?;
+        Ok(header.starts_with(b"PE\0\0") && u16::from_le_bytes([header[92], header[93]]) == GUI_SUBSYSTEM)
+    };
+    read().unwrap_or(false)
+}
+
+#[cfg(not(windows))]
+fn windowed(_: &Path) -> bool {
+    false
+}
+
 pub(crate) fn find(name: &str, configured: Option<&str>) -> Option<Launch> {
     if let Some(p) = configured.map(str::trim).filter(|p| !p.is_empty()) {
         let p = PathBuf::from(p);
@@ -399,13 +422,13 @@ pub(crate) fn find(name: &str, configured: Option<&str>) -> Option<Launch> {
         if p.extension().is_some_and(|e| e.eq_ignore_ascii_case("cmd") || e.eq_ignore_ascii_case("bat")) {
             return follow_shim(&p);
         }
-        return p.is_file().then(|| Launch { program: p, ..Default::default() });
+        return (p.is_file() && !windowed(&p)).then(|| Launch { program: p, ..Default::default() });
     }
     for dir in std::env::split_paths(&search_path()) {
         #[cfg(windows)]
         {
             let exe = dir.join(format!("{name}.exe"));
-            if exe.is_file() {
+            if exe.is_file() && !windowed(&exe) {
                 return Some(Launch { program: exe, ..Default::default() });
             }
             let shim = dir.join(format!("{name}.cmd"));
@@ -464,6 +487,14 @@ mod tests {
         let found = super::native_codex(&script);
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(found.as_deref(), Some(exe.as_path()));
+    }
+
+    #[test]
+    fn desktop_apps_are_not_taken_for_clis() {
+        let system = std::env::var_os("SystemRoot").map(std::path::PathBuf::from).unwrap_or_else(|| "C:\\Windows".into()).join("System32");
+        assert!(super::windowed(&system.join("notepad.exe")));
+        assert!(!super::windowed(&system.join("cmd.exe")));
+        assert!(!super::windowed(&std::env::current_exe().unwrap()));
     }
 }
 

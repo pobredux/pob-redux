@@ -12,6 +12,8 @@ export interface AgentStatus {
   signed_in: boolean | null;
   account: string | null;
   error: string | null;
+  /** false for a switched-off CLI the app has not started. */
+  checked: boolean;
 }
 
 export interface ProviderStatus {
@@ -46,7 +48,8 @@ export interface ModelInfo {
   fast: boolean;
 }
 
-export const listProviders = (refresh = false, only?: string) => invoke<ProviderStatus[]>("ai_providers", { refresh, only });
+export const listProviders = (refresh = false, only?: string, skip: string[] = []) =>
+  invoke<ProviderStatus[]>("ai_providers", { refresh, only, skip });
 export const listModels = (provider: string) => invoke<ModelInfo[]>("ai_models", { provider });
 export const setKey = (provider: string, key: string) => invoke<void>("ai_key_set", { provider, key });
 export const clearKey = (provider: string) => invoke<void>("ai_key_clear", { provider });

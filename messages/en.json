@@ -590,6 +590,7 @@
   "assistant_terminal_install": "A terminal window is running: {command}. This page updates when it finishes.",
   "assistant_terminal_login": "A terminal window is running: {command}. Finish signing in there; this page updates when you are done.",
   "assistant_offer": "Offer {name} in the assistant",
+  "assistant_switched_off": "{name} is switched off, so the app does not start it. Turn it on to check it.",
   "assistant_setup": "Setup",
   "assistant_program": "Program",
   "assistant_program_missing": "Not found on this computer",

@@ -439,7 +439,7 @@ class ChatStore {
     await this.refreshProviders();
     // Land on something usable rather than an unconfigured or retired provider.
     if (!this.ready) {
-      const first = this.providers.find((p) => p.ready && p.kind === "agent") ?? (this.current ? undefined : this.providers[0]);
+      const first = this.offered.find((p) => p.ready && p.kind === "agent") ?? (this.current ? undefined : this.offered[0]);
       if (first) await this.setProvider(first.id);
     }
     await this.refreshModels();
@@ -1030,7 +1030,7 @@ class ChatStore {
 
   /** `recheck` asks the CLIs again, after the user installed or signed in to one. */
   async refreshProviders(recheck = false, only?: string) {
-    this.providers = await listProviders(recheck, only).catch(() => this.providers);
+    this.providers = await listProviders(recheck, only, this.disabled).catch(() => this.providers);
     this.checkedAt = Date.now();
     if (recheck && only) delete this.catalog[only];
     else if (recheck) this.catalog = {};
@@ -1044,6 +1044,7 @@ class ChatStore {
   async setEnabled(id: string, on: boolean) {
     this.disabled = on ? this.disabled.filter((x) => x !== id) : [...new Set([...this.disabled, id])];
     this.persist();
+    if (on && this.providers.find((p) => p.id === id)?.agent?.checked === false) await this.refreshProviders(true, id);
     if (!on && id === this.provider) {
       const next = this.offered.find((p) => p.ready) ?? this.offered[0];
       if (next) await this.setProvider(next.id);

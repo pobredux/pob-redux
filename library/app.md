@@ -179,7 +179,8 @@ into this build; the Items pane has **Buy similar** and **Use theirs** per slot.
   for new builds, default affix roll.
 - **Assistant**: choose and set up the provider (Claude Code, Codex, GitHub Copilot, Cursor, Grok,
   Kimi Code, OpenCode, Antigravity, Ollama on this computer, or OpenAI-compatible for a server such
-  as LiteLLM, llama-swap or LM Studio), sign in, pick models, and "Ask before each change". Ollama
+  as LiteLLM, llama-swap or LM Studio), sign in, pick models, and "Ask before each change". Each
+  provider has an on/off switch; the app never starts a provider that is off and shows it as Off. Ollama
   and OpenAI-compatible have an Address and an optional API key; OpenAI-compatible needs an Address
   (the base URL, usually ending in /v1) before it lists models.
 - **MCP server**: "Enable MCP server" and the port, with the address, token and ready-made commands

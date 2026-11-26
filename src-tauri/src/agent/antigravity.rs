@@ -162,7 +162,7 @@ pub(crate) fn status(app: &AppHandle, configured: Option<&str>) -> AgentStatus {
         version: Some(VERSION.trim_start_matches("agy_acp_server_").to_string()),
         signed_in: Some(signed_in),
         account: signed_in.then(|| "Google account".to_string()),
-        error: None,
+        ..Default::default()
     }
 }
 

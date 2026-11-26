@@ -349,6 +349,8 @@ pub struct AgentStatus {
     pub signed_in: Option<bool>,
     pub account: Option<String>,
     pub error: Option<String>,
+    /// False for a switched-off CLI the app has not started.
+    pub checked: bool,
 }
 
 #[derive(Default)]
@@ -420,34 +422,37 @@ async fn detect(launch: Option<Launch>, cli: Cli) -> AgentStatus {
 }
 
 /// Installed, version and sign-in state per CLI. Cached; `refresh` checks again,
-/// all of them or `only` one.
-pub(crate) async fn statuses(app: &AppHandle, refresh: bool, only: Option<Cli>) -> HashMap<Cli, AgentStatus> {
+/// all of them or `only` one. A CLI in `skip` is never started.
+pub(crate) async fn statuses(app: &AppHandle, refresh: bool, only: Option<Cli>, skip: &[Cli]) -> HashMap<Cli, AgentStatus> {
     let state = app.state::<AgentState>();
     let mut cache = state.status.lock().await;
-    if refresh || cache.len() < CLIS.len() {
-        if refresh {
-            which::refresh_search_path();
-            match only {
-                Some(cli) => {
-                    state.models.lock().unwrap().remove(&cli);
-                }
-                None => state.models.lock().unwrap().clear(),
+    if refresh {
+        which::refresh_search_path();
+        match only {
+            Some(cli) => {
+                state.models.lock().unwrap().remove(&cli);
             }
+            None => state.models.lock().unwrap().clear(),
         }
-        let probed: Vec<Cli> =
-            CLIS.into_iter().filter(|c| *c != Cli::Antigravity && (cache.len() < CLIS.len() || only.is_none_or(|o| o == *c))).collect();
-        let checks: Vec<_> = probed.iter().map(|&cli| tauri::async_runtime::spawn(detect(state.launch(app, cli), cli))).collect();
-        for (cli, check) in probed.into_iter().zip(checks) {
-            cache.insert(cli, check.await.unwrap_or_default());
-        }
-        cache.insert(Cli::Antigravity, antigravity::status(app, state.configured(Cli::Antigravity).as_deref()));
+    }
+    let (agy, probed): (Vec<Cli>, Vec<Cli>) = CLIS
+        .into_iter()
+        .filter(|c| only.is_none_or(|o| o == *c) && !skip.contains(c) && (refresh || !cache.contains_key(c)))
+        .partition(|c| *c == Cli::Antigravity);
+    let checks: Vec<_> = probed.iter().map(|&cli| tauri::async_runtime::spawn(detect(state.launch(app, cli), cli))).collect();
+    for (cli, check) in probed.into_iter().zip(checks) {
+        cache.insert(cli, AgentStatus { checked: true, ..check.await.unwrap_or_default() });
+    }
+    if !agy.is_empty() {
+        let status = antigravity::status(app, state.configured(Cli::Antigravity).as_deref());
+        cache.insert(Cli::Antigravity, AgentStatus { checked: true, ..status });
     }
     cache.clone()
 }
 
 pub(crate) async fn models(app: &AppHandle, cli: Cli) -> Result<Vec<crate::ai::ModelInfo>, String> {
     if cli == Cli::Claude {
-        let installed = statuses(app, false, None).await.remove(&cli).and_then(|s| s.version);
+        let installed = statuses(app, false, Some(cli), &[]).await.remove(&cli).and_then(|s| s.version);
         return Ok(claude::models(installed.as_deref()));
     }
     let state = app.state::<AgentState>();
@@ -476,7 +481,7 @@ fn managed_cli(provider: &str) -> Result<Cli, String> {
 pub async fn agent_install(app: AppHandle, provider: String, on_progress: Channel<antigravity::Progress>) -> Result<(), String> {
     managed_cli(&provider)?;
     antigravity::install(&app, &on_progress).await?;
-    statuses(&app, true, Some(Cli::Antigravity)).await;
+    statuses(&app, true, Some(Cli::Antigravity), &[]).await;
     Ok(())
 }
 
@@ -502,7 +507,7 @@ pub async fn agent_sign_in(app: AppHandle, provider: String) -> Result<(), Strin
     }
     let out = rx.await.unwrap_or_else(|_| Err("Sign-in was cancelled.".into()));
     antigravity::mark_signed_in(&app, out.is_ok());
-    statuses(&app, true, Some(cli)).await;
+    statuses(&app, true, Some(cli), &[]).await;
     out
 }
 
@@ -536,7 +541,7 @@ pub async fn agent_terminal(app: AppHandle, provider: String, action: String) ->
 pub async fn agent_uninstall(app: AppHandle, provider: String) -> Result<(), String> {
     managed_cli(&provider)?;
     antigravity::uninstall(&app)?;
-    statuses(&app, true, Some(Cli::Antigravity)).await;
+    statuses(&app, true, Some(Cli::Antigravity), &[]).await;
     Ok(())
 }
 
@@ -551,7 +556,7 @@ pub fn agent_sign_in_cancel(app: AppHandle) {
 pub async fn agent_sign_out(app: AppHandle, provider: String) -> Result<(), String> {
     managed_cli(&provider)?;
     antigravity::sign_out(&app)?;
-    statuses(&app, true, Some(Cli::Antigravity)).await;
+    statuses(&app, true, Some(Cli::Antigravity), &[]).await;
     Ok(())
 }
 
@@ -584,7 +589,7 @@ pub async fn agent_path_set(app: AppHandle, provider: String, path: String) -> R
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     std::fs::write(&file, serde_json::to_string_pretty(&snapshot).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
-    statuses(&app, true, Some(cli)).await;
+    statuses(&app, true, Some(cli), &[]).await;
     Ok(())
 }
 

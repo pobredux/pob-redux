@@ -231,10 +231,11 @@ pub struct ProviderStatus {
 }
 
 /// The CLIs first, then Ollama. `refresh` checks the CLIs again instead of
-/// using what was found at startup.
+/// using what was found earlier; the CLIs in `skip` are switched off and never started.
 #[tauri::command]
-pub async fn ai_providers(app: AppHandle, refresh: Option<bool>, only: Option<String>) -> Vec<ProviderStatus> {
-    let found = agent::statuses(&app, refresh.unwrap_or(false), only.as_deref().and_then(Cli::from_id)).await;
+pub async fn ai_providers(app: AppHandle, refresh: Option<bool>, only: Option<String>, skip: Option<Vec<String>>) -> Vec<ProviderStatus> {
+    let skip: Vec<Cli> = skip.unwrap_or_default().iter().filter_map(|id| Cli::from_id(id)).collect();
+    let found = agent::statuses(&app, refresh.unwrap_or(false), only.as_deref().and_then(Cli::from_id), &skip).await;
     let agents = CLIS.into_iter().map(|cli: Cli| {
         let status = found.get(&cli).cloned().unwrap_or_default();
         ProviderStatus {

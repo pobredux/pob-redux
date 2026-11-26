@@ -1299,10 +1299,6 @@ pub fn run() {
             spawn_pool_reaper(app.handle().clone());
             app.manage(ai::AiState::new(&app.handle().clone()));
             app.manage(agent::AgentState::new(&app.handle().clone()));
-            let handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                agent::statuses(&handle, false, None).await;
-            });
             app.manage(decide::DecideState::new(&app.handle().clone()));
             app.manage(voice::VoiceState::new());
             app.manage(wake::WakeState::default());
