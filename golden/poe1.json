@@ -1,5 +1,5 @@
 {
-"pob": {"commit":"343b054ce6f6d9abab9e101d17cd27e2cf15f8a5","game":"poe1","patches":["0001-Parse-the-current-wording-of-the-trigger-on-skill-use-craft.patch","0002-Fix-Node-Power-giving-nodes-another-node-s-score.patch","0003-Include-tattoos-in-the-Node-Power-cache-key.patch"],"version":"2.68.1"},
+"pob": {"commit":"343b054ce6f6d9abab9e101d17cd27e2cf15f8a5","game":"poe1","patches":["0001-Parse-the-current-wording-of-the-trigger-on-skill-use-craft.patch","0002-Fix-Node-Power-giving-nodes-another-node-s-score.patch","0003-Include-tattoos-in-the-Node-Power-cache-key.patch","0004-Use-the-game-s-socket-in-a-medium-cluster-in-a-large-socket.patch"],"version":"2.68.1"},
 "corpus": "aaf8bd5d466cc41ad0a7d2ce60f629abb1c20042",
 "stats": "curated",
 "builds": {
